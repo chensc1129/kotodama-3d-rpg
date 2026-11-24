@@ -173,10 +173,10 @@ func perform_attack_a() -> void:
 	b["atk_step"] = (int(b["atk_step"]) % 3) + 1
 	b["atk_reset_timer"] = 1.2
 	b["atk_cooldown"] = 0.22
-	if player != null:
-		player.slash_anim_timer = 0.24
-
 	var step: int = int(b["atk_step"])
+	if player != null:
+		player.trigger_slash(step)
+
 	AudioManager.play_sfx("slash%d" % step)
 
 	var stats := GameState.get_computed_stats()
