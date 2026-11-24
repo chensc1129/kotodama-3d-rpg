@@ -64,7 +64,7 @@ func setup(tpl: Dictionary, p_is_boss: bool, wave_num: int, is_hard: bool) -> vo
 	atk_timer = 1.2 + randf() * 1.5
 
 	var ang := randf() * TAU
-	var dist := 10.0 + randf() * 6.0
+	var dist := 13.5 + randf() * 9.5
 	position = Vector3(cos(ang) * dist, 0.0, sin(ang) * dist)
 
 	_build_mesh(tpl)

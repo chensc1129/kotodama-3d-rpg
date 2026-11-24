@@ -8,10 +8,10 @@ var life: float = 2.6
 
 
 func setup(origin: Vector3, dir: Vector3, damage: int) -> void:
-	direction = Vector3(dir.x, 0.0, dir.z).normalized()
+	direction = dir.normalized() if dir.length_squared() > 0.0001 else Vector3.FORWARD
 	dmg = damage
-	life = 2.6
-	position = Vector3(origin.x, 1.2, origin.z)
+	life = 3.2
+	position = Vector3(origin.x, origin.y + 1.2, origin.z)
 
 	var sphere := SphereMesh.new()
 	sphere.radius = 0.32

@@ -33,6 +33,17 @@ var _hitstop_timer: float = 0.0
 var _shift_tap_window: float = 0.0
 var _dash_dir: Vector3 = Vector3.ZERO
 
+# Stage-specific mechanic runtime states
+var _sakura_cycle_timer: float = 0.0
+var _sakura_heal_acc: float = 0.0
+var _in_sakura_buff: bool = false
+var _wind_buff_timer: float = 0.0
+var _lava_tick_timer: float = 0.0
+var _enemy_lava_timer: float = 0.0
+var _hazard_spawn_timer: float = 4.2
+var _jump_pad_cooldown: float = 0.0
+var _stage_hazards: Array[Dictionary] = [] # {pos, radius, timer, max_time, kind, node, mat}
+
 
 func _ready() -> void:
 	GameState.appearance_changed.connect(_on_appearance_changed)
@@ -41,12 +52,40 @@ func _ready() -> void:
 	call_deferred("_initialize_world")
 
 
+func _get_terrain_y(x: float, z: float, cur_y: float = 99.0) -> float:
+	if arena != null:
+		return arena.get_ground_height(x, z, cur_y)
+	return 0.0
+
+
+func _reset_stage_mechanics() -> void:
+	_clear_stage_hazards()
+	_sakura_cycle_timer = 0.0
+	_sakura_heal_acc = 0.0
+	_in_sakura_buff = false
+	_wind_buff_timer = 0.0
+	_lava_tick_timer = 0.0
+	_enemy_lava_timer = 0.0
+	_hazard_spawn_timer = 4.2
+	_jump_pad_cooldown = 0.0
+	GameState.battle["stage_status"] = ""
+
+
+func _clear_stage_hazards() -> void:
+	for hz in _stage_hazards:
+		var n: Node3D = hz.get("node")
+		if is_instance_valid(n):
+			n.queue_free()
+	_stage_hazards.clear()
+
+
 func _initialize_world() -> void:
 	if arena != null:
 		arena.build_stage(GameState.player["stage_id"])
+	_reset_stage_mechanics()
 	if player != null:
 		player.position = Vector3(0.0, 0.0, 4.0)
-		player.reset_vertical_state()
+		player.reset_vertical_state(_get_terrain_y(0.0, 4.0))
 		player.rebuild_mesh()
 	if shikigami != null and player != null:
 		shikigami.rebuild_mesh(player.position)
@@ -64,6 +103,9 @@ func _on_appearance_changed() -> void:
 func _on_stage_changed(stage_id: String) -> void:
 	if arena != null:
 		arena.build_stage(stage_id)
+	_reset_stage_mechanics()
+	if player != null:
+		player.reset_vertical_state(_get_terrain_y(player.position.x, player.position.z))
 	hud_updated.emit()
 
 
@@ -125,6 +167,7 @@ func start_new_battle() -> void:
 	_hitstop_timer = 0.0
 	_shift_tap_window = 0.0
 	_dash_dir = Vector3.ZERO
+	_reset_stage_mechanics()
 	var stats := GameState.get_computed_stats()
 	GameState.battle["active"] = true
 	GameState.battle["paused"] = false
@@ -133,13 +176,13 @@ func start_new_battle() -> void:
 	GameState.battle["sp"] = 40.0
 	GameState.battle["endless_seconds"] = 0.0
 
-	if player != null:
-		player.position = Vector3(0.0, 0.0, 4.0)
-		player.reset_vertical_state()
-		player.facing = PI
-		player.rebuild_mesh()
 	if arena != null:
 		arena.build_stage(GameState.player["stage_id"])
+	if player != null:
+		player.position = Vector3(0.0, 0.0, 4.0)
+		player.reset_vertical_state(_get_terrain_y(0.0, 4.0))
+		player.facing = PI
+		player.rebuild_mesh()
 	if shikigami != null and player != null:
 		shikigami.rebuild_mesh(player.position)
 
@@ -155,8 +198,11 @@ func start_wave(wave_num: int) -> void:
 		var idx: int = int(floor(float(wave_num - 1) / 3.0)) % GameData.STAGES.size()
 		var next_st: Dictionary = GameData.STAGES[idx]
 		GameState.player["stage_id"] = next_st["id"]
+		_reset_stage_mechanics()
 		if arena != null:
 			arena.build_stage(next_st["id"])
+		if player != null:
+			player.reset_vertical_state(_get_terrain_y(player.position.x, player.position.z))
 		GameState.toast_requested.emit("🌀 空間轉移！進入新戰場「%s」" % next_st["name"])
 
 	var is_hard := GameState.is_hard_mode()
@@ -185,6 +231,7 @@ func _clear_enemies_and_projectiles() -> void:
 		if is_instance_valid(pr):
 			pr.queue_free()
 	projectiles.clear()
+	_clear_stage_hazards()
 
 
 func _spawn_enemy(tpl: Dictionary, is_boss: bool, wave_num: int, is_hard: bool) -> void:
@@ -193,6 +240,7 @@ func _spawn_enemy(tpl: Dictionary, is_boss: bool, wave_num: int, is_hard: bool) 
 	var en := Enemy3D.new()
 	enemies_root.add_child(en)
 	en.setup(tpl, is_boss, wave_num, is_hard)
+	en.position.y = _get_terrain_y(en.position.x, en.position.z)
 	enemies.append(en)
 
 
@@ -258,6 +306,7 @@ func perform_attack_a() -> void:
 	var skill_mult: float = 1.0 + float(normal_lv - 1) * 0.14
 	var step_mult: float = 1.55 if step == 3 else (1.2 if step == 2 else 1.0)
 	var reach: float = 5.4 if step == 3 else 4.35
+	var sakura_mult: float = 1.25 if _in_sakura_buff else 1.0
 
 	var char_cfg: Dictionary = GameData.get_character(GameState.player["char_id"])
 	var vfx_color := Color.html("#fbbf24") if step == 3 else Color.html(char_cfg["color_primary"])
@@ -265,15 +314,25 @@ func perform_attack_a() -> void:
 
 	var hit_count: int = 0
 	var any_crit: bool = false
-	for en: Enemy3D in enemies.duplicate():
-		if not is_instance_valid(en) or en.dead:
+	for item in enemies.duplicate():
+		if not is_instance_valid(item):
 			continue
-		var dist := en.position.distance_to(player.position)
-		if dist <= reach:
+		var en := item as Enemy3D
+		if en == null or en.dead:
+			continue
+		var flat_dist := Vector2(en.position.x - player.position.x, en.position.z - player.position.z).length()
+		var dy := absf(en.position.y - player.position.y)
+		if flat_dist <= reach and dy <= 2.9:
 			hit_count += 1
-			var dmg := int(round(float(stats["atk"]) * skill_mult * step_mult * (0.92 + randf() * 0.16)))
+			var dmg := int(round(float(stats["atk"]) * skill_mult * step_mult * sakura_mult * (0.92 + randf() * 0.16)))
 			var tag := "あ!! 暴擊" if step == 3 else "あ"
 			var is_crit := (step == 3)
+
+			# High-Ground Advantage (+20% damage when attacking from elevated terrain or mid-air!)
+			if player.position.y > en.position.y + 0.70:
+				dmg = int(round(float(dmg) * 1.20))
+				if step != 3:
+					tag = "⛰️高地斬"
 
 			# Petrified Shatter Crit (Sakura synergy)
 			if en.petrify_timer > 0.0:
@@ -344,9 +403,12 @@ func perform_jump() -> void:
 	var b := GameState.battle
 	if not b["active"] or b["paused"] or player == null:
 		return
-	if player.trigger_jump():
+	var jump_mult: float = 1.30 if _wind_buff_timer > 0.0 else 1.0
+	if player.trigger_jump(jump_mult):
 		AudioManager.play_sfx("jump")
-		spawn_ring_vfx(Vector3(player.position.x, 0.0, player.position.z), Color.html("#fef3c7"), 2.0, 0.24)
+		var gy := _get_terrain_y(player.position.x, player.position.z, player.position.y)
+		var ring_col := Color.html("#34d399") if _wind_buff_timer > 0.0 else Color.html("#fef3c7")
+		spawn_ring_vfx(Vector3(player.position.x, gy, player.position.z), ring_col, 2.2, 0.24)
 
 
 func perform_dash() -> void:
@@ -690,16 +752,18 @@ func _process(delta: float) -> void:
 			player.position.z += dvec.z * float(stats["speed"]) * 2.85 * dt
 			player.clamp_to_arena()
 	else:
-		if wants_sprint and is_moving and (not bool(b["stamina_exhausted"])) and float(b["stamina"]) > 0.0:
+		var has_wind: bool = _wind_buff_timer > 0.0
+		if wants_sprint and is_moving and (has_wind or ((not bool(b["stamina_exhausted"])) and float(b["stamina"]) > 0.0)):
 			is_sprinting = true
 			b["is_sprinting"] = true
-			b["stamina"] = maxf(0.0, float(b["stamina"]) - SPRINT_DRAIN_PER_SEC * dt)
-			b["stamina_regen_delay"] = 0.55
-			if float(b["stamina"]) <= 0.01:
-				b["stamina"] = 0.0
-				b["stamina_exhausted"] = true
-				is_sprinting = false
-				b["is_sprinting"] = false
+			if not has_wind:
+				b["stamina"] = maxf(0.0, float(b["stamina"]) - SPRINT_DRAIN_PER_SEC * dt)
+				b["stamina_regen_delay"] = 0.55
+				if float(b["stamina"]) <= 0.01:
+					b["stamina"] = 0.0
+					b["stamina_exhausted"] = true
+					is_sprinting = false
+					b["is_sprinting"] = false
 		else:
 			b["is_sprinting"] = false
 			if float(b["stamina_regen_delay"]) > 0.0:
@@ -717,18 +781,22 @@ func _process(delta: float) -> void:
 			var world_dx := clamped.x * cos_y + clamped.y * sin_y
 			var world_dz := -clamped.x * sin_y + clamped.y * cos_y
 
-			var speed_mult: float = 1.58 if is_sprinting else 1.0
+			var speed_mult: float = (1.58 if is_sprinting else 1.0) * (1.40 if has_wind else 1.0)
 			player.position.x += world_dx * float(stats["speed"]) * speed_mult * dt
 			player.position.z += world_dz * float(stats["speed"]) * speed_mult * dt
 			player.clamp_to_arena()
 			player.facing = atan2(world_dx, world_dz)
 
 	if player != null:
-		var landed := player.update_vertical_physics(dt)
+		var player_gy := _get_terrain_y(player.position.x, player.position.z, player.position.y)
+		var landed := player.update_vertical_physics(dt, player_gy)
 		if landed:
 			AudioManager.play_sfx("land")
-			spawn_ring_vfx(Vector3(player.position.x, 0.0, player.position.z), Color.html("#e2e8f0"), 1.6, 0.20)
+			spawn_ring_vfx(Vector3(player.position.x, player_gy, player.position.z), Color.html("#e2e8f0"), 1.6, 0.20)
 		player.update_animations(dt, is_moving or is_dashing, is_sprinting)
+
+	# Update Stage-Specific Map Mechanics (Sakura Sanctuary / Maple Wind / Lava Geysers / Sky Jump Pads & Thunder)
+	_update_stage_mechanics(dt, stats)
 
 	# Shikigami Companion Follow & Auto-Support
 	if shikigami != null and shikigami.visible and player != null:
@@ -757,7 +825,7 @@ func _process(delta: float) -> void:
 				damage_enemy(target, int(round(float(stats["atk"]) * 0.90)), "🐺雷撃", Color.html("#38bdf8"))
 				b["sp"] = minf(float(b["max_sp"]), float(b["sp"]) + 4.0)
 
-	# Enemy AI & Status Effects
+	# Enemy AI, Terrain Grounding & Status Effects
 	for item in enemies.duplicate():
 		if not is_instance_valid(item):
 			continue
@@ -786,28 +854,33 @@ func _process(delta: float) -> void:
 					continue
 
 		en.update_status_visuals(dt)
+		var en_gy := _get_terrain_y(en.position.x, en.position.z, en.position.y)
+		en.position.y = lerpf(en.position.y, en_gy, clampf(dt * 14.0, 0.0, 1.0))
+
 		if en.is_controlled() or en.is_staggered():
 			continue
 
 		var to_player := player.position - en.position
-		to_player.y = 0.0
-		var dist := to_player.length()
+		var to_player_flat := Vector3(to_player.x, 0.0, to_player.z)
+		var dist := to_player_flat.length()
 		if dist > 0.1:
-			en.rotation.y = atan2(to_player.x, to_player.z)
+			en.rotation.y = atan2(to_player_flat.x, to_player_flat.z)
 
-		var stop_dist: float = 7.5 if en.ranged else 1.7
+		var stop_dist: float = 8.5 if en.ranged else 1.7
 		if dist > stop_dist and dist > 0.001:
-			en.position += to_player.normalized() * en.move_speed * dt
+			en.position += to_player_flat.normalized() * en.move_speed * dt
 			en.clamp_to_arena()
+			en.position.y = lerpf(en.position.y, _get_terrain_y(en.position.x, en.position.z, en.position.y), clampf(dt * 14.0, 0.0, 1.0))
 
 		en.atk_timer -= dt
 		if en.atk_timer <= 0.0:
-			if dist <= 2.3 and player.position.y < 1.35:
+			if dist <= 2.3 and absf(player.position.y - en.position.y) < 1.45:
 				en.atk_timer = 1.4
 				damage_player(en.atk)
-			elif en.ranged and dist <= 15.0 and dist > 0.001:
+			elif en.ranged and dist <= 18.0 and dist > 0.001:
 				en.atk_timer = 2.4
-				_spawn_enemy_projectile(en.position, to_player.normalized(), en.atk)
+				var aim_3d := ((player.position + Vector3(0.0, 1.0, 0.0)) - (en.position + Vector3(0.0, 1.2, 0.0))).normalized()
+				_spawn_enemy_projectile(en.position, aim_3d, en.atk)
 
 	# Prune dead enemies
 	var alive: Array[Enemy3D] = []
@@ -847,6 +920,242 @@ func _process(delta: float) -> void:
 			wave_cleared.emit()
 
 	hud_updated.emit()
+
+
+# ==============================================================================
+#  FOUR UNIQUE STAGE MECHANICS
+# ==============================================================================
+func _update_stage_mechanics(dt: float, stats: Dictionary) -> void:
+	if arena == null or player == null:
+		return
+	var b := GameState.battle
+	var sid := arena.current_stage_id
+	_in_sakura_buff = false
+	if _wind_buff_timer > 0.0:
+		_wind_buff_timer = maxf(0.0, _wind_buff_timer - dt)
+	if _jump_pad_cooldown > 0.0:
+		_jump_pad_cooldown = maxf(0.0, _jump_pad_cooldown - dt)
+
+	match sid:
+		"sakura_shrine":
+			_sakura_cycle_timer += dt
+			if _sakura_cycle_timer >= 12.0:
+				_sakura_cycle_timer = 0.0
+				var np := arena.cycle_sakura_zone()
+				spawn_ring_vfx(np, Color.html("#f472b6"), 5.5, 0.50)
+				GameState.toast_requested.emit("🌸 櫻花靈陣轉移至新神壇高台！")
+
+			var d := Vector2(player.position.x - arena.sakura_zone_pos.x, player.position.z - arena.sakura_zone_pos.z).length()
+			if d <= arena.sakura_zone_radius:
+				_in_sakura_buff = true
+				b["sp"] = minf(float(b["max_sp"]), float(b["sp"]) + 10.0 * dt)
+				b["stamina"] = minf(float(b["max_stamina"]), float(b["stamina"]) + 45.0 * dt)
+				b["stamina_exhausted"] = false
+				_sakura_heal_acc += float(b["max_hp"]) * 0.05 * dt
+				if _sakura_heal_acc >= 2.0:
+					var h_amt := int(floor(_sakura_heal_acc))
+					_sakura_heal_acc -= float(h_amt)
+					if int(b["hp"]) < int(b["max_hp"]):
+						b["hp"] = mini(int(b["max_hp"]), int(b["hp"]) + h_amt)
+				b["stage_status"] = "🌸 靈櫻加護中！攻擊 +25%・高速回復"
+			else:
+				b["stage_status"] = "🌸 尋訪發光櫻花靈陣獲得回復與增傷"
+
+		"maple_temple":
+			for wz in arena.wind_zones:
+				var wp: Vector3 = wz["pos"]
+				var wr: float = float(wz["radius"])
+				if Vector2(player.position.x - wp.x, player.position.z - wp.z).length() <= wr:
+					if _wind_buff_timer < 3.6:
+						AudioManager.play_sfx("dash")
+						spawn_ring_vfx(wp, Color.html("#34d399"), 4.2, 0.35)
+					_wind_buff_timer = 4.8
+					b["stamina"] = minf(float(b["max_stamina"]), float(b["stamina"]) + 35.0 * dt)
+					b["stamina_exhausted"] = false
+					break
+			if _wind_buff_timer > 0.0:
+				b["stage_status"] = "🍃 疾風祝福 %.1fs（加速＋無限急跑＋高跳）" % _wind_buff_timer
+			else:
+				b["stage_status"] = "🍃 踏入翠綠風場啟動疾風加速與高跳"
+
+		"onigashima_lava":
+			# 1. Lava Trench Ground Burn (jump over trenches or stay on obsidian plateaus!)
+			if arena.is_in_lava(player.position.x, player.position.z, player.position.y):
+				_lava_tick_timer += dt
+				if _lava_tick_timer >= 0.75:
+					_lava_tick_timer = 0.0
+					damage_player(maxi(5, int(round(float(b["max_hp"]) * 0.06))))
+					popup_requested.emit(player.position + Vector3(0.0, 2.4, 0.0), "🌋岩漿灼燒!", Color.html("#fb923c"))
+			else:
+				_lava_tick_timer = 0.35
+
+			_enemy_lava_timer += dt
+			if _enemy_lava_timer >= 0.90:
+				_enemy_lava_timer = 0.0
+				for item in enemies.duplicate():
+					if not is_instance_valid(item):
+						continue
+					var en := item as Enemy3D
+					if en != null and not en.dead and arena.is_in_lava(en.position.x, en.position.z, en.position.y):
+						damage_enemy(en, maxi(6, int(round(float(stats["atk"]) * 0.35))), "🌋地火灼燒", Color.html("#fb923c"))
+
+			# 2. Periodic Volcanic Geyser Eruptions (telegraphed AoE that hurts both player & lured monsters!)
+			_hazard_spawn_timer -= dt
+			if _hazard_spawn_timer <= 0.0:
+				_hazard_spawn_timer = 6.5
+				_spawn_stage_hazards("lava_geyser", 3, 3.6, 1.65)
+			_update_stage_hazards(dt, stats)
+			b["stage_status"] = "🌋 熔岩噴發預警！跳躍閃避或引怪入陣" if not _stage_hazards.is_empty() else "🌋 佔領黑曜高台・跳過發光熔岩裂谷"
+
+		"sky_tenshu":
+			# 1. Cloud Jump Pads launching hero onto Floating Golden Sky Platforms!
+			if _jump_pad_cooldown <= 0.0:
+				for jp in arena.jump_pads:
+					var jpos: Vector3 = jp["pos"]
+					var jrad: float = float(jp["radius"])
+					if Vector2(player.position.x - jpos.x, player.position.z - jpos.z).length() <= jrad and absf(player.position.y - jpos.y) < 1.1:
+						_jump_pad_cooldown = 0.75
+						player.launch_upward(16.8)
+						AudioManager.play_sfx("jump")
+						AudioManager.play_sfx("dash")
+						spawn_ring_vfx(jpos, Color.html("#38bdf8"), 4.2, 0.38)
+						_trigger_camera_impact(0.14, 2.2)
+						popup_requested.emit(player.position + Vector3(0.0, 2.2, 0.0), "⚡騰雲躍昇!", Color.html("#7dd3fc"))
+						break
+
+			# 2. Full-Moon Thunder Strikes (telegraphed sky lightning that shocks monsters!)
+			_hazard_spawn_timer -= dt
+			if _hazard_spawn_timer <= 0.0:
+				_hazard_spawn_timer = 7.0
+				_spawn_stage_hazards("sky_thunder", 3, 3.5, 1.55)
+			_update_stage_hazards(dt, stats)
+			if not _stage_hazards.is_empty():
+				b["stage_status"] = "⚡ 滿月天雷降臨！閃避雷圈並引雷劈怪"
+			elif player.position.y > 1.8:
+				b["stage_status"] = "⚡ 雲海高地制壓中（高地斬 +20% 傷害）"
+			else:
+				b["stage_status"] = "⚡ 踏上藍金騰雲陣躍升懸浮天守高台"
+
+
+func _spawn_stage_hazards(kind: String, count: int, rad: float, delay: float) -> void:
+	if vfx_root == null or player == null:
+		return
+	var col := Color.html("#f97316") if kind == "lava_geyser" else Color.html("#38bdf8")
+	for i in range(count):
+		var hx := 0.0
+		var hz := 0.0
+		if i == 0:
+			# First zone targets near player (giving clear telegraph time to jump/dash!)
+			var a := randf() * TAU
+			var d := randf() * 3.5
+			hx = player.position.x + cos(a) * d
+			hz = player.position.z + sin(a) * d
+		elif i == 1 and not enemies.is_empty():
+			# Second zone targets near an enemy cluster for tactical synergy!
+			var target_en := _find_nearest_enemy()
+			if target_en != null:
+				hx = target_en.position.x + randf_range(-2.0, 2.0)
+				hz = target_en.position.z + randf_range(-2.0, 2.0)
+		else:
+			var a := randf() * TAU
+			var d := 5.0 + randf() * (GameData.ARENA_RADIUS - 8.0)
+			hx = cos(a) * d
+			hz = sin(a) * d
+
+		var flat := Vector2(hx, hz)
+		if flat.length() > GameData.ARENA_RADIUS - 3.0:
+			flat = flat.normalized() * (GameData.ARENA_RADIUS - 3.0)
+		var hy := _get_terrain_y(flat.x, flat.y)
+		var pos := Vector3(flat.x, hy, flat.y)
+
+		var ring := MeshInstance3D.new()
+		var torus := TorusMesh.new()
+		torus.inner_radius = rad - 0.35
+		torus.outer_radius = rad
+		torus.rings = 32
+		torus.ring_segments = 6
+		ring.mesh = torus
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(col.r, col.g, col.b, 0.78)
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		ring.material_override = mat
+		ring.position = pos + Vector3(0.0, 0.16, 0.0)
+		ring.scale = Vector3(1.0, 0.08, 1.0)
+		vfx_root.add_child(ring)
+
+		_stage_hazards.append({
+			"pos": pos,
+			"radius": rad,
+			"timer": delay,
+			"max_time": delay,
+			"kind": kind,
+			"node": ring,
+			"mat": mat,
+		})
+
+
+func _update_stage_hazards(dt: float, stats: Dictionary) -> void:
+	if _stage_hazards.is_empty():
+		return
+	var remain: Array[Dictionary] = []
+	for hz in _stage_hazards:
+		hz["timer"] = float(hz["timer"]) - dt
+		var t_left: float = float(hz["timer"])
+		var max_t: float = maxf(0.01, float(hz["max_time"]))
+		var node: MeshInstance3D = hz["node"]
+		var mat: StandardMaterial3D = hz["mat"]
+		var p: float = 1.0 - clampf(t_left / max_t, 0.0, 1.0)
+
+		if is_instance_valid(node) and mat != null:
+			var pulse := 0.88 + 0.14 * sin(p * 24.0)
+			node.scale = Vector3(pulse, 0.08, pulse)
+			mat.albedo_color.a = 0.45 + p * 0.50
+
+		if t_left <= 0.0:
+			var pos: Vector3 = hz["pos"]
+			var rad: float = float(hz["radius"])
+			var kind: String = String(hz["kind"])
+			if is_instance_valid(node):
+				node.queue_free()
+			_detonate_stage_hazard(pos, rad, kind, stats)
+		else:
+			remain.append(hz)
+	_stage_hazards = remain
+
+
+func _detonate_stage_hazard(pos: Vector3, rad: float, kind: String, stats: Dictionary) -> void:
+	var is_lava := (kind == "lava_geyser")
+	var col := Color.html("#f97316") if is_lava else Color.html("#38bdf8")
+	spawn_ring_vfx(pos, col, rad * 1.45, 0.42)
+	spawn_hit_spark(pos + Vector3(0.0, 1.4, 0.0), col, true, 1.45)
+	AudioManager.play_sfx("impact_heavy")
+	_trigger_camera_impact(0.32, -1.6)
+
+	# Player check (can safely jump high above ground geyser or dash out!)
+	if player != null:
+		var pd := Vector2(player.position.x - pos.x, player.position.z - pos.z).length()
+		var vertical_ok := (player.position.y < pos.y + 1.65) if is_lava else true
+		if pd <= rad and vertical_ok:
+			damage_player(maxi(10, int(round(float(GameState.battle["max_hp"]) * 0.11))))
+
+	# Tactical monster damage! Luring monsters into Lava Geysers or Moon Thunder blasts them!
+	var hazard_dmg := int(round(float(stats["atk"]) * 1.85))
+	for item in enemies.duplicate():
+		if not is_instance_valid(item):
+			continue
+		var en := item as Enemy3D
+		if en == null or en.dead:
+			continue
+		var ed := Vector2(en.position.x - pos.x, en.position.z - pos.z).length()
+		if ed <= rad + 0.8:
+			en.trigger_hit_react(en.position - pos, true)
+			if is_lava:
+				en.burn_timer = maxf(en.burn_timer, 4.0)
+				damage_enemy(en, hazard_dmg, "🌋地火噴發!", Color.html("#fb923c"))
+			else:
+				en.shock_timer = maxf(en.shock_timer, 5.0)
+				damage_enemy(en, hazard_dmg, "⚡滿月天雷!", Color.html("#7dd3fc"))
 
 
 func _find_nearest_enemy() -> Enemy3D:

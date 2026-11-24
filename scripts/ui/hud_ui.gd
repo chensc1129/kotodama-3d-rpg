@@ -22,6 +22,7 @@ var _stage_lbl: Label
 var _mode_lbl: Label
 var _enemy_count_lbl: Label
 var _endless_lbl: Label
+var _stage_mech_lbl: Label
 
 var _gold_lbl: Label
 var _sp_pts_lbl: Label
@@ -241,6 +242,11 @@ func _build_ui() -> void:
 	_endless_lbl.add_theme_color_override("font_color", Color.html("#fcd34d"))
 	_endless_lbl.visible = false
 	sub_row.add_child(_endless_lbl)
+
+	_stage_mech_lbl = Label.new()
+	_stage_mech_lbl.add_theme_font_size_override("font_size", 11)
+	_stage_mech_lbl.add_theme_color_override("font_color", Color.html("#fde68a"))
+	stage_vbox.add_child(_stage_mech_lbl)
 
 	var top_spacer := Control.new()
 	top_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -787,6 +793,10 @@ func refresh(enemy_count: int, boss: Enemy3D) -> void:
 	if _endless_lbl.visible:
 		var secs := int(floor(float(b["endless_seconds"])))
 		_endless_lbl.text = "⏱️ %02d:%02d" % [secs / 60, secs % 60]
+
+	if _stage_mech_lbl != null:
+		var status_txt := String(b.get("stage_status", ""))
+		_stage_mech_lbl.text = status_txt if not status_txt.is_empty() else String(stage_cfg.get("mechanic_name", ""))
 
 	_gold_lbl.text = "🪙 %d" % int(p["gold"])
 	_sp_pts_lbl.text = "✨ %dpt" % int(p["skill_points"])

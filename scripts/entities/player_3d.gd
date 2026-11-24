@@ -20,6 +20,7 @@ var kick_anim_timer: float = 0.0
 var vertical_velocity: float = 0.0
 var is_grounded: bool = true
 
+var _current_ground_y: float = 0.0
 var _slash_step: int = 1
 var _walk_phase: float = 0.0
 var _elapsed: float = 0.0
@@ -63,35 +64,50 @@ func _ready() -> void:
 	add_child(_name_label)
 
 
-func trigger_jump() -> bool:
+func trigger_jump(force_mult: float = 1.0) -> bool:
 	if not is_grounded:
 		return false
 	is_grounded = false
-	vertical_velocity = JUMP_FORCE
+	vertical_velocity = JUMP_FORCE * force_mult
 	_punch_scale = Vector3(0.88, 1.18, 0.88)
 	if _body_pivot != null:
 		_body_pivot.scale = _punch_scale
 	return true
 
 
-func reset_vertical_state() -> void:
-	position.y = 0.0
+func launch_upward(vy: float) -> void:
+	is_grounded = false
+	vertical_velocity = maxf(vertical_velocity, vy)
+	_punch_scale = Vector3(0.84, 1.26, 0.84)
+	if _body_pivot != null:
+		_body_pivot.scale = _punch_scale
+
+
+func reset_vertical_state(ground_y: float = 0.0) -> void:
+	_current_ground_y = ground_y
+	position.y = ground_y
 	vertical_velocity = 0.0
 	is_grounded = true
 
 
-func update_vertical_physics(delta: float) -> bool:
-	if is_grounded and position.y <= 0.001:
-		position.y = 0.0
-		vertical_velocity = 0.0
-		return false
+func update_vertical_physics(delta: float, ground_y: float = 0.0) -> bool:
+	_current_ground_y = ground_y
+	if is_grounded:
+		# Step off a steep drop-off into free-fall
+		if ground_y < position.y - 0.55:
+			is_grounded = false
+			vertical_velocity = -0.5
+		else:
+			position.y = lerpf(position.y, ground_y, clampf(delta * 20.0, 0.0, 1.0))
+			vertical_velocity = 0.0
+			return false
+
 	vertical_velocity -= GRAVITY * delta
 	position.y += vertical_velocity * delta
-	if position.y <= 0.0:
-		position.y = 0.0
+	if position.y <= ground_y and vertical_velocity <= 0.0:
+		position.y = ground_y
 		vertical_velocity = 0.0
 		is_grounded = true
-		# Crisp landing squash
 		_punch_scale = Vector3(1.16, 0.84, 1.16)
 		if _body_pivot != null:
 			_body_pivot.scale = _punch_scale
@@ -263,8 +279,8 @@ func update_animations(delta: float, is_moving: bool, is_sprinting: bool = false
 
 	if _aura_mesh != null:
 		_aura_mesh.rotation.y = _elapsed * (3.2 if is_sprinting else 1.8)
-		# Keep aura ring hugging the ground while jumping!
-		_aura_mesh.position.y = 0.04 - position.y
+		# Keep aura ring hugging the exact terrain surface below the hero!
+		_aura_mesh.position.y = 0.04 + (_current_ground_y - position.y)
 
 	if _orbit_group != null:
 		var cid: String = GameState.player["char_id"]

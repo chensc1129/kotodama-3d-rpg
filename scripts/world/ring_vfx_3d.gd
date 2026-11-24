@@ -11,7 +11,7 @@ var _mat: StandardMaterial3D
 func setup(world_pos: Vector3, color: Color, max_radius: float = 6.0, duration: float = 0.45) -> void:
 	_max_radius = max_radius
 	_duration = maxf(0.05, duration)
-	position = Vector3(world_pos.x, 0.14, world_pos.z)
+	position = Vector3(world_pos.x, world_pos.y + 0.14, world_pos.z)
 
 	var torus := TorusMesh.new()
 	torus.inner_radius = 0.45
