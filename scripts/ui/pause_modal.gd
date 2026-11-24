@@ -32,29 +32,29 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(520 if is_mob else 440, 0)
+	panel.custom_minimum_size = Vector2(640 if is_mob else 440, 0)
 	panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.96, "#fbbf24", 0.85, 24, 2, 28, 24))
 	center.add_child(panel)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 14 if is_mob else 11)
+	vbox.add_theme_constant_override("separation", 16 if is_mob else 11)
 	panel.add_child(vbox)
 
 	var title := Label.new()
 	title.text = "⏸️ 遊戲暫停"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 30 if is_mob else 25)
+	title.add_theme_font_size_override("font_size", 36 if is_mob else 25)
 	title.add_theme_color_override("font_color", Color.html("#fcd34d"))
 	vbox.add_child(title)
 
 	_info_lbl = Label.new()
 	_info_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_info_lbl.add_theme_font_size_override("font_size", 16 if is_mob else 13)
+	_info_lbl.add_theme_font_size_override("font_size", 19 if is_mob else 13)
 	_info_lbl.add_theme_color_override("font_color", Color.html("#cbd5e1"))
 	vbox.add_child(_info_lbl)
 
-	var btn_h := 62 if is_mob else 48
-	var btn_fs := 20 if is_mob else 16
+	var btn_h := 72 if is_mob else 48
+	var btn_fs := 23 if is_mob else 16
 
 	var resume_btn := _make_btn("▶️ 繼續戰鬥", "#10b981", "#6ee7b7", "#0f172a", btn_h, btn_fs)
 	resume_btn.pressed.connect(func() -> void:

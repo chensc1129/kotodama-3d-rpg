@@ -14,6 +14,11 @@ static func is_mobile_device() -> bool:
 	return false
 
 
+static func request_mobile_landscape_fullscreen() -> void:
+	if OS.has_feature("web") and is_mobile_device():
+		JavaScriptBridge.eval("if(window.kotodamaLockLandscape){window.kotodamaLockLandscape();}")
+
+
 static func make_panel(
 	bg_hex: String = "#0f172a",
 	alpha: float = 0.86,

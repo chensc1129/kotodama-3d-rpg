@@ -29,17 +29,17 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(540 if is_mob else 460, 0)
+	panel.custom_minimum_size = Vector2(640 if is_mob else 460, 0)
 	panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.96, "#fbbf24", 0.85, 24, 2, 28, 24))
 	center.add_child(panel)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 16)
+	vbox.add_theme_constant_override("separation", 18)
 	panel.add_child(vbox)
 
 	_title_lbl = Label.new()
 	_title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title_lbl.add_theme_font_size_override("font_size", 30 if is_mob else 25)
+	_title_lbl.add_theme_font_size_override("font_size", 36 if is_mob else 25)
 	vbox.add_child(_title_lbl)
 
 	var info_card := PanelContainer.new()
@@ -48,12 +48,12 @@ func _build_ui() -> void:
 
 	_summary_lbl = Label.new()
 	_summary_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_summary_lbl.add_theme_font_size_override("font_size", 18 if is_mob else 15)
+	_summary_lbl.add_theme_font_size_override("font_size", 21 if is_mob else 15)
 	_summary_lbl.add_theme_color_override("font_color", Color.html("#e2e8f0"))
 	info_card.add_child(_summary_lbl)
 
-	var btn_h := 64 if is_mob else 50
-	var btn_fs := 20 if is_mob else 16
+	var btn_h := 74 if is_mob else 50
+	var btn_fs := 23 if is_mob else 16
 
 	var replay_btn := Button.new()
 	replay_btn.text = "🔄 再戰一場"

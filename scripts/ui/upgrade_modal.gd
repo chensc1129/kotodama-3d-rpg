@@ -13,6 +13,7 @@ var _body_box: VBoxContainer
 
 func _ready() -> void:
 	visible = false
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
 	GameState.state_changed.connect(func() -> void:
@@ -22,29 +23,46 @@ func _ready() -> void:
 
 
 func _build_ui() -> void:
+	var is_mob := UiStyle.is_mobile_device()
+
 	var backdrop := ColorRect.new()
-	backdrop.color = Color(0.02, 0.03, 0.08, 0.80)
+	backdrop.color = Color(0.02, 0.03, 0.08, 0.84)
 	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(backdrop)
 
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 16 if is_mob else 30)
+	margin.add_theme_constant_override("margin_right", 16 if is_mob else 30)
+	margin.add_theme_constant_override("margin_top", 14 if is_mob else 24)
+	margin.add_theme_constant_override("margin_bottom", 14 if is_mob else 24)
+	add_child(margin)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(760, 560)
-	panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.96, "#fbbf24", 0.7, 22, 2, 22, 18))
-	center.add_child(panel)
+	panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.96, "#fbbf24", 0.75, 22, 2, 24, 18))
+	if is_mob:
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		margin.add_child(panel)
+	else:
+		var center := CenterContainer.new()
+		center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		margin.add_child(center)
+		panel.custom_minimum_size = Vector2(780, 560)
+		center.add_child(panel)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 12)
+	vbox.add_theme_constant_override("separation", 14 if is_mob else 12)
 	panel.add_child(vbox)
 
 	# Tabs + Close
 	var top_bar := HBoxContainer.new()
-	top_bar.add_theme_constant_override("separation", 8)
+	top_bar.add_theme_constant_override("separation", 10 if is_mob else 8)
 	vbox.add_child(top_bar)
 
+	var tab_h := 56 if is_mob else 40
+	var tab_fs := 20 if is_mob else 14
 	var tabs := [
 		["skills", "⚡ 技能升級"],
 		["equip", "🎒 裝備鍛造"],
@@ -53,6 +71,8 @@ func _build_ui() -> void:
 	for t in tabs:
 		var btn := Button.new()
 		btn.text = t[1]
+		btn.custom_minimum_size = Vector2(180 if is_mob else 130, tab_h)
+		btn.add_theme_font_size_override("font_size", tab_fs)
 		var tab_id: String = t[0]
 		btn.pressed.connect(func() -> void: switch_tab(tab_id))
 		top_bar.add_child(btn)
@@ -64,13 +84,15 @@ func _build_ui() -> void:
 
 	var close_btn := Button.new()
 	close_btn.text = "✕ 關閉"
-	UiStyle.apply_button(close_btn, "#1e293b", "#64748b", "#f8fafc", 10, 1, 0.95)
+	close_btn.custom_minimum_size = Vector2(120 if is_mob else 84, tab_h)
+	close_btn.add_theme_font_size_override("font_size", tab_fs)
+	UiStyle.apply_button(close_btn, "#1e293b", "#64748b", "#f8fafc", 12, 1, 0.95)
 	close_btn.pressed.connect(close_modal)
 	top_bar.add_child(close_btn)
 
 	# Resource Bar
 	var res_panel := PanelContainer.new()
-	res_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0b1120", 0.95, "#334155", 0.9, 12, 1, 14, 8))
+	res_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0b1120", 0.95, "#334155", 0.9, 12, 1, 16, 10))
 	vbox.add_child(res_panel)
 
 	var res_row := HBoxContainer.new()
@@ -78,10 +100,12 @@ func _build_ui() -> void:
 
 	_gold_label = Label.new()
 	_gold_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_gold_label.add_theme_font_size_override("font_size", 20 if is_mob else 15)
 	_gold_label.add_theme_color_override("font_color", Color.html("#fcd34d"))
 	res_row.add_child(_gold_label)
 
 	_sp_pts_label = Label.new()
+	_sp_pts_label.add_theme_font_size_override("font_size", 20 if is_mob else 15)
 	_sp_pts_label.add_theme_color_override("font_color", Color.html("#7dd3fc"))
 	res_row.add_child(_sp_pts_label)
 
@@ -94,7 +118,7 @@ func _build_ui() -> void:
 
 	_body_box = VBoxContainer.new()
 	_body_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_body_box.add_theme_constant_override("separation", 10)
+	_body_box.add_theme_constant_override("separation", 12 if is_mob else 10)
 	scroll.add_child(_body_box)
 
 
@@ -114,13 +138,18 @@ func switch_tab(tab: String) -> void:
 	for k in _tab_buttons.keys():
 		var btn: Button = _tab_buttons[k]
 		if k == tab:
-			UiStyle.apply_button(btn, "#f59e0b", "#fde68a", "#0f172a", 12, 1, 1.0)
+			UiStyle.apply_button(btn, "#f59e0b", "#fde68a", "#0f172a", 12, 2, 1.0)
 		else:
 			UiStyle.apply_button(btn, "#1e293b", "#475569", "#cbd5e1", 12, 1, 0.95)
 	_render_content()
 
 
 func _render_content() -> void:
+	var is_mob := UiStyle.is_mobile_device()
+	var row_fs := 19 if is_mob else 14
+	var btn_h := 56 if is_mob else 40
+	var btn_fs := 18 if is_mob else 14
+
 	_gold_label.text = "持有金幣：%d 🪙" % int(GameState.player["gold"])
 	_sp_pts_label.text = "可用技能點：%d pt" % int(GameState.player["skill_points"])
 
@@ -141,21 +170,22 @@ func _render_content() -> void:
 			var is_max := lv >= GameData.MAX_SKILL_LEVEL
 			var row := _make_row_panel("#0b1120", "#334155")
 			var hbox := HBoxContainer.new()
-			hbox.add_theme_constant_override("separation", 12)
+			hbox.add_theme_constant_override("separation", 14)
 			row.add_child(hbox)
 
 			var info := Label.new()
 			info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			info.text = "%s  %s  [Lv.%d / %d]\n%s" % [sk["icon"], sk["name"], lv, GameData.MAX_SKILL_LEVEL, sk["desc"]]
-			info.add_theme_font_size_override("font_size", 14)
+			info.add_theme_font_size_override("font_size", row_fs)
 			hbox.add_child(info)
 
 			var up_btn := Button.new()
 			up_btn.text = "MAX" if is_max else "升級 (1pt)"
 			up_btn.disabled = is_max or int(GameState.player["skill_points"]) <= 0
-			up_btn.custom_minimum_size = Vector2(110, 38)
-			UiStyle.apply_button(up_btn, "#f59e0b", "#fde68a", "#0f172a", 10, 1, 1.0)
+			up_btn.custom_minimum_size = Vector2(160 if is_mob else 115, btn_h)
+			up_btn.add_theme_font_size_override("font_size", btn_fs)
+			UiStyle.apply_button(up_btn, "#f59e0b", "#fde68a", "#0f172a", 12, 1, 1.0)
 			var sk_key: String = sk["key"]
 			up_btn.pressed.connect(func() -> void: GameState.upgrade_skill(sk_key))
 			hbox.add_child(up_btn)
@@ -173,7 +203,7 @@ func _render_content() -> void:
 
 			var row := _make_row_panel("#064e3b" if is_eq else "#0b1120", "#34d399" if is_eq else "#334155")
 			var hbox := HBoxContainer.new()
-			hbox.add_theme_constant_override("separation", 10)
+			hbox.add_theme_constant_override("separation", 12)
 			row.add_child(hbox)
 
 			var tag := "【裝備中】" if is_eq else ""
@@ -181,27 +211,33 @@ func _render_content() -> void:
 			var info := Label.new()
 			info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			info.text = "%s  %s%s %s\n攻擊 +%d ｜ 生命 +%d" % [eq["icon"], eq["name"], plus_txt, tag, atk_val, hp_val]
-			info.add_theme_font_size_override("font_size", 14)
+			info.add_theme_font_size_override("font_size", row_fs)
 			hbox.add_child(info)
 
 			if not owned:
 				var buy_btn := Button.new()
 				buy_btn.text = "購買 (%d 🪙)" % int(eq["cost"])
 				buy_btn.disabled = int(GameState.player["gold"]) < int(eq["cost"])
-				UiStyle.apply_button(buy_btn, "#f59e0b", "#fde68a", "#0f172a", 10, 1, 1.0)
+				buy_btn.custom_minimum_size = Vector2(175 if is_mob else 130, btn_h)
+				buy_btn.add_theme_font_size_override("font_size", btn_fs)
+				UiStyle.apply_button(buy_btn, "#f59e0b", "#fde68a", "#0f172a", 12, 1, 1.0)
 				buy_btn.pressed.connect(func() -> void: GameState.buy_or_equip_item(eq_id, "buy"))
 				hbox.add_child(buy_btn)
 			else:
 				if not is_eq:
 					var eq_btn := Button.new()
 					eq_btn.text = "裝備"
-					UiStyle.apply_button(eq_btn, "#10b981", "#6ee7b7", "#0f172a", 10, 1, 1.0)
+					eq_btn.custom_minimum_size = Vector2(115 if is_mob else 80, btn_h)
+					eq_btn.add_theme_font_size_override("font_size", btn_fs)
+					UiStyle.apply_button(eq_btn, "#10b981", "#6ee7b7", "#0f172a", 12, 1, 1.0)
 					eq_btn.pressed.connect(func() -> void: GameState.buy_or_equip_item(eq_id, "equip"))
 					hbox.add_child(eq_btn)
 				var enh_btn := Button.new()
 				enh_btn.text = "強化 MAX" if plus >= GameData.MAX_EQUIP_ENHANCE else "鍛造 +1 (%d 🪙)" % enh_cost
 				enh_btn.disabled = plus >= GameData.MAX_EQUIP_ENHANCE or int(GameState.player["gold"]) < enh_cost
-				UiStyle.apply_button(enh_btn, "#38bdf8", "#bae6fd", "#0f172a", 10, 1, 1.0)
+				enh_btn.custom_minimum_size = Vector2(205 if is_mob else 145, btn_h)
+				enh_btn.add_theme_font_size_override("font_size", btn_fs)
+				UiStyle.apply_button(enh_btn, "#38bdf8", "#bae6fd", "#0f172a", 12, 1, 1.0)
 				enh_btn.pressed.connect(func() -> void: GameState.buy_or_equip_item(eq_id, "enh"))
 				hbox.add_child(enh_btn)
 
@@ -215,20 +251,22 @@ func _render_content() -> void:
 
 			var row := _make_row_panel("#500724" if active else "#0b1120", "#f472b6" if active else "#334155")
 			var hbox := HBoxContainer.new()
-			hbox.add_theme_constant_override("separation", 12)
+			hbox.add_theme_constant_override("separation", 14)
 			row.add_child(hbox)
 
 			var info := Label.new()
 			info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			info.text = "%s  %s\n%s" % [sh["icon"], sh["name"], sh["desc"]]
-			info.add_theme_font_size_override("font_size", 14)
+			info.add_theme_font_size_override("font_size", row_fs)
 			hbox.add_child(info)
 
 			var btn := Button.new()
 			btn.text = "跟隨中" if active else ("召喚跟隨" if owned else "契約 (%d 🪙)" % int(sh["cost"]))
 			btn.disabled = (not owned) and int(GameState.player["gold"]) < int(sh["cost"])
-			UiStyle.apply_button(btn, "#ec4899" if active else "#f59e0b", "#fbcfe8" if active else "#fde68a", "#0f172a", 10, 1, 1.0)
+			btn.custom_minimum_size = Vector2(175 if is_mob else 130, btn_h)
+			btn.add_theme_font_size_override("font_size", btn_fs)
+			UiStyle.apply_button(btn, "#ec4899" if active else "#f59e0b", "#fbcfe8" if active else "#fde68a", "#0f172a", 12, 1, 1.0)
 			btn.pressed.connect(func() -> void: GameState.contract_or_summon_shikigami(sh_id))
 			hbox.add_child(btn)
 			_body_box.add_child(row)
@@ -237,5 +275,5 @@ func _render_content() -> void:
 func _make_row_panel(bg_hex: String, border_hex: String) -> PanelContainer:
 	var p := PanelContainer.new()
 	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	p.add_theme_stylebox_override("panel", UiStyle.make_panel(bg_hex, 0.92, border_hex, 0.7, 14, 1, 14, 10))
+	p.add_theme_stylebox_override("panel", UiStyle.make_panel(bg_hex, 0.92, border_hex, 0.7, 14, 1, 16, 12))
 	return p

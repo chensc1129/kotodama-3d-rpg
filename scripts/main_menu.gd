@@ -1,6 +1,6 @@
 extends Control
 ## Standalone Main Menu scene: handles name, character, stage, mode selection,
-## pre-battle upgrades, and loads the 3D Game scene only when the player starts.
+## pre-battle upgrades, fullscreen landscape lock, and loads the 3D Game scene on start.
 
 const GAME_SCENE_PATH: String = "res://scenes/game.tscn"
 
@@ -63,24 +63,33 @@ func _build_ui() -> void:
 	petals.color = Color(0.98, 0.65, 0.82, 0.68)
 	add_child(petals)
 
-	# Main Centered Panel
+	# Outer Container: Full-screen on mobile, centered card on desktop
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 20)
-	margin.add_theme_constant_override("margin_right", 20)
-	margin.add_theme_constant_override("margin_top", 14)
-	margin.add_theme_constant_override("margin_bottom", 14)
+	var m_side := 12 if is_mob else 24
+	var m_vert := 10 if is_mob else 18
+	margin.add_theme_constant_override("margin_left", m_side)
+	margin.add_theme_constant_override("margin_right", m_side)
+	margin.add_theme_constant_override("margin_top", m_vert)
+	margin.add_theme_constant_override("margin_bottom", m_vert)
 	add_child(margin)
 
-	var center := CenterContainer.new()
-	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	margin.add_child(center)
-
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(1080 if is_mob else 960, 640)
-	panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.92, "#fbbf24", 0.65, 24, 2, 24, 18))
-	center.add_child(panel)
+	panel.add_theme_stylebox_override(
+		"panel",
+		UiStyle.make_panel("#0f172a", 0.92, "#fbbf24", 0.65, 22, 2, 24 if is_mob else 24, 18)
+	)
+	if is_mob:
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		margin.add_child(panel)
+	else:
+		var center := CenterContainer.new()
+		center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		margin.add_child(center)
+		panel.custom_minimum_size = Vector2(960, 640)
+		center.add_child(panel)
 
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -90,12 +99,12 @@ func _build_ui() -> void:
 
 	var vbox := VBoxContainer.new()
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 14)
+	vbox.add_theme_constant_override("separation", 18 if is_mob else 14)
 	scroll.add_child(vbox)
 
 	# ==================== HEADER ====================
 	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 10)
+	header.add_theme_constant_override("separation", 12)
 	vbox.add_child(header)
 
 	var title_box := VBoxContainer.new()
@@ -104,31 +113,31 @@ func _build_ui() -> void:
 
 	var ver_lbl := Label.new()
 	ver_lbl.text = "Ver 2.0 資料片｜百鬼夜行・新角色與新關卡（Godot 4.3 主選單）"
-	ver_lbl.add_theme_font_size_override("font_size", 13 if is_mob else 12)
+	ver_lbl.add_theme_font_size_override("font_size", 16 if is_mob else 12)
 	ver_lbl.add_theme_color_override("font_color", Color.html("#fda4af"))
 	title_box.add_child(ver_lbl)
 
 	var main_title := Label.new()
 	main_title.text = "⛩️ 言霊剣士・あの一撃 3D"
-	main_title.add_theme_font_size_override("font_size", 32 if is_mob else 28)
+	main_title.add_theme_font_size_override("font_size", 36 if is_mob else 28)
 	main_title.add_theme_color_override("font_color", Color.html("#fcd34d"))
 	title_box.add_child(main_title)
 
 	# Player Stats + Quick Prep Buttons
 	var header_right := HBoxContainer.new()
-	header_right.add_theme_constant_override("separation", 8)
+	header_right.add_theme_constant_override("separation", 10 if is_mob else 8)
 	header.add_child(header_right)
 
 	var stat_panel := PanelContainer.new()
-	stat_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#1e293b", 0.95, "#fbbf24", 0.45, 12, 1, 12, 6))
+	stat_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#1e293b", 0.95, "#fbbf24", 0.45, 12, 1, 14, 8))
 	_stats_badge_lbl = Label.new()
-	_stats_badge_lbl.add_theme_font_size_override("font_size", 15 if is_mob else 13)
+	_stats_badge_lbl.add_theme_font_size_override("font_size", 18 if is_mob else 13)
 	_stats_badge_lbl.add_theme_color_override("font_color", Color.html("#fde68a"))
 	stat_panel.add_child(_stats_badge_lbl)
 	header_right.add_child(stat_panel)
 
-	var btn_h := 50 if is_mob else 38
-	var btn_fs := 16 if is_mob else 13
+	var btn_h := 58 if is_mob else 38
+	var btn_fs := 19 if is_mob else 13
 	for item in [
 		["⚡ 技能", "#fbbf24", "#fcd34d", "skills"],
 		["🎒 裝備", "#34d399", "#6ee7b7", "equip"],
@@ -136,39 +145,49 @@ func _build_ui() -> void:
 	]:
 		var b := Button.new()
 		b.text = item[0]
-		b.custom_minimum_size = Vector2(92 if is_mob else 74, btn_h)
+		b.custom_minimum_size = Vector2(110 if is_mob else 74, btn_h)
 		b.add_theme_font_size_override("font_size", btn_fs)
-		UiStyle.apply_button(b, "#1e293b", item[1], item[2], 12, 1, 0.95)
+		UiStyle.apply_button(b, "#1e293b", item[1], item[2], 12, 2 if is_mob else 1, 0.95)
 		var tab_id: String = item[3]
 		b.pressed.connect(func() -> void: _upgrade_modal.open_modal(tab_id))
 		header_right.add_child(b)
 
+	if is_mob:
+		var fs_btn := Button.new()
+		fs_btn.text = "⛶ 橫向全螢幕"
+		fs_btn.custom_minimum_size = Vector2(150, btn_h)
+		fs_btn.add_theme_font_size_override("font_size", 18)
+		UiStyle.apply_button(fs_btn, "#0c4a6e", "#38bdf8", "#e0f2fe", 12, 2, 0.95)
+		fs_btn.pressed.connect(func() -> void: UiStyle.request_mobile_landscape_fullscreen())
+		header_right.add_child(fs_btn)
+
 	_audio_btn = Button.new()
-	_audio_btn.custom_minimum_size = Vector2(56 if is_mob else 44, btn_h)
-	_audio_btn.add_theme_font_size_override("font_size", 18 if is_mob else 15)
-	UiStyle.apply_button(_audio_btn, "#1e293b", "#94a3b8", "#ffffff", 12, 1, 0.95)
+	_audio_btn.custom_minimum_size = Vector2(64 if is_mob else 44, btn_h)
+	_audio_btn.add_theme_font_size_override("font_size", 22 if is_mob else 15)
+	UiStyle.apply_button(_audio_btn, "#1e293b", "#94a3b8", "#ffffff", 12, 2 if is_mob else 1, 0.95)
 	_audio_btn.pressed.connect(func() -> void: AudioManager.toggle_audio())
 	header_right.add_child(_audio_btn)
 	_update_audio_btn()
 
 	# ==================== CUSTOM NAME BAR ====================
 	var name_panel := PanelContainer.new()
-	name_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0b1120", 0.92, "#334155", 0.9, 14, 1, 14, 10))
+	name_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0b1120", 0.92, "#334155", 0.9, 14, 1, 16, 12))
 	vbox.add_child(name_panel)
 
 	var name_row := HBoxContainer.new()
-	name_row.add_theme_constant_override("separation", 10)
+	name_row.add_theme_constant_override("separation", 12)
 	name_panel.add_child(name_row)
 
 	var name_lbl := Label.new()
 	name_lbl.text = "🏷️ 自訂角色名稱："
-	name_lbl.add_theme_font_size_override("font_size", 16 if is_mob else 14)
+	name_lbl.add_theme_font_size_override("font_size", 20 if is_mob else 14)
 	name_lbl.add_theme_color_override("font_color", Color.html("#cbd5e1"))
 	name_row.add_child(name_lbl)
 
 	_name_input = LineEdit.new()
 	_name_input.max_length = 12
-	_name_input.custom_minimum_size = Vector2(240 if is_mob else 220, 44 if is_mob else 36)
+	_name_input.custom_minimum_size = Vector2(280 if is_mob else 220, 54 if is_mob else 36)
+	_name_input.add_theme_font_size_override("font_size", 20 if is_mob else 15)
 	UiStyle.apply_line_edit(_name_input, "#fbbf24")
 	_name_input.text_submitted.connect(func(_t: String) -> void: GameState.set_player_name(_name_input.text))
 	name_row.add_child(_name_input)
@@ -179,9 +198,9 @@ func _build_ui() -> void:
 
 	var rand_btn := Button.new()
 	rand_btn.text = "🎲 隨機和風取名"
-	rand_btn.custom_minimum_size = Vector2(0, 44 if is_mob else 36)
-	rand_btn.add_theme_font_size_override("font_size", 15 if is_mob else 13)
-	UiStyle.apply_button(rand_btn, "#1e293b", "#64748b", "#fde68a", 10, 1, 0.95)
+	rand_btn.custom_minimum_size = Vector2(200 if is_mob else 0, 54 if is_mob else 36)
+	rand_btn.add_theme_font_size_override("font_size", 18 if is_mob else 13)
+	UiStyle.apply_button(rand_btn, "#1e293b", "#64748b", "#fde68a", 12, 1, 0.95)
 	rand_btn.pressed.connect(func() -> void:
 		var pick: String = GameData.RANDOM_NAMES[randi() % GameData.RANDOM_NAMES.size()]
 		_name_input.text = pick
@@ -191,9 +210,9 @@ func _build_ui() -> void:
 
 	var confirm_btn := Button.new()
 	confirm_btn.text = "確認名字"
-	confirm_btn.custom_minimum_size = Vector2(0, 44 if is_mob else 36)
-	confirm_btn.add_theme_font_size_override("font_size", 15 if is_mob else 13)
-	UiStyle.apply_button(confirm_btn, "#f59e0b", "#fde68a", "#0f172a", 10, 1, 1.0)
+	confirm_btn.custom_minimum_size = Vector2(140 if is_mob else 0, 54 if is_mob else 36)
+	confirm_btn.add_theme_font_size_override("font_size", 18 if is_mob else 13)
+	UiStyle.apply_button(confirm_btn, "#f59e0b", "#fde68a", "#0f172a", 12, 1, 1.0)
 	confirm_btn.pressed.connect(func() -> void: GameState.set_player_name(_name_input.text))
 	name_row.add_child(confirm_btn)
 
@@ -201,44 +220,44 @@ func _build_ui() -> void:
 	vbox.add_child(_make_section_title("🎭 1. 選擇出戰 3D 角色（普攻皆為「あ」三段斬，技能按鍵各有專屬奧義）：", "#fcd34d", is_mob))
 	_char_grid = GridContainer.new()
 	_char_grid.columns = 2 if is_mob else 3
-	_char_grid.add_theme_constant_override("h_separation", 10)
-	_char_grid.add_theme_constant_override("v_separation", 10)
+	_char_grid.add_theme_constant_override("h_separation", 12 if is_mob else 10)
+	_char_grid.add_theme_constant_override("v_separation", 12 if is_mob else 10)
 	vbox.add_child(_char_grid)
 
 	# ==================== STEP 2: STAGES ====================
 	vbox.add_child(_make_section_title("🗺️ 2. 選擇 3D 戰鬥關卡場景：", "#7dd3fc", is_mob))
 	_stage_grid = GridContainer.new()
 	_stage_grid.columns = 2 if is_mob else 4
-	_stage_grid.add_theme_constant_override("h_separation", 10)
-	_stage_grid.add_theme_constant_override("v_separation", 10)
+	_stage_grid.add_theme_constant_override("h_separation", 12 if is_mob else 10)
+	_stage_grid.add_theme_constant_override("v_separation", 12 if is_mob else 10)
 	vbox.add_child(_stage_grid)
 
 	# ==================== STEP 3: MODES ====================
 	vbox.add_child(_make_section_title("🔥 3. 選擇挑戰模式：", "#fda4af", is_mob))
 	_mode_grid = GridContainer.new()
 	_mode_grid.columns = 2 if is_mob else 4
-	_mode_grid.add_theme_constant_override("h_separation", 10)
-	_mode_grid.add_theme_constant_override("v_separation", 10)
+	_mode_grid.add_theme_constant_override("h_separation", 12 if is_mob else 10)
+	_mode_grid.add_theme_constant_override("v_separation", 12 if is_mob else 10)
 	vbox.add_child(_mode_grid)
 
 	# ==================== FOOTER CTA ====================
 	var footer := HBoxContainer.new()
-	footer.add_theme_constant_override("separation", 14)
+	footer.add_theme_constant_override("separation", 16)
 	vbox.add_child(footer)
 
 	var tip := Label.new()
 	tip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tip.text = "💡 選擇好角色、關卡與模式後點擊右側按鈕，才會正式載入 3D 戰鬥本體！"
-	tip.add_theme_font_size_override("font_size", 14 if is_mob else 12)
+	tip.add_theme_font_size_override("font_size", 18 if is_mob else 12)
 	tip.add_theme_color_override("font_color", Color.html("#94a3b8"))
 	footer.add_child(tip)
 
 	var start_btn := Button.new()
 	start_btn.text = "⚔️ 進入 3D 道場開戰！"
-	start_btn.custom_minimum_size = Vector2(280 if is_mob else 240, 64 if is_mob else 52)
-	start_btn.add_theme_font_size_override("font_size", 21 if is_mob else 18)
-	UiStyle.apply_button(start_btn, "#dc2626", "#fde68a", "#ffffff", 16, 2, 1.0)
+	start_btn.custom_minimum_size = Vector2(400 if is_mob else 240, 76 if is_mob else 52)
+	start_btn.add_theme_font_size_override("font_size", 26 if is_mob else 18)
+	UiStyle.apply_button(start_btn, "#dc2626", "#fde68a", "#ffffff", 18, 3 if is_mob else 2, 1.0)
 	start_btn.pressed.connect(_on_start_battle_pressed)
 	footer.add_child(start_btn)
 
@@ -258,7 +277,7 @@ func _build_ui() -> void:
 	_toast_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toast_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.96, "#fbbf24", 0.85, 20, 2, 20, 8))
 	_toast_lbl = Label.new()
-	_toast_lbl.add_theme_font_size_override("font_size", 15)
+	_toast_lbl.add_theme_font_size_override("font_size", 18 if is_mob else 15)
 	_toast_lbl.add_theme_color_override("font_color", Color.html("#fcd34d"))
 	_toast_panel.add_child(_toast_lbl)
 	toast_center.add_child(_toast_panel)
@@ -281,7 +300,7 @@ func _build_ui() -> void:
 	var load_lbl := Label.new()
 	load_lbl.text = "🌸 正在載入 3D 道場與百鬼夜行戰場...\n請稍候片刻"
 	load_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	load_lbl.add_theme_font_size_override("font_size", 22 if is_mob else 18)
+	load_lbl.add_theme_font_size_override("font_size", 24 if is_mob else 18)
 	load_lbl.add_theme_color_override("font_color", Color.html("#fcd34d"))
 	load_panel.add_child(load_lbl)
 
@@ -289,7 +308,7 @@ func _build_ui() -> void:
 func _make_section_title(text: String, hex_col: String, is_mob: bool) -> Label:
 	var lbl := Label.new()
 	lbl.text = text
-	lbl.add_theme_font_size_override("font_size", 17 if is_mob else 15)
+	lbl.add_theme_font_size_override("font_size", 21 if is_mob else 15)
 	lbl.add_theme_color_override("font_color", Color.html(hex_col))
 	return lbl
 
@@ -317,15 +336,15 @@ func refresh() -> void:
 			var selected: bool = p["char_id"] == cid
 			var btn := Button.new()
 			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			btn.custom_minimum_size = Vector2(0, 118 if is_mob else 96)
+			btn.custom_minimum_size = Vector2(0, 152 if is_mob else 96)
 			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			btn.text = "%s %s【%s】 鍵：%s\n%s" % [ch["icon"], ch["name"], ch["title"], ch["sig_key"], ch["desc"]]
-			btn.add_theme_font_size_override("font_size", 15 if is_mob else 12)
+			btn.add_theme_font_size_override("font_size", 20 if is_mob else 12)
 			if selected:
-				UiStyle.apply_button(btn, "#78350f", "#fbbf24", "#fef3c7", 14, 2, 0.80)
+				UiStyle.apply_button(btn, "#78350f", "#fbbf24", "#fef3c7", 16, 3 if is_mob else 2, 0.85)
 			else:
-				UiStyle.apply_button(btn, "#0f172a", "#334155", "#e2e8f0", 14, 1, 0.90)
+				UiStyle.apply_button(btn, "#0f172a", "#334155", "#e2e8f0", 16, 1, 0.90)
 			var pick_id: String = cid
 			btn.pressed.connect(func() -> void: GameState.set_character(pick_id))
 			_char_grid.add_child(btn)
@@ -337,15 +356,15 @@ func refresh() -> void:
 			var selected: bool = p["stage_id"] == st["id"]
 			var btn := Button.new()
 			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			btn.custom_minimum_size = Vector2(0, 96 if is_mob else 82)
+			btn.custom_minimum_size = Vector2(0, 118 if is_mob else 82)
 			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			btn.text = "%s %s\n%s" % [st["icon"], st["name"], st["desc"]]
-			btn.add_theme_font_size_override("font_size", 15 if is_mob else 12)
+			btn.add_theme_font_size_override("font_size", 19 if is_mob else 12)
 			if selected:
-				UiStyle.apply_button(btn, "#0c4a6e", "#38bdf8", "#e0f2fe", 14, 2, 0.82)
+				UiStyle.apply_button(btn, "#0c4a6e", "#38bdf8", "#e0f2fe", 16, 3 if is_mob else 2, 0.85)
 			else:
-				UiStyle.apply_button(btn, "#0f172a", "#334155", "#cbd5e1", 14, 1, 0.90)
+				UiStyle.apply_button(btn, "#0f172a", "#334155", "#cbd5e1", 16, 1, 0.90)
 			var sid: String = st["id"]
 			btn.pressed.connect(func() -> void: GameState.set_stage(sid))
 			_stage_grid.add_child(btn)
@@ -357,15 +376,15 @@ func refresh() -> void:
 			var selected: bool = p["mode"] == m["id"]
 			var btn := Button.new()
 			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			btn.custom_minimum_size = Vector2(0, 88 if is_mob else 72)
+			btn.custom_minimum_size = Vector2(0, 108 if is_mob else 72)
 			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			btn.text = "%s\n%s" % [m["label"], m["desc"]]
-			btn.add_theme_font_size_override("font_size", 15 if is_mob else 12)
+			btn.add_theme_font_size_override("font_size", 19 if is_mob else 12)
 			if selected:
-				UiStyle.apply_button(btn, "#78350f", "#fbbf24", m["color"], 14, 2, 0.80)
+				UiStyle.apply_button(btn, "#78350f", "#fbbf24", m["color"], 16, 3 if is_mob else 2, 0.85)
 			else:
-				UiStyle.apply_button(btn, "#0f172a", "#334155", m["color"], 14, 1, 0.90)
+				UiStyle.apply_button(btn, "#0f172a", "#334155", m["color"], 16, 1, 0.90)
 			var mid: String = m["id"]
 			btn.pressed.connect(func() -> void: GameState.set_mode(mid))
 			_mode_grid.add_child(btn)
@@ -375,6 +394,8 @@ func _on_start_battle_pressed() -> void:
 	if _is_loading_game:
 		return
 	_is_loading_game = true
+
+	UiStyle.request_mobile_landscape_fullscreen()
 
 	var typed := _name_input.text.strip_edges()
 	if not typed.is_empty() and typed != String(GameState.player["name"]):
