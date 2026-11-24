@@ -306,6 +306,7 @@ func _build_ui() -> void:
 
 	# Left: 360 Joystick OR 4-Way D-Pad (Mobile / Touch ONLY)
 	_left_ctrl = VBoxContainer.new()
+	_left_ctrl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_left_ctrl.alignment = BoxContainer.ALIGNMENT_END
 	_left_ctrl.add_theme_constant_override("separation", 10)
 	bot_row.add_child(_left_ctrl)
@@ -315,6 +316,7 @@ func _build_ui() -> void:
 	_left_ctrl.add_child(_joystick)
 
 	_dpad_grid = GridContainer.new()
+	_dpad_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_dpad_grid.columns = 3
 	_dpad_grid.visible = false
 	_dpad_grid.add_theme_constant_override("h_separation", 6)
@@ -381,10 +383,12 @@ func _build_ui() -> void:
 
 	# Right: Skill Row + Big Red 'あ' Attack Button
 	_right_vbox = VBoxContainer.new()
+	_right_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_right_vbox.alignment = BoxContainer.ALIGNMENT_END
 	bot_row.add_child(_right_vbox)
 
 	_skill_row = HBoxContainer.new()
+	_skill_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_skill_row.alignment = BoxContainer.ALIGNMENT_END
 	_right_vbox.add_child(_skill_row)
 
@@ -403,6 +407,7 @@ func _build_ui() -> void:
 	_skill_row.add_child(_btn_sig)
 
 	var atk_row := HBoxContainer.new()
+	atk_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	atk_row.alignment = BoxContainer.ALIGNMENT_END
 	_right_vbox.add_child(atk_row)
 
@@ -414,69 +419,69 @@ func _build_ui() -> void:
 
 func _apply_responsive_layout() -> void:
 	if _is_mobile_ui:
-		# Mobile / Touch Mode: show large touch wheel, hide desktop keyboard hints, enlarge all buttons
+		# Mobile / Touch Mode: hide desktop hints, show extra-large thumb-friendly controls
 		_left_ctrl.visible = true
 		_direct_center.visible = false
 		_hint_lbl.visible = false
 
-		_bot_margin.offset_top = -315
+		_bot_margin.offset_top = -425
 		_bot_margin.add_theme_constant_override("margin_left", 28)
 		_bot_margin.add_theme_constant_override("margin_right", 28)
-		_bot_margin.add_theme_constant_override("margin_bottom", 22)
+		_bot_margin.add_theme_constant_override("margin_bottom", 20)
 
-		_joystick.set_joystick_size(210.0)
+		_joystick.set_joystick_size(268.0)
 		for cell in _dpad_cells:
-			cell.custom_minimum_size = Vector2(68, 68)
+			cell.custom_minimum_size = Vector2(90, 90)
 		for db in _dpad_buttons:
-			db.custom_minimum_size = Vector2(68, 68)
-			db.add_theme_font_size_override("font_size", 24)
-		_ctrl_toggle_btn.custom_minimum_size = Vector2(180, 42)
-		_ctrl_toggle_btn.add_theme_font_size_override("font_size", 15)
+			db.custom_minimum_size = Vector2(90, 90)
+			db.add_theme_font_size_override("font_size", 32)
+		_ctrl_toggle_btn.custom_minimum_size = Vector2(220, 52)
+		_ctrl_toggle_btn.add_theme_font_size_override("font_size", 18)
 
-		_right_vbox.add_theme_constant_override("separation", 14)
-		_skill_row.add_theme_constant_override("separation", 14)
+		_right_vbox.add_theme_constant_override("separation", 16)
+		_skill_row.add_theme_constant_override("separation", 16)
 
-		_btn_dash.custom_minimum_size = Vector2(96, 96)
-		_btn_dash.add_theme_font_size_override("font_size", 17)
-		UiStyle.apply_button(_btn_dash, "#0f172a", "#38bdf8", "#7dd3fc", 20, 2, 0.92)
+		_btn_dash.custom_minimum_size = Vector2(126, 126)
+		_btn_dash.add_theme_font_size_override("font_size", 22)
+		UiStyle.apply_button(_btn_dash, "#0f172a", "#38bdf8", "#7dd3fc", 26, 3, 0.94)
 
-		_btn_ult.custom_minimum_size = Vector2(124, 96)
-		_btn_ult.add_theme_font_size_override("font_size", 15)
-		UiStyle.apply_button(_btn_ult, "#d97706", "#fde68a", "#ffffff", 20, 2, 0.96)
+		_btn_ult.custom_minimum_size = Vector2(154, 126)
+		_btn_ult.add_theme_font_size_override("font_size", 19)
+		UiStyle.apply_button(_btn_ult, "#d97706", "#fde68a", "#ffffff", 26, 3, 0.96)
 
-		_btn_sig.custom_minimum_size = Vector2(156, 96)
-		_btn_sig.add_theme_font_size_override("font_size", 16)
-		UiStyle.apply_button(_btn_sig, "#9333ea", "#f9a8d4", "#ffffff", 20, 2, 0.96)
+		_btn_sig.custom_minimum_size = Vector2(194, 126)
+		_btn_sig.add_theme_font_size_override("font_size", 20)
+		UiStyle.apply_button(_btn_sig, "#9333ea", "#f9a8d4", "#ffffff", 26, 3, 0.96)
 
-		_btn_atk.custom_minimum_size = Vector2(168, 168)
-		_btn_atk.add_theme_font_size_override("font_size", 30)
-		UiStyle.apply_button(_btn_atk, "#dc2626", "#fcd34d", "#ffffff", 84, 4, 0.98)
+		_btn_atk.custom_minimum_size = Vector2(236, 236)
+		_btn_atk.add_theme_font_size_override("font_size", 42)
+		UiStyle.apply_button(_btn_atk, "#dc2626", "#fcd34d", "#ffffff", 118, 5, 0.98)
 
 		# Enlarge Top HUD & Menu Buttons for mobile legibility and thumb tapping
-		_icon_box.custom_minimum_size = Vector2(56, 56)
-		_char_icon_lbl.add_theme_font_size_override("font_size", 28)
-		_bars_box.custom_minimum_size = Vector2(210, 0)
-		_player_name_lbl.add_theme_font_size_override("font_size", 15)
-		_level_lbl.add_theme_font_size_override("font_size", 14)
-		_hp_text_lbl.add_theme_font_size_override("font_size", 13)
-		_hp_bar.custom_minimum_size = Vector2(0, 11)
-		_sp_text_lbl.add_theme_font_size_override("font_size", 13)
-		_sp_bar.custom_minimum_size = Vector2(0, 9)
+		_icon_box.custom_minimum_size = Vector2(64, 64)
+		_char_icon_lbl.add_theme_font_size_override("font_size", 32)
+		_bars_box.custom_minimum_size = Vector2(230, 0)
+		_player_name_lbl.add_theme_font_size_override("font_size", 17)
+		_level_lbl.add_theme_font_size_override("font_size", 16)
+		_hp_text_lbl.add_theme_font_size_override("font_size", 14)
+		_hp_bar.custom_minimum_size = Vector2(0, 12)
+		_sp_text_lbl.add_theme_font_size_override("font_size", 14)
+		_sp_bar.custom_minimum_size = Vector2(0, 10)
 
-		_stage_lbl.add_theme_font_size_override("font_size", 16)
-		_mode_lbl.add_theme_font_size_override("font_size", 13)
-		_enemy_count_lbl.add_theme_font_size_override("font_size", 13)
-		_endless_lbl.add_theme_font_size_override("font_size", 13)
-		_gold_lbl.add_theme_font_size_override("font_size", 15)
-		_sp_pts_lbl.add_theme_font_size_override("font_size", 15)
-		_boss_name_lbl.add_theme_font_size_override("font_size", 15)
-		_boss_hp_lbl.add_theme_font_size_override("font_size", 15)
+		_stage_lbl.add_theme_font_size_override("font_size", 18)
+		_mode_lbl.add_theme_font_size_override("font_size", 15)
+		_enemy_count_lbl.add_theme_font_size_override("font_size", 15)
+		_endless_lbl.add_theme_font_size_override("font_size", 15)
+		_gold_lbl.add_theme_font_size_override("font_size", 17)
+		_sp_pts_lbl.add_theme_font_size_override("font_size", 17)
+		_boss_name_lbl.add_theme_font_size_override("font_size", 17)
+		_boss_hp_lbl.add_theme_font_size_override("font_size", 17)
 
 		for mb in _menu_buttons:
-			mb.custom_minimum_size = Vector2(86, 50)
-			mb.add_theme_font_size_override("font_size", 16)
-		_audio_btn.custom_minimum_size = Vector2(54, 50)
-		_audio_btn.add_theme_font_size_override("font_size", 18)
+			mb.custom_minimum_size = Vector2(104, 64)
+			mb.add_theme_font_size_override("font_size", 19)
+		_audio_btn.custom_minimum_size = Vector2(68, 64)
+		_audio_btn.add_theme_font_size_override("font_size", 22)
 	else:
 		# Desktop Mode: hide mobile movement wheel completely!
 		_left_ctrl.visible = false

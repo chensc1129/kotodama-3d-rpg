@@ -4,7 +4,7 @@ extends RefCounted
 
 
 static func is_mobile_device() -> bool:
-	if OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios"):
+	if OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios") or OS.has_feature("web_android") or OS.has_feature("web_ios"):
 		return true
 	if OS.has_feature("web"):
 		var res: Variant = JavaScriptBridge.eval(

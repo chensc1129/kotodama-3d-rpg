@@ -12,7 +12,7 @@ var _mouse_active: bool = false
 
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(204, 204)
+	custom_minimum_size = Vector2(268, 268)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 
@@ -27,15 +27,15 @@ func _draw() -> void:
 	var knob_r := base_r * 0.42
 
 	# Base circle
-	draw_circle(center, base_r, Color(0.06, 0.09, 0.16, 0.80))
-	draw_arc(center, base_r, 0.0, TAU, 48, Color(0.98, 0.75, 0.14, 0.55), 2.5, true)
-	draw_arc(center, base_r * 0.62, 0.0, TAU, 36, Color(0.98, 0.75, 0.14, 0.18), 1.5, true)
+	draw_circle(center, base_r, Color(0.06, 0.09, 0.16, 0.84))
+	draw_arc(center, base_r, 0.0, TAU, 48, Color(0.98, 0.75, 0.14, 0.65), 3.5, true)
+	draw_arc(center, base_r * 0.62, 0.0, TAU, 36, Color(0.98, 0.75, 0.14, 0.22), 2.0, true)
 
 	# Knob
 	var knob_pos := center + _knob_offset
 	draw_circle(knob_pos, knob_r, Color.html("#f59e0b"))
 	draw_circle(knob_pos + Vector2(-knob_r * 0.18, -knob_r * 0.18), knob_r * 0.45, Color(1.0, 0.94, 0.72, 0.65))
-	draw_arc(knob_pos, knob_r, 0.0, TAU, 32, Color.html("#fffbeb"), 2.0, true)
+	draw_arc(knob_pos, knob_r, 0.0, TAU, 32, Color.html("#fffbeb"), 3.0, true)
 
 
 func _gui_input(event: InputEvent) -> void:
