@@ -59,8 +59,6 @@ var _is_dpad_mode: bool = false
 
 var _combo_panel: PanelContainer
 var _combo_lbl: Label
-var _direct_center: CenterContainer
-var _direct_input: LineEdit
 var _hint_panel: PanelContainer
 var _hint_lbl: Label
 
@@ -358,30 +356,6 @@ func _build_ui() -> void:
 	_desktop_status_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mid_vbox.add_child(_desktop_status_slot)
 
-	_direct_center = CenterContainer.new()
-	_direct_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	mid_vbox.add_child(_direct_center)
-
-	var direct_panel := PanelContainer.new()
-	direct_panel.add_theme_stylebox_override("panel", UiStyle.make_pill("#0a0f1f", 0.74, "#64748b", 0.36, 12, 4))
-	var direct_row := HBoxContainer.new()
-	direct_row.add_theme_constant_override("separation", 8)
-	direct_panel.add_child(direct_row)
-	var direct_lbl := Label.new()
-	direct_lbl.text = "日文感應："
-	direct_lbl.add_theme_font_size_override("font_size", 11)
-	direct_lbl.add_theme_color_override("font_color", Color.html("#cbd5e1"))
-	direct_row.add_child(direct_lbl)
-
-	_direct_input = LineEdit.new()
-	_direct_input.custom_minimum_size = Vector2(230, 28)
-	_direct_input.add_theme_font_size_override("font_size", 12)
-	_direct_input.placeholder_text = "輸入 あ 攻擊，或 石頭/腳/雷光/冰結"
-	UiStyle.apply_line_edit(_direct_input, "#475569")
-	_direct_input.text_changed.connect(_on_direct_input_changed)
-	direct_row.add_child(_direct_input)
-	_direct_center.add_child(direct_panel)
-
 	var hint_center := CenterContainer.new()
 	hint_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mid_vbox.add_child(hint_center)
@@ -524,7 +498,6 @@ func _apply_responsive_layout() -> void:
 		if _lock_hint_panel != null:
 			_lock_hint_panel.visible = false
 		_left_ctrl.visible = true
-		_direct_center.visible = false
 		_hint_panel.visible = false
 
 		_bot_margin.offset_top = -425
@@ -589,10 +562,9 @@ func _apply_responsive_layout() -> void:
 			_crosshair.visible = true
 		_left_ctrl.visible = false
 		joystick_changed.emit(Vector2.ZERO)
-		_direct_center.visible = true
 		_hint_panel.visible = true
 
-		_bot_margin.offset_top = -245
+		_bot_margin.offset_top = -225
 		_bot_margin.add_theme_constant_override("margin_left", 24)
 		_bot_margin.add_theme_constant_override("margin_right", 24)
 		_bot_margin.add_theme_constant_override("margin_bottom", 18)
@@ -693,21 +665,6 @@ func _toggle_control_mode() -> void:
 	_dpad_grid.visible = _is_dpad_mode
 	joystick_changed.emit(Vector2.ZERO)
 	_ctrl_toggle_btn.text = "➕ 十字鍵 ⇄ 輪盤" if _is_dpad_mode else "🕹️ 輪盤 ⇄ 十字鍵"
-
-
-func _on_direct_input_changed(new_text: String) -> void:
-	var val := new_text.strip_edges()
-	if val.is_empty():
-		return
-	if val.contains("あ") or val.to_lower().contains("a"):
-		_direct_input.text = ""
-		attack_pressed.emit()
-	elif val.contains("石頭") or val.contains("腳") or val.contains("火") or val.contains("雷") or val.contains("冰"):
-		_direct_input.text = ""
-		sig_skill_pressed.emit()
-	elif val.contains("奧義") or val.contains("必殺"):
-		_direct_input.text = ""
-		ult_skill_pressed.emit()
 
 
 func refresh(enemy_count: int, boss: Enemy3D) -> void:
