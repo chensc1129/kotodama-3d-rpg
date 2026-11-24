@@ -27,6 +27,7 @@ const NOTE_FREQ: Dictionary = {
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_player = AudioStreamPlayer.new()
 	var stream := AudioStreamGenerator.new()
 	stream.mix_rate = SAMPLE_RATE

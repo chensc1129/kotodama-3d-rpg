@@ -9,7 +9,7 @@ signal dash_pressed
 signal sig_skill_pressed
 signal ult_skill_pressed
 signal upgrade_requested(tab: String)
-signal lobby_requested
+signal pause_requested
 signal joystick_changed(vec: Vector2)
 
 var _is_mobile_ui: bool = false
@@ -233,10 +233,10 @@ func _build_ui() -> void:
 	var b_sk := _make_menu_btn("⚡ 技能", "#fbbf24", "#fcd34d", func() -> void: upgrade_requested.emit("skills"))
 	var b_eq := _make_menu_btn("🎒 裝備", "#34d399", "#6ee7b7", func() -> void: upgrade_requested.emit("equip"))
 	var b_sh := _make_menu_btn("🦊 式神", "#f472b6", "#f9a8d4", func() -> void: upgrade_requested.emit("shikigami"))
-	var b_lb := _make_menu_btn("⛩️ 大廳", "#94a3b8", "#ffffff", func() -> void: lobby_requested.emit())
+	var b_ps := _make_menu_btn("⏸️ 暫停", "#94a3b8", "#ffffff", func() -> void: pause_requested.emit())
 	_audio_btn = _make_menu_btn("🔊", "#94a3b8", "#ffffff", func() -> void: AudioManager.toggle_audio())
 
-	_menu_buttons = [b_sk, b_eq, b_sh, b_lb]
+	_menu_buttons = [b_sk, b_eq, b_sh, b_ps]
 	for mb in _menu_buttons:
 		menu_row.add_child(mb)
 	menu_row.add_child(_audio_btn)
@@ -375,7 +375,7 @@ func _build_ui() -> void:
 	_direct_center.add_child(direct_panel)
 
 	_hint_lbl = Label.new()
-	_hint_lbl.text = "拖曳畫面旋轉 3D 視角 ｜ WASD/方向鍵移動 ｜ J/あ 攻擊 ｜ 1/K 專屬技 ｜ 2/Q 奧義 ｜ Space 瞬步"
+	_hint_lbl.text = "拖曳旋轉 3D 視角 ｜ WASD/方向鍵移動 ｜ J/あ 攻擊 ｜ 1/K 專屬技 ｜ 2/Q 奧義 ｜ Space 瞬步 ｜ Esc/P 暫停"
 	_hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hint_lbl.add_theme_font_size_override("font_size", 11)
 	_hint_lbl.add_theme_color_override("font_color", Color(0.82, 0.86, 0.92, 0.82))

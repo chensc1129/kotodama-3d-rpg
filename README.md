@@ -13,7 +13,8 @@ kotodama_3d_rpg/
 ├── resources/
 │   └── ui_theme.tres          # 繁體中文／日文系統字型主題
 ├── scenes/
-│   └── main.tscn              # 主場景（3D 世界、攝影機、戰鬥管理、HUD 與各彈窗）
+│   ├── main_menu.tscn         # 獨立主選單場景（選角、關卡、模式、戰前整備，尚未載入 3D 戰場）
+│   └── game.tscn              # 3D 遊戲本體場景（World3D 可暫停 ＋ UILayer）
 └── scripts/
     ├── autoload/
     │   ├── game_data.gd       # 角色、關卡、裝備、式神、怪物、Boss、日文詞庫、祝福資料
@@ -30,13 +31,16 @@ kotodama_3d_rpg/
     │   └── enemy_projectile_3d.gd
     ├── combat/
     │   └── battle_manager.gd  # 核心戰鬥、波次生成、AI、三段斬、瞬步與言霊詠唱技能
+    ├── main_menu.gd           # 主選單邏輯與切換載入遊戲本體
+    ├── game.gd                # 遊戲本體協調器（含 Esc / P / 按鈕暫停控制）
     └── ui/
-        ├── ui_style.gd        # 玻璃擬態風格工具
+        ├── ui_style.gd        # 玻璃擬態風格工具與桌機／手機裝置偵測
         ├── virtual_joystick.gd# 360° 虛擬類比輪盤（支援多點觸控與滑鼠）
         ├── floating_popup_layer.gd # 3D 轉 2D 浮動傷害數字
-        ├── hud_ui.gd          # 頂部狀態列、Boss 血條、底部操作與日文感應輸入框
+        ├── hud_ui.gd          # 響應式 HUD（桌機隱藏輪盤、手機放大操作鍵、暫停按鈕）
         ├── chant_overlay.gd   # 子彈時間日文詠唱視窗（手打 1.5 倍暴擊／四選一）
-        ├── lobby_modal.gd     # 大廳（自訂名稱、5 角色、4 場景、4 模式）
+        ├── pause_modal.gd     # 暫停選單（繼續、整備、音效、重開本局、返回主選單）
+        ├── result_modal.gd    # 勝敗結算選單（再戰一場／返回主選單）
         ├── upgrade_modal.gd   # 技能升級／裝備鍛造／式神契約
         └── blessing_modal.gd  # 幕間 3 選 1 Roguelite 祝福
 ```

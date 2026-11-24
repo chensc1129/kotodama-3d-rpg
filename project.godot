@@ -12,7 +12,7 @@ config_version=5
 
 config/name="言霊剣士・あの一撃 3D"
 config/description="全3D日文動作RPG｜百鬼夜行・新角色與新關卡資料片（Godot 4.3 跨平台移植版）"
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 config/icon="res://icon.svg"
 

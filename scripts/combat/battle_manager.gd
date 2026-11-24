@@ -6,7 +6,7 @@ signal hud_updated
 signal popup_requested(world_pos: Vector3, text: String, color: Color)
 signal chant_started(skill_type: String, word: Dictionary, max_time: float)
 signal wave_cleared
-signal lobby_requested
+signal battle_ended(is_victory: bool, reached_wave: int)
 
 @export var arena: Arena3D
 @export var camera_rig: CameraRig
@@ -406,7 +406,7 @@ func damage_player(dmg: int) -> void:
 		b["active"] = false
 		b["paused"] = true
 		GameState.toast_requested.emit("💀 体力歸零！返回道場重整裝備與技能再戰！")
-		lobby_requested.emit()
+		battle_ended.emit(false, int(b["wave"]))
 	hud_updated.emit()
 
 
@@ -580,7 +580,7 @@ func _process(delta: float) -> void:
 			GameState.save_game_data()
 			b["active"] = false
 			b["paused"] = true
-			lobby_requested.emit()
+			battle_ended.emit(true, int(b["wave"]))
 		else:
 			b["paused"] = true
 			wave_cleared.emit()
