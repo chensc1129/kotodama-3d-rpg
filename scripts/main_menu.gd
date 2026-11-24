@@ -20,6 +20,7 @@ var _is_loading_game: bool = false
 
 func _ready() -> void:
 	get_tree().paused = false
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	GameState.reset_battle_state()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_ui()

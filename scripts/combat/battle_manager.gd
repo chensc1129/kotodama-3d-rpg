@@ -7,6 +7,8 @@ signal popup_requested(world_pos: Vector3, text: String, color: Color)
 signal chant_started(skill_type: String, word: Dictionary, max_time: float)
 signal wave_cleared
 signal battle_ended(is_victory: bool, reached_wave: int)
+signal attack_swung(step: int)
+signal hit_landed(is_crit: bool)
 
 @export var arena: Arena3D
 @export var camera_rig: CameraRig
@@ -63,6 +65,19 @@ func _unhandled_input(event: InputEvent) -> void:
 	var focus_owner := get_viewport().gui_get_focus_owner()
 	if focus_owner is LineEdit or focus_owner is TextEdit:
 		return
+
+	# When mouse is locked on desktop: Left-Click attacks, Right-Click dashes!
+	if event is InputEventMouseButton and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		var mb := event as InputEventMouseButton
+		if mb.pressed:
+			if mb.button_index == MOUSE_BUTTON_LEFT:
+				perform_attack_a()
+				get_viewport().set_input_as_handled()
+				return
+			elif mb.button_index == MOUSE_BUTTON_RIGHT:
+				perform_dash()
+				get_viewport().set_input_as_handled()
+				return
 
 	if event is InputEventKey:
 		var ke := event as InputEventKey
@@ -203,9 +218,12 @@ func perform_attack_a() -> void:
 	b["atk_reset_timer"] = 1.2
 	b["atk_cooldown"] = 0.22
 	var step: int = int(b["atk_step"])
+	attack_swung.emit(step)
 	if player != null:
+		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and camera_rig != null:
+			player.facing = camera_rig.get_aim_facing()
 		player.trigger_slash(step)
-		# Weighty forward combat lunge step toward slash direction
+		# Weighty forward combat lunge step toward slash/crosshair direction
 		var lunge_dist: float = 0.78 if step == 3 else 0.38
 		var forward := Vector3(sin(player.facing), 0.0, cos(player.facing))
 		player.position += forward * lunge_dist
@@ -271,6 +289,7 @@ func perform_attack_a() -> void:
 				en.clamp_to_arena()
 
 	if hit_count > 0:
+		hit_landed.emit(any_crit)
 		if any_crit:
 			AudioManager.play_sfx("impact_crit")
 			_trigger_camera_impact(0.48, -3.4)
@@ -374,13 +393,17 @@ func complete_skill_chant(is_success: bool, is_typed_perfect: bool) -> void:
 		trigger_hitstop(0.095)
 		if player != null:
 			player.trigger_hit_punch(true)
+		var ult_hit := false
 		for en: Enemy3D in enemies.duplicate():
 			if is_instance_valid(en) and not en.dead:
+				ult_hit = true
 				var push := en.position - player.position
 				push.y = 0.0
 				en.trigger_hit_react(push, true)
 				spawn_hit_spark(en.position + Vector3(0.0, 1.45 * en.scale.y, 0.0), Color.html("#fde047"), true, 1.4)
 				damage_enemy(en, dmg, "🌟完美奧義!" if is_typed_perfect else "🌟言霊奧義", Color.html("#fde047"))
+		if ult_hit:
+			hit_landed.emit(true)
 		GameState.toast_requested.emit("🌟 完美詠唱！1.5 倍全屏言霊奧義爆發！" if is_typed_perfect else "🌟 言霊奧義發動！")
 	else:
 		_execute_signature_skill(stats, crit_mult)
@@ -408,6 +431,8 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 				damage_enemy(en, dmg, "🪨石化封印!", Color.html("#f9a8d4"))
 		GameState.toast_requested.emit("🪨「石頭」石化魔眼！妖怪石化 %.1f 秒，快用「あ」碎石暴擊！" % duration)
 	elif cid == "kickboxer":
+		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and camera_rig != null:
+			player.facing = camera_rig.get_aim_facing()
 		player.kick_anim_timer = 0.5
 		var forward := Vector3(sin(player.facing), 0.0, cos(player.facing))
 		player.position += forward * 4.0
@@ -463,6 +488,7 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 		GameState.toast_requested.emit("🔥「火炎斬」紅蓮烈焰斬爆發！")
 
 	if any_hit:
+		hit_landed.emit(true)
 		AudioManager.play_sfx("impact_crit")
 		_trigger_camera_impact(0.56, -3.8)
 		trigger_hitstop(0.072)

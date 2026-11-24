@@ -64,10 +64,13 @@ var _btn_ult: Button
 var _btn_sig: Button
 var _btn_atk: Button
 
-# Toast
+# Toast & Desktop Crosshair / Mouse-Lock Hint
 var _toast_panel: PanelContainer
 var _toast_lbl: Label
 var _toast_timer: float = 0.0
+var _crosshair: CrosshairReticle
+var _lock_hint_panel: PanelContainer
+var _lock_hint_lbl: Label
 
 
 func _ready() -> void:
@@ -83,6 +86,28 @@ func _ready() -> void:
 	)
 
 
+func is_mobile_mode() -> bool:
+	return _is_mobile_ui
+
+
+func set_mouse_lock_ui(is_locked: bool, show_crosshair: bool, show_unlock_hint: bool) -> void:
+	if _crosshair != null:
+		_crosshair.visible = (not _is_mobile_ui) and show_crosshair
+		_crosshair.set_locked_state(is_locked)
+	if _lock_hint_panel != null:
+		_lock_hint_panel.visible = (not _is_mobile_ui) and show_unlock_hint and (not is_locked)
+
+
+func trigger_crosshair_bloom(step: int) -> void:
+	if _crosshair != null and _crosshair.visible:
+		_crosshair.trigger_bloom(step)
+
+
+func trigger_crosshair_hit(is_crit: bool) -> void:
+	if _crosshair != null and _crosshair.visible:
+		_crosshair.trigger_hit_marker(is_crit)
+
+
 func _input(event: InputEvent) -> void:
 	# If a touch event occurs on a tablet/hybrid device in desktop browser mode,
 	# automatically enable the touch-friendly mobile layout.
@@ -92,6 +117,31 @@ func _input(event: InputEvent) -> void:
 
 
 func _build_ui() -> void:
+	# ==================== DESKTOP CENTER CROSSHAIR ====================
+	_crosshair = CrosshairReticle.new()
+	_crosshair.visible = not _is_mobile_ui
+	add_child(_crosshair)
+
+	var lock_center := CenterContainer.new()
+	lock_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lock_center.anchor_left = 0.0
+	lock_center.anchor_right = 1.0
+	lock_center.anchor_top = 0.56
+	lock_center.anchor_bottom = 0.56
+	add_child(lock_center)
+
+	_lock_hint_panel = PanelContainer.new()
+	_lock_hint_panel.visible = false
+	_lock_hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lock_hint_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.84, "#fbbf24", 0.72, 18, 1, 16, 7))
+	_lock_hint_lbl = Label.new()
+	_lock_hint_lbl.text = "點擊畫面鎖定滑鼠視角與準心（Esc 解鎖）"
+	_lock_hint_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lock_hint_lbl.add_theme_font_size_override("font_size", 14)
+	_lock_hint_lbl.add_theme_color_override("font_color", Color.html("#fde68a"))
+	_lock_hint_panel.add_child(_lock_hint_lbl)
+	lock_center.add_child(_lock_hint_panel)
+
 	# ==================== TOP BAR ====================
 	var top_margin := MarginContainer.new()
 	top_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -325,6 +375,7 @@ func _build_ui() -> void:
 	_left_ctrl.add_child(_dpad_grid)
 
 	_ctrl_toggle_btn = Button.new()
+	_ctrl_toggle_btn.focus_mode = Control.FOCUS_NONE
 	_ctrl_toggle_btn.text = "🕹️ 輪盤 ⇄ 十字鍵"
 	UiStyle.apply_button(_ctrl_toggle_btn, "#0f172a", "#fbbf24", "#fde68a", 16, 2, 0.88)
 	_ctrl_toggle_btn.pressed.connect(_toggle_control_mode)
@@ -375,10 +426,10 @@ func _build_ui() -> void:
 	_direct_center.add_child(direct_panel)
 
 	_hint_lbl = Label.new()
-	_hint_lbl.text = "拖曳旋轉 3D 視角 ｜ WASD/方向鍵移動 ｜ J/あ 攻擊 ｜ 1/K 專屬技 ｜ 2/Q 奧義 ｜ Space 瞬步 ｜ Esc/P 暫停"
+	_hint_lbl.text = "滑鼠鎖定轉視角 ｜ 左鍵/J/あ 攻擊 ｜ E 專屬技 ｜ Q 奧義 ｜ 右鍵/Space 瞬步 ｜ WASD 移動 ｜ Esc 解鎖/暫停"
 	_hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hint_lbl.add_theme_font_size_override("font_size", 11)
-	_hint_lbl.add_theme_color_override("font_color", Color(0.82, 0.86, 0.92, 0.82))
+	_hint_lbl.add_theme_color_override("font_color", Color(0.82, 0.86, 0.92, 0.84))
 	mid_vbox.add_child(_hint_lbl)
 
 	# Right: Skill Row + Big Red 'あ' Attack Button
@@ -393,16 +444,19 @@ func _build_ui() -> void:
 	_right_vbox.add_child(_skill_row)
 
 	_btn_dash = Button.new()
+	_btn_dash.focus_mode = Control.FOCUS_NONE
 	_btn_dash.text = "💨\n瞬步"
 	_btn_dash.pressed.connect(func() -> void: dash_pressed.emit())
 	_skill_row.add_child(_btn_dash)
 
 	_btn_ult = Button.new()
+	_btn_ult.focus_mode = Control.FOCUS_NONE
 	_btn_ult.text = "🌟\n全屏奧義\n70 SP"
 	_btn_ult.pressed.connect(func() -> void: ult_skill_pressed.emit())
 	_skill_row.add_child(_btn_ult)
 
 	_btn_sig = Button.new()
+	_btn_sig.focus_mode = Control.FOCUS_NONE
 	_btn_sig.pressed.connect(func() -> void: sig_skill_pressed.emit())
 	_skill_row.add_child(_btn_sig)
 
@@ -412,6 +466,7 @@ func _build_ui() -> void:
 	_right_vbox.add_child(atk_row)
 
 	_btn_atk = Button.new()
+	_btn_atk.focus_mode = Control.FOCUS_NONE
 	_btn_atk.text = "あ\n三段斬撃"
 	_btn_atk.pressed.connect(func() -> void: attack_pressed.emit())
 	atk_row.add_child(_btn_atk)
@@ -419,7 +474,11 @@ func _build_ui() -> void:
 
 func _apply_responsive_layout() -> void:
 	if _is_mobile_ui:
-		# Mobile / Touch Mode: hide desktop hints, show extra-large thumb-friendly controls
+		# Mobile / Touch Mode: hide desktop crosshair/hints, show extra-large thumb-friendly controls
+		if _crosshair != null:
+			_crosshair.visible = false
+		if _lock_hint_panel != null:
+			_lock_hint_panel.visible = false
 		_left_ctrl.visible = true
 		_direct_center.visible = false
 		_hint_lbl.visible = false
@@ -441,10 +500,12 @@ func _apply_responsive_layout() -> void:
 		_right_vbox.add_theme_constant_override("separation", 16)
 		_skill_row.add_theme_constant_override("separation", 16)
 
+		_btn_dash.text = "💨\n瞬步"
 		_btn_dash.custom_minimum_size = Vector2(126, 126)
 		_btn_dash.add_theme_font_size_override("font_size", 22)
 		UiStyle.apply_button(_btn_dash, "#0f172a", "#38bdf8", "#7dd3fc", 26, 3, 0.94)
 
+		_btn_ult.text = "🌟\n全屏奧義\n70 SP"
 		_btn_ult.custom_minimum_size = Vector2(154, 126)
 		_btn_ult.add_theme_font_size_override("font_size", 19)
 		UiStyle.apply_button(_btn_ult, "#d97706", "#fde68a", "#ffffff", 26, 3, 0.96)
@@ -453,6 +514,7 @@ func _apply_responsive_layout() -> void:
 		_btn_sig.add_theme_font_size_override("font_size", 20)
 		UiStyle.apply_button(_btn_sig, "#9333ea", "#f9a8d4", "#ffffff", 26, 3, 0.96)
 
+		_btn_atk.text = "あ\n三段斬撃"
 		_btn_atk.custom_minimum_size = Vector2(236, 236)
 		_btn_atk.add_theme_font_size_override("font_size", 42)
 		UiStyle.apply_button(_btn_atk, "#dc2626", "#fcd34d", "#ffffff", 118, 5, 0.98)
@@ -483,7 +545,9 @@ func _apply_responsive_layout() -> void:
 		_audio_btn.custom_minimum_size = Vector2(68, 64)
 		_audio_btn.add_theme_font_size_override("font_size", 22)
 	else:
-		# Desktop Mode: hide mobile movement wheel completely!
+		# Desktop Mode: hide mobile movement wheel completely, show crosshair & E/Q hints!
+		if _crosshair != null:
+			_crosshair.visible = true
 		_left_ctrl.visible = false
 		joystick_changed.emit(Vector2.ZERO)
 		_direct_center.visible = true
@@ -497,20 +561,23 @@ func _apply_responsive_layout() -> void:
 		_right_vbox.add_theme_constant_override("separation", 8)
 		_skill_row.add_theme_constant_override("separation", 8)
 
-		_btn_dash.custom_minimum_size = Vector2(66, 66)
-		_btn_dash.add_theme_font_size_override("font_size", 12)
+		_btn_dash.text = "💨 瞬步\n[Space]"
+		_btn_dash.custom_minimum_size = Vector2(74, 66)
+		_btn_dash.add_theme_font_size_override("font_size", 11)
 		UiStyle.apply_button(_btn_dash, "#0f172a", "#38bdf8", "#7dd3fc", 16, 2, 0.90)
 
-		_btn_ult.custom_minimum_size = Vector2(84, 70)
+		_btn_ult.text = "🌟 [Q]\n全屏奧義\n70 SP"
+		_btn_ult.custom_minimum_size = Vector2(92, 70)
 		_btn_ult.add_theme_font_size_override("font_size", 11)
 		UiStyle.apply_button(_btn_ult, "#d97706", "#fde68a", "#ffffff", 16, 2, 0.96)
 
-		_btn_sig.custom_minimum_size = Vector2(104, 70)
+		_btn_sig.custom_minimum_size = Vector2(114, 70)
 		_btn_sig.add_theme_font_size_override("font_size", 12)
 		UiStyle.apply_button(_btn_sig, "#9333ea", "#f9a8d4", "#ffffff", 16, 2, 0.96)
 
+		_btn_atk.text = "あ\n左鍵/J"
 		_btn_atk.custom_minimum_size = Vector2(112, 112)
-		_btn_atk.add_theme_font_size_override("font_size", 22)
+		_btn_atk.add_theme_font_size_override("font_size", 20)
 		UiStyle.apply_button(_btn_atk, "#dc2626", "#fcd34d", "#ffffff", 56, 3, 0.98)
 
 		_icon_box.custom_minimum_size = Vector2(46, 46)
@@ -541,6 +608,7 @@ func _apply_responsive_layout() -> void:
 
 func _make_menu_btn(label: String, border_hex: String, text_hex: String, cb: Callable) -> Button:
 	var btn := Button.new()
+	btn.focus_mode = Control.FOCUS_NONE
 	btn.text = label
 	UiStyle.apply_button(btn, "#0f172a", border_hex, text_hex, 12, 1, 0.88)
 	btn.pressed.connect(cb)
@@ -573,6 +641,7 @@ func _populate_dpad(grid: GridContainer) -> void:
 			_dpad_cells.append(mid)
 		else:
 			var b := Button.new()
+			b.focus_mode = Control.FOCUS_NONE
 			b.text = lbl
 			b.custom_minimum_size = Vector2(68, 68)
 			UiStyle.apply_button(b, "#0f172a", "#fbbf24", "#fcd34d", 14, 2, 0.90)
@@ -640,7 +709,10 @@ func refresh(enemy_count: int, boss: Enemy3D) -> void:
 	_gold_lbl.text = "🪙 %d" % int(p["gold"])
 	_sp_pts_lbl.text = "✨ %dpt" % int(p["skill_points"])
 
-	_btn_sig.text = "%s %s\n%s (30SP)" % [char_cfg["sig_icon"], char_cfg["sig_key"], char_cfg["sig_name"]]
+	if _is_mobile_ui:
+		_btn_sig.text = "%s %s\n%s (30SP)" % [char_cfg["sig_icon"], char_cfg["sig_key"], char_cfg["sig_name"]]
+	else:
+		_btn_sig.text = "%s [E] %s\n%s (30SP)" % [char_cfg["sig_icon"], char_cfg["sig_key"], char_cfg["sig_name"]]
 	_btn_sig.disabled = float(b["sp"]) < 30.0
 	_btn_ult.disabled = float(b["sp"]) < 70.0
 
