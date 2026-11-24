@@ -46,6 +46,8 @@ func _ready() -> void:
 
 func reset_battle_state() -> void:
 	var stats := get_computed_stats_base()
+	var dash_lv: int = int(player["skills"].get("dash_skill", 1))
+	var max_sta: float = 100.0 + float(dash_lv - 1) * 10.0
 	battle = {
 		"active": false,
 		"paused": true,
@@ -54,6 +56,11 @@ func reset_battle_state() -> void:
 		"max_hp": stats["max_hp"],
 		"sp": 40.0,
 		"max_sp": 100.0,
+		"stamina": max_sta,
+		"max_stamina": max_sta,
+		"stamina_regen_delay": 0.0,
+		"stamina_exhausted": false,
+		"is_sprinting": false,
 		"combo": 0,
 		"combo_timer": 0.0,
 		"atk_step": 0,

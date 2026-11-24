@@ -6,6 +6,7 @@ extends Control
 ## - Mobile/Touch: enlarged top status card, 360° joystick/D-Pad, and extra-large circular action orbs.
 
 signal attack_pressed
+signal jump_pressed
 signal dash_pressed
 signal sig_skill_pressed
 signal ult_skill_pressed
@@ -45,7 +46,15 @@ var _hp_text_lbl: Label
 var _hp_bar: ProgressBar
 var _sp_text_lbl: Label
 var _sp_bar: ProgressBar
+var _stamina_text_lbl: Label
+var _stamina_bar: ProgressBar
 var _exp_bar: ProgressBar
+var _stamina_low_state: bool = false
+
+# Genshin-style Floating Action Stamina Bar (appears while sprinting/dashing/recovering)
+var _floating_sta_panel: PanelContainer
+var _floating_sta_bar: ProgressBar
+var _floating_sta_lbl: Label
 
 # Bottom controls
 var _bot_margin: MarginContainer
@@ -64,6 +73,7 @@ var _hint_lbl: Label
 
 var _right_vbox: VBoxContainer
 var _skill_row: HBoxContainer
+var _btn_jump: Button
 var _btn_dash: Button
 var _btn_ult: Button
 var _btn_sig: Button
@@ -144,6 +154,35 @@ func _build_ui() -> void:
 	_lock_hint_lbl.add_theme_color_override("font_color", Color.html("#fef3c7"))
 	_lock_hint_panel.add_child(_lock_hint_lbl)
 	lock_center.add_child(_lock_hint_panel)
+
+	# Dynamic Genshin-style Floating Action Stamina Bar (auto-appears when sprinting/dashing!)
+	var sta_float_center := CenterContainer.new()
+	sta_float_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sta_float_center.anchor_left = 0.0
+	sta_float_center.anchor_right = 1.0
+	sta_float_center.anchor_top = 0.63
+	sta_float_center.anchor_bottom = 0.63
+	add_child(sta_float_center)
+
+	_floating_sta_panel = PanelContainer.new()
+	_floating_sta_panel.visible = false
+	_floating_sta_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_floating_sta_panel.add_theme_stylebox_override("panel", UiStyle.make_pill("#090e1d", 0.80, "#f59e0b", 0.55, 12, 5))
+	var sta_float_row := HBoxContainer.new()
+	sta_float_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sta_float_row.add_theme_constant_override("separation", 8)
+	_floating_sta_panel.add_child(sta_float_row)
+	_floating_sta_lbl = Label.new()
+	_floating_sta_lbl.text = "體力"
+	_floating_sta_lbl.add_theme_font_size_override("font_size", 11)
+	_floating_sta_lbl.add_theme_color_override("font_color", Color.html("#fde68a"))
+	sta_float_row.add_child(_floating_sta_lbl)
+	_floating_sta_bar = ProgressBar.new()
+	_floating_sta_bar.custom_minimum_size = Vector2(130, 8)
+	_floating_sta_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	UiStyle.apply_bar(_floating_sta_bar, "#f59e0b", "#141008", 4, "#fde68a", 0.35)
+	sta_float_row.add_child(_floating_sta_bar)
+	sta_float_center.add_child(_floating_sta_panel)
 
 	# ==================== TOP FLOATING BAR ====================
 	var top_margin := MarginContainer.new()
@@ -364,7 +403,7 @@ func _build_ui() -> void:
 	_hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hint_panel.add_theme_stylebox_override("panel", UiStyle.make_pill("#090d1a", 0.64, "#e6c37a", 0.24, 14, 4))
 	_hint_lbl = Label.new()
-	_hint_lbl.text = "滑鼠轉視角 ｜ 左鍵 斬撃 ｜ E 專屬技 ｜ Q 奧義 ｜ 右鍵/Space 瞬步 ｜ WASD 移動 ｜ Esc 暫停"
+	_hint_lbl.text = "滑鼠轉視角 ｜ 左鍵 斬撃 ｜ Space 跳躍 ｜ Shift 急跑 / 兩下衝刺 ｜ E 專屬技 ｜ Q 奧義 ｜ Esc 暫停"
 	_hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hint_lbl.add_theme_font_size_override("font_size", 11)
 	_hint_lbl.add_theme_color_override("font_color", Color(0.88, 0.90, 0.95, 0.88))
@@ -381,6 +420,11 @@ func _build_ui() -> void:
 	_skill_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_skill_row.alignment = BoxContainer.ALIGNMENT_END
 	_right_vbox.add_child(_skill_row)
+
+	_btn_jump = Button.new()
+	_btn_jump.focus_mode = Control.FOCUS_NONE
+	_btn_jump.pressed.connect(func() -> void: jump_pressed.emit())
+	_skill_row.add_child(_btn_jump)
 
 	_btn_dash = Button.new()
 	_btn_dash.focus_mode = Control.FOCUS_NONE
@@ -427,7 +471,7 @@ func _build_status_card() -> PanelContainer:
 	st_hbox.add_child(_icon_box)
 
 	_bars_box = VBoxContainer.new()
-	_bars_box.add_theme_constant_override("separation", 4)
+	_bars_box.add_theme_constant_override("separation", 3)
 	st_hbox.add_child(_bars_box)
 
 	var name_row := HBoxContainer.new()
@@ -468,6 +512,19 @@ func _build_status_card() -> PanelContainer:
 	_sp_text_lbl = Label.new()
 	_sp_text_lbl.add_theme_color_override("font_color", Color.html("#bae6fd"))
 	sp_row.add_child(_sp_text_lbl)
+
+	# Stamina (體力) row
+	var sta_row := HBoxContainer.new()
+	sta_row.add_theme_constant_override("separation", 8)
+	_bars_box.add_child(sta_row)
+	_stamina_bar = ProgressBar.new()
+	_stamina_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stamina_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	UiStyle.apply_bar(_stamina_bar, "#f59e0b", "#141008", 4, "#fde68a", 0.30)
+	sta_row.add_child(_stamina_bar)
+	_stamina_text_lbl = Label.new()
+	_stamina_text_lbl.add_theme_color_override("font_color", Color.html("#fde68a"))
+	sta_row.add_child(_stamina_text_lbl)
 
 	# EXP hairline
 	_exp_bar = ProgressBar.new()
@@ -515,18 +572,22 @@ func _apply_responsive_layout() -> void:
 		_ctrl_toggle_btn.add_theme_font_size_override("font_size", 18)
 
 		_right_vbox.add_theme_constant_override("separation", 16)
-		_skill_row.add_theme_constant_override("separation", 14)
+		_skill_row.add_theme_constant_override("separation", 12)
 
-		_btn_dash.text = "💨\n瞬步"
+		_btn_jump.text = "▲\n跳躍"
+		_btn_jump.add_theme_font_size_override("font_size", 20)
+		UiStyle.apply_orb_button(_btn_jump, "#0f2419", "#34d399", "#a7f3d0", 118.0, 3, 0.92)
+
+		_btn_dash.text = "💨\n衝刺"
 		_btn_dash.add_theme_font_size_override("font_size", 20)
-		UiStyle.apply_orb_button(_btn_dash, "#0d1b2a", "#38bdf8", "#bae6fd", 122.0, 3, 0.92)
+		UiStyle.apply_orb_button(_btn_dash, "#0d1b2a", "#38bdf8", "#bae6fd", 118.0, 3, 0.92)
 
 		_btn_sig.add_theme_font_size_override("font_size", 18)
-		UiStyle.apply_orb_button(_btn_sig, "#581c87", "#f0abfc", "#ffffff", 142.0, 3, 0.95)
+		UiStyle.apply_orb_button(_btn_sig, "#581c87", "#f0abfc", "#ffffff", 136.0, 3, 0.95)
 
 		_btn_ult.text = "🌟\n奧義\n70SP"
 		_btn_ult.add_theme_font_size_override("font_size", 18)
-		UiStyle.apply_orb_button(_btn_ult, "#b45309", "#fde68a", "#ffffff", 142.0, 3, 0.96)
+		UiStyle.apply_orb_button(_btn_ult, "#b45309", "#fde68a", "#ffffff", 136.0, 3, 0.96)
 
 		_btn_atk.text = "あ\n斬撃"
 		_btn_atk.add_theme_font_size_override("font_size", 42)
@@ -534,13 +595,15 @@ func _apply_responsive_layout() -> void:
 
 		_icon_box.custom_minimum_size = Vector2(62, 62)
 		_char_icon_lbl.add_theme_font_size_override("font_size", 30)
-		_bars_box.custom_minimum_size = Vector2(240, 0)
+		_bars_box.custom_minimum_size = Vector2(246, 0)
 		_player_name_lbl.add_theme_font_size_override("font_size", 17)
 		_level_lbl.add_theme_font_size_override("font_size", 16)
 		_hp_text_lbl.add_theme_font_size_override("font_size", 14)
-		_hp_bar.custom_minimum_size = Vector2(0, 12)
+		_hp_bar.custom_minimum_size = Vector2(0, 11)
 		_sp_text_lbl.add_theme_font_size_override("font_size", 14)
-		_sp_bar.custom_minimum_size = Vector2(0, 10)
+		_sp_bar.custom_minimum_size = Vector2(0, 9)
+		_stamina_text_lbl.add_theme_font_size_override("font_size", 13)
+		_stamina_bar.custom_minimum_size = Vector2(0, 9)
 
 		_stage_lbl.add_theme_font_size_override("font_size", 18)
 		_mode_lbl.add_theme_font_size_override("font_size", 15)
@@ -557,46 +620,52 @@ func _apply_responsive_layout() -> void:
 		_audio_btn.custom_minimum_size = Vector2(66, 62)
 		_audio_btn.add_theme_font_size_override("font_size", 22)
 	else:
-		# Desktop Mode: Genshin-style bottom-center status bar + glowing circular E/Q orbs!
+		# Desktop Mode: Genshin-style bottom-center status bar + glowing circular orbs!
 		if _crosshair != null:
 			_crosshair.visible = true
 		_left_ctrl.visible = false
 		joystick_changed.emit(Vector2.ZERO)
 		_hint_panel.visible = true
 
-		_bot_margin.offset_top = -225
+		_bot_margin.offset_top = -230
 		_bot_margin.add_theme_constant_override("margin_left", 24)
 		_bot_margin.add_theme_constant_override("margin_right", 24)
 		_bot_margin.add_theme_constant_override("margin_bottom", 18)
 
 		_right_vbox.add_theme_constant_override("separation", 10)
-		_skill_row.add_theme_constant_override("separation", 10)
+		_skill_row.add_theme_constant_override("separation", 8)
 
-		_btn_dash.text = "💨\n瞬步\nSpace"
-		_btn_dash.add_theme_font_size_override("font_size", 11)
+		_btn_jump.text = "▲\n跳躍\nSpace"
+		_btn_jump.add_theme_font_size_override("font_size", 10)
+		UiStyle.apply_orb_button(_btn_jump, "#0f2419", "#34d399", "#a7f3d0", 68.0, 2, 0.90)
+
+		_btn_dash.text = "💨\n衝刺\n2×Shift"
+		_btn_dash.add_theme_font_size_override("font_size", 10)
 		UiStyle.apply_orb_button(_btn_dash, "#0d1b2a", "#38bdf8", "#bae6fd", 74.0, 2, 0.90)
 
 		_btn_sig.add_theme_font_size_override("font_size", 11)
-		UiStyle.apply_orb_button(_btn_sig, "#581c87", "#f0abfc", "#ffffff", 86.0, 2, 0.94)
+		UiStyle.apply_orb_button(_btn_sig, "#581c87", "#f0abfc", "#ffffff", 84.0, 2, 0.94)
 
 		_btn_ult.text = "🌟 [Q]\n奧義\n70SP"
 		_btn_ult.add_theme_font_size_override("font_size", 11)
-		UiStyle.apply_orb_button(_btn_ult, "#b45309", "#fde68a", "#ffffff", 86.0, 2, 0.95)
+		UiStyle.apply_orb_button(_btn_ult, "#b45309", "#fde68a", "#ffffff", 84.0, 2, 0.95)
 
 		_btn_atk.text = "あ\n左鍵"
 		_btn_atk.add_theme_font_size_override("font_size", 20)
 		UiStyle.apply_orb_button(_btn_atk, "#be123c", "#fde68a", "#ffffff", 104.0, 3, 0.97)
 
-		# Sleek bottom-center Genshin HP/SP/EXP card
-		_icon_box.custom_minimum_size = Vector2(46, 46)
-		_char_icon_lbl.add_theme_font_size_override("font_size", 23)
-		_bars_box.custom_minimum_size = Vector2(310, 0)
+		# Sleek bottom-center Genshin HP/SP/Stamina/EXP card
+		_icon_box.custom_minimum_size = Vector2(48, 48)
+		_char_icon_lbl.add_theme_font_size_override("font_size", 24)
+		_bars_box.custom_minimum_size = Vector2(320, 0)
 		_player_name_lbl.add_theme_font_size_override("font_size", 13)
 		_level_lbl.add_theme_font_size_override("font_size", 12)
 		_hp_text_lbl.add_theme_font_size_override("font_size", 11)
-		_hp_bar.custom_minimum_size = Vector2(0, 10)
+		_hp_bar.custom_minimum_size = Vector2(0, 9)
 		_sp_text_lbl.add_theme_font_size_override("font_size", 11)
-		_sp_bar.custom_minimum_size = Vector2(0, 8)
+		_sp_bar.custom_minimum_size = Vector2(0, 7)
+		_stamina_text_lbl.add_theme_font_size_override("font_size", 11)
+		_stamina_bar.custom_minimum_size = Vector2(0, 7)
 
 		_stage_lbl.add_theme_font_size_override("font_size", 14)
 		_mode_lbl.add_theme_font_size_override("font_size", 11)
@@ -678,13 +747,33 @@ func refresh(enemy_count: int, boss: Enemy3D) -> void:
 	_player_name_lbl.text = "%s・%s" % [String(p["name"]), char_cfg["name"]]
 	_level_lbl.text = "Lv.%d" % int(p["level"])
 
-	_hp_text_lbl.text = "%d / %d" % [int(b["hp"]), int(b["max_hp"])]
+	_hp_text_lbl.text = "HP %d/%d" % [int(b["hp"]), int(b["max_hp"])]
 	_hp_bar.max_value = maxf(1.0, float(b["max_hp"]))
 	_hp_bar.value = float(b["hp"])
 
 	_sp_text_lbl.text = "SP %d/%d" % [int(floor(float(b["sp"]))), int(b["max_sp"])]
 	_sp_bar.max_value = float(b["max_sp"])
 	_sp_bar.value = float(b["sp"])
+
+	# Stamina (體力條) update + low/exhausted visual cue
+	var sta: float = float(b.get("stamina", 100.0))
+	var max_sta: float = maxf(1.0, float(b.get("max_stamina", 100.0)))
+	var is_low_sta: bool = bool(b.get("stamina_exhausted", false)) or (sta / max_sta) < 0.25
+	_stamina_bar.max_value = max_sta
+	_stamina_bar.value = sta
+	_stamina_text_lbl.text = "體力 %d/%d" % [int(floor(sta)), int(round(max_sta))]
+	if _floating_sta_bar != null and _floating_sta_panel != null:
+		_floating_sta_bar.max_value = max_sta
+		_floating_sta_bar.value = sta
+		_floating_sta_panel.visible = bool(b.get("active", false)) and (not bool(b.get("paused", false))) and (sta < max_sta - 0.5)
+	if is_low_sta != _stamina_low_state:
+		_stamina_low_state = is_low_sta
+		var bar_fill := "#fb7185" if is_low_sta else "#f59e0b"
+		var bar_border := "#fda4af" if is_low_sta else "#fde68a"
+		UiStyle.apply_bar(_stamina_bar, bar_fill, "#141008", 4, bar_border, 0.35)
+		_stamina_text_lbl.add_theme_color_override("font_color", Color.html(bar_border))
+		if _floating_sta_bar != null:
+			UiStyle.apply_bar(_floating_sta_bar, bar_fill, "#141008", 4, bar_border, 0.40)
 
 	var exp_need := GameState.get_exp_to_next_level(int(p["level"]))
 	_exp_bar.max_value = 100.0
@@ -708,6 +797,7 @@ func refresh(enemy_count: int, boss: Enemy3D) -> void:
 		_btn_sig.text = "%s [E]\n%s\n30SP" % [char_cfg["sig_icon"], char_cfg["sig_key"]]
 	_btn_sig.disabled = float(b["sp"]) < 30.0
 	_btn_ult.disabled = float(b["sp"]) < 70.0
+	_btn_dash.disabled = sta < 24.0
 
 	if int(b["combo"]) >= 2:
 		_combo_panel.visible = true

@@ -11,9 +11,14 @@ const HERO_MODELS: Dictionary = {
 	"yukionna": "res://assets/models/hero_yukionna.glb",
 }
 
+const GRAVITY: float = 28.5
+const JUMP_FORCE: float = 11.6
+
 var facing: float = PI
 var slash_anim_timer: float = 0.0
 var kick_anim_timer: float = 0.0
+var vertical_velocity: float = 0.0
+var is_grounded: bool = true
 
 var _slash_step: int = 1
 var _walk_phase: float = 0.0
@@ -56,6 +61,42 @@ func _ready() -> void:
 	if ResourceLoader.exists("res://assets/fonts/noto_cjk_game.otf"):
 		_name_label.font = load("res://assets/fonts/noto_cjk_game.otf")
 	add_child(_name_label)
+
+
+func trigger_jump() -> bool:
+	if not is_grounded:
+		return false
+	is_grounded = false
+	vertical_velocity = JUMP_FORCE
+	_punch_scale = Vector3(0.88, 1.18, 0.88)
+	if _body_pivot != null:
+		_body_pivot.scale = _punch_scale
+	return true
+
+
+func reset_vertical_state() -> void:
+	position.y = 0.0
+	vertical_velocity = 0.0
+	is_grounded = true
+
+
+func update_vertical_physics(delta: float) -> bool:
+	if is_grounded and position.y <= 0.001:
+		position.y = 0.0
+		vertical_velocity = 0.0
+		return false
+	vertical_velocity -= GRAVITY * delta
+	position.y += vertical_velocity * delta
+	if position.y <= 0.0:
+		position.y = 0.0
+		vertical_velocity = 0.0
+		is_grounded = true
+		# Crisp landing squash
+		_punch_scale = Vector3(1.16, 0.84, 1.16)
+		if _body_pivot != null:
+			_body_pivot.scale = _punch_scale
+		return true
+	return false
 
 
 func trigger_slash(step: int) -> void:
@@ -211,7 +252,7 @@ func update_name_badge() -> void:
 	_name_label.text = "%s\nLv.%d・%s" % [GameState.player["name"], int(GameState.player["level"]), char_cfg["name"]]
 
 
-func update_animations(delta: float, is_moving: bool) -> void:
+func update_animations(delta: float, is_moving: bool, is_sprinting: bool = false) -> void:
 	_elapsed += delta
 	if slash_anim_timer > 0.0:
 		slash_anim_timer = maxf(0.0, slash_anim_timer - delta)
@@ -221,7 +262,9 @@ func update_animations(delta: float, is_moving: bool) -> void:
 	_visual_root.rotation.y = facing
 
 	if _aura_mesh != null:
-		_aura_mesh.rotation.y = _elapsed * 1.8
+		_aura_mesh.rotation.y = _elapsed * (3.2 if is_sprinting else 1.8)
+		# Keep aura ring hugging the ground while jumping!
+		_aura_mesh.position.y = 0.04 - position.y
 
 	if _orbit_group != null:
 		var cid: String = GameState.player["char_id"]
@@ -231,40 +274,59 @@ func update_animations(delta: float, is_moving: bool) -> void:
 			_orbit_group.rotation.y = _elapsed * 1.9
 
 	if _scarf_node != null:
-		_scarf_node.rotation.x = (0.35 if is_moving else 0.08) + sin(_elapsed * 7.5) * 0.12
+		var scarf_base := 0.62 if is_sprinting else (0.35 if is_moving else 0.08)
+		_scarf_node.rotation.x = scarf_base + sin(_elapsed * (12.0 if is_sprinting else 7.5)) * 0.14
 
 	if _body_pivot == null:
 		return
 
-	# Impact hit-punch scale recovery
-	_punch_scale = _punch_scale.lerp(Vector3.ONE, clampf(delta * 16.0, 0.0, 1.0))
+	# Impact hit-punch / jump-land squash recovery
+	_punch_scale = _punch_scale.lerp(Vector3.ONE, clampf(delta * 15.0, 0.0, 1.0))
 	_body_pivot.scale = _punch_scale
 
 	# Subtle head life motion
 	if _head_pivot != null:
 		_head_pivot.rotation.z = sin(_elapsed * 2.4) * 0.035
 
-	# Vertical body bounce / kick jump / forward run lean
+	# Vertical body bounce / kick jump / sprint forward lean
 	if kick_anim_timer > 0.0:
 		var kt := kick_anim_timer / 0.5
 		_body_pivot.position.y = sin(kt * PI) * 1.45
 		_body_pivot.rotation.x = -0.35
+	elif not is_grounded:
+		_body_pivot.position.y = lerpf(_body_pivot.position.y, 0.0, clampf(delta * 12.0, 0.0, 1.0))
+		var air_lean := 0.22 if vertical_velocity > 0.0 else 0.10
+		_body_pivot.rotation.x = lerpf(_body_pivot.rotation.x, air_lean, clampf(delta * 10.0, 0.0, 1.0))
 	else:
-		_body_pivot.position.y = sin(_elapsed * (10.0 if is_moving else 3.2)) * (0.06 if is_moving else 0.03)
-		var target_lean := 0.22 if slash_anim_timer > 0.0 else (0.14 if is_moving else 0.0)
+		var bounce_freq := 15.5 if is_sprinting else (10.0 if is_moving else 3.2)
+		var bounce_amp := 0.09 if is_sprinting else (0.06 if is_moving else 0.03)
+		_body_pivot.position.y = sin(_elapsed * bounce_freq) * bounce_amp
+		var target_lean := 0.26 if (slash_anim_timer > 0.0 or is_sprinting) else (0.14 if is_moving else 0.0)
 		_body_pivot.rotation.x = lerpf(_body_pivot.rotation.x, target_lean, clampf(delta * 12.0, 0.0, 1.0))
 
 	# Leg & Arm Locomotion
-	if is_moving and kick_anim_timer <= 0.0:
-		_walk_phase += delta * 14.0
-		var swing := sin(_walk_phase)
+	if not is_grounded and kick_anim_timer <= 0.0:
+		# Crisp mid-air jump tuck pose
+		var smooth_air := clampf(delta * 12.0, 0.0, 1.0)
 		if _left_leg != null and _right_leg != null:
-			_left_leg.rotation.x = swing * 0.65
-			_right_leg.rotation.x = -swing * 0.65
+			_left_leg.rotation.x = lerpf(_left_leg.rotation.x, -0.52, smooth_air)
+			_right_leg.rotation.x = lerpf(_right_leg.rotation.x, 0.38, smooth_air)
 		if _left_arm != null:
-			_left_arm.rotation.x = -swing * 0.55
+			_left_arm.rotation.x = lerpf(_left_arm.rotation.x, -0.55, smooth_air)
 		if _right_arm != null and slash_anim_timer <= 0.0:
-			_right_arm.rotation.x = swing * 0.40 - 0.25
+			_right_arm.rotation.x = lerpf(_right_arm.rotation.x, -0.45, smooth_air)
+			_right_arm.rotation.z = lerpf(_right_arm.rotation.z, 0.25, smooth_air)
+	elif is_moving and kick_anim_timer <= 0.0:
+		_walk_phase += delta * (21.0 if is_sprinting else 14.0)
+		var swing := sin(_walk_phase)
+		var amp := 0.92 if is_sprinting else 0.65
+		if _left_leg != null and _right_leg != null:
+			_left_leg.rotation.x = swing * amp
+			_right_leg.rotation.x = -swing * amp
+		if _left_arm != null:
+			_left_arm.rotation.x = -swing * (0.78 if is_sprinting else 0.55)
+		if _right_arm != null and slash_anim_timer <= 0.0:
+			_right_arm.rotation.x = swing * (0.58 if is_sprinting else 0.40) - 0.25
 			_right_arm.rotation.z = 0.08
 	elif kick_anim_timer > 0.0:
 		if _right_leg != null and _left_leg != null:

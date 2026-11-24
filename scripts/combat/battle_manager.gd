@@ -18,6 +18,11 @@ signal hit_landed(is_crit: bool)
 @export var projectiles_root: Node3D
 @export var vfx_root: Node3D
 
+const DASH_STAMINA_COST: float = 24.0
+const SPRINT_DRAIN_PER_SEC: float = 20.0
+const STAMINA_REGEN_PER_SEC: float = 28.0
+const SHIFT_DOUBLE_TAP_WINDOW: float = 0.30
+
 var joy_vector: Vector2 = Vector2.ZERO
 var enemies: Array[Enemy3D] = []
 var projectiles: Array[EnemyProjectile3D] = []
@@ -25,6 +30,8 @@ var projectiles: Array[EnemyProjectile3D] = []
 var _pending_skill_type: String = ""
 var _pending_word: Dictionary = {}
 var _hitstop_timer: float = 0.0
+var _shift_tap_window: float = 0.0
+var _dash_dir: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
@@ -39,6 +46,7 @@ func _initialize_world() -> void:
 		arena.build_stage(GameState.player["stage_id"])
 	if player != null:
 		player.position = Vector3(0.0, 0.0, 4.0)
+		player.reset_vertical_state()
 		player.rebuild_mesh()
 	if shikigami != null and player != null:
 		shikigami.rebuild_mesh(player.position)
@@ -66,7 +74,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if focus_owner is LineEdit or focus_owner is TextEdit:
 		return
 
-	# When mouse is locked on desktop: Left-Click attacks, Right-Click dashes!
+	# When mouse is locked on desktop: Left-Click attacks, Right-Click quick-dashes!
 	if event is InputEventMouseButton and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var mb := event as InputEventMouseButton
 		if mb.pressed:
@@ -90,6 +98,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("attack"):
 		perform_attack_a()
 		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("jump"):
+		perform_jump()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("sprint"):
+		# Double-tap Shift within window -> Explosive Quick Dash!
+		if _shift_tap_window > 0.0:
+			_shift_tap_window = 0.0
+			perform_dash()
+		else:
+			_shift_tap_window = SHIFT_DOUBLE_TAP_WINDOW
+		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("dash"):
 		perform_dash()
 		get_viewport().set_input_as_handled()
@@ -104,6 +123,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func start_new_battle() -> void:
 	GameState.reset_battle_state()
 	_hitstop_timer = 0.0
+	_shift_tap_window = 0.0
+	_dash_dir = Vector3.ZERO
 	var stats := GameState.get_computed_stats()
 	GameState.battle["active"] = true
 	GameState.battle["paused"] = false
@@ -114,6 +135,7 @@ func start_new_battle() -> void:
 
 	if player != null:
 		player.position = Vector3(0.0, 0.0, 4.0)
+		player.reset_vertical_state()
 		player.facing = PI
 		player.rebuild_mesh()
 	if arena != null:
@@ -318,17 +340,65 @@ func perform_attack_a() -> void:
 	hud_updated.emit()
 
 
+func perform_jump() -> void:
+	var b := GameState.battle
+	if not b["active"] or b["paused"] or player == null:
+		return
+	if player.trigger_jump():
+		AudioManager.play_sfx("jump")
+		spawn_ring_vfx(Vector3(player.position.x, 0.0, player.position.z), Color.html("#fef3c7"), 2.0, 0.24)
+
+
 func perform_dash() -> void:
 	var b := GameState.battle
-	if not b["active"] or b["paused"] or float(b["dash_cooldown"]) > 0.0:
+	if not b["active"] or b["paused"] or float(b["dash_cooldown"]) > 0.0 or player == null:
 		return
+	if float(b["stamina"]) < DASH_STAMINA_COST:
+		GameState.toast_requested.emit("💨 體力不足，無法快速衝刺！")
+		return
+
+	b["stamina"] = maxf(0.0, float(b["stamina"]) - DASH_STAMINA_COST)
+	b["stamina_regen_delay"] = 0.60
+	if float(b["stamina"]) <= 0.01:
+		b["stamina_exhausted"] = true
+
+	# Determine explosive dash direction: WASD input -> camera aim (if locked) -> current facing
+	var move_in := _read_move_input()
+	if move_in.length() > 0.05:
+		var clamped := move_in / maxf(1.0, move_in.length())
+		var yaw: float = camera_rig.cam_yaw if camera_rig != null else 0.0
+		var wx := clamped.x * cos(yaw) + clamped.y * sin(yaw)
+		var wz := -clamped.x * sin(yaw) + clamped.y * cos(yaw)
+		_dash_dir = Vector3(wx, 0.0, wz).normalized()
+		player.facing = atan2(_dash_dir.x, _dash_dir.z)
+	else:
+		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and camera_rig != null:
+			player.facing = camera_rig.get_aim_facing()
+		_dash_dir = Vector3(sin(player.facing), 0.0, cos(player.facing)).normalized()
+
 	AudioManager.play_sfx("dash")
 	var dash_lv: int = int(GameState.player["skills"].get("dash_skill", 1))
-	b["dash_timer"] = 0.22
+	b["dash_timer"] = 0.24
 	b["invuln_timer"] = 0.45
-	b["dash_cooldown"] = maxf(0.6, 1.3 - float(dash_lv - 1) * 0.06)
-	spawn_ring_vfx(player.position, Color.html("#38bdf8"), 2.5, 0.30)
-	_trigger_camera_impact(0.10, 1.8)
+	b["dash_cooldown"] = maxf(0.45, 1.05 - float(dash_lv - 1) * 0.05)
+	spawn_ring_vfx(Vector3(player.position.x, 0.0, player.position.z), Color.html("#38bdf8"), 3.2, 0.32)
+	_trigger_camera_impact(0.14, 2.6)
+	hud_updated.emit()
+
+
+func _read_move_input() -> Vector2:
+	var move_input := joy_vector
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	if not (focus_owner is LineEdit or focus_owner is TextEdit):
+		if Input.is_action_pressed("move_up"):
+			move_input.y -= 1.0
+		if Input.is_action_pressed("move_down"):
+			move_input.y += 1.0
+		if Input.is_action_pressed("move_left"):
+			move_input.x -= 1.0
+		if Input.is_action_pressed("move_right"):
+			move_input.x += 1.0
+	return move_input
 
 
 func initiate_skill_chant(skill_type: String) -> void:
@@ -579,6 +649,13 @@ func _process(delta: float) -> void:
 	b["dash_cooldown"] = maxf(0.0, float(b["dash_cooldown"]) - dt)
 	b["dash_timer"] = maxf(0.0, float(b["dash_timer"]) - dt)
 	b["invuln_timer"] = maxf(0.0, float(b["invuln_timer"]) - dt)
+	if _shift_tap_window > 0.0:
+		_shift_tap_window = maxf(0.0, _shift_tap_window - dt)
+
+	# Sync max stamina with dash_skill level
+	var dash_lv_now: int = int(GameState.player["skills"].get("dash_skill", 1))
+	var max_sta: float = 100.0 + float(dash_lv_now - 1) * 10.0
+	b["max_stamina"] = max_sta
 
 	if float(b["atk_reset_timer"]) > 0.0:
 		b["atk_reset_timer"] = float(b["atk_reset_timer"]) - dt
@@ -593,37 +670,65 @@ func _process(delta: float) -> void:
 	if GameState.is_endless_mode():
 		b["endless_seconds"] = float(b["endless_seconds"]) + dt
 
-	# Movement input (camera-aligned)
-	var move_input := joy_vector
+	# Movement input (camera-aligned) + Shift Sprint + Double-Tap Shift Quick Dash + Stamina
+	var move_input := _read_move_input()
 	var focus_owner := get_viewport().gui_get_focus_owner()
-	if not (focus_owner is LineEdit or focus_owner is TextEdit):
-		if Input.is_action_pressed("move_up"):
-			move_input.y -= 1.0
-		if Input.is_action_pressed("move_down"):
-			move_input.y += 1.0
-		if Input.is_action_pressed("move_left"):
-			move_input.x -= 1.0
-		if Input.is_action_pressed("move_right"):
-			move_input.x += 1.0
+	var wants_sprint: bool = (not (focus_owner is LineEdit or focus_owner is TextEdit)) and Input.is_action_pressed("sprint")
 
 	var stats := GameState.get_computed_stats()
 	var is_moving := move_input.length() > 0.05
-	if is_moving and player != null:
-		var clamped := move_input / maxf(1.0, move_input.length())
-		var yaw: float = camera_rig.cam_yaw if camera_rig != null else 0.0
-		var sin_y := sin(yaw)
-		var cos_y := cos(yaw)
-		var world_dx := clamped.x * cos_y + clamped.y * sin_y
-		var world_dz := -clamped.x * sin_y + clamped.y * cos_y
+	var is_dashing := float(b["dash_timer"]) > 0.0
+	var is_sprinting := false
 
-		var dash_mult: float = 2.6 if float(b["dash_timer"]) > 0.0 else 1.0
-		player.position.x += world_dx * float(stats["speed"]) * dash_mult * dt
-		player.position.z += world_dz * float(stats["speed"]) * dash_mult * dt
-		player.clamp_to_arena()
-		player.facing = atan2(world_dx, world_dz)
+	if is_dashing:
+		# High-speed directional burst even from standstill
+		b["is_sprinting"] = true
+		is_sprinting = true
+		if player != null:
+			var dvec := _dash_dir if _dash_dir.length_squared() > 0.001 else Vector3(sin(player.facing), 0.0, cos(player.facing))
+			player.position.x += dvec.x * float(stats["speed"]) * 2.85 * dt
+			player.position.z += dvec.z * float(stats["speed"]) * 2.85 * dt
+			player.clamp_to_arena()
+	else:
+		if wants_sprint and is_moving and (not bool(b["stamina_exhausted"])) and float(b["stamina"]) > 0.0:
+			is_sprinting = true
+			b["is_sprinting"] = true
+			b["stamina"] = maxf(0.0, float(b["stamina"]) - SPRINT_DRAIN_PER_SEC * dt)
+			b["stamina_regen_delay"] = 0.55
+			if float(b["stamina"]) <= 0.01:
+				b["stamina"] = 0.0
+				b["stamina_exhausted"] = true
+				is_sprinting = false
+				b["is_sprinting"] = false
+		else:
+			b["is_sprinting"] = false
+			if float(b["stamina_regen_delay"]) > 0.0:
+				b["stamina_regen_delay"] = maxf(0.0, float(b["stamina_regen_delay"]) - dt)
+			else:
+				b["stamina"] = minf(max_sta, float(b["stamina"]) + STAMINA_REGEN_PER_SEC * dt)
+				if bool(b["stamina_exhausted"]) and float(b["stamina"]) >= max_sta * 0.22:
+					b["stamina_exhausted"] = false
+
+		if is_moving and player != null:
+			var clamped := move_input / maxf(1.0, move_input.length())
+			var yaw: float = camera_rig.cam_yaw if camera_rig != null else 0.0
+			var sin_y := sin(yaw)
+			var cos_y := cos(yaw)
+			var world_dx := clamped.x * cos_y + clamped.y * sin_y
+			var world_dz := -clamped.x * sin_y + clamped.y * cos_y
+
+			var speed_mult: float = 1.58 if is_sprinting else 1.0
+			player.position.x += world_dx * float(stats["speed"]) * speed_mult * dt
+			player.position.z += world_dz * float(stats["speed"]) * speed_mult * dt
+			player.clamp_to_arena()
+			player.facing = atan2(world_dx, world_dz)
 
 	if player != null:
-		player.update_animations(dt, is_moving)
+		var landed := player.update_vertical_physics(dt)
+		if landed:
+			AudioManager.play_sfx("land")
+			spawn_ring_vfx(Vector3(player.position.x, 0.0, player.position.z), Color.html("#e2e8f0"), 1.6, 0.20)
+		player.update_animations(dt, is_moving or is_dashing, is_sprinting)
 
 	# Shikigami Companion Follow & Auto-Support
 	if shikigami != null and shikigami.visible and player != null:
@@ -697,7 +802,7 @@ func _process(delta: float) -> void:
 
 		en.atk_timer -= dt
 		if en.atk_timer <= 0.0:
-			if dist <= 2.3:
+			if dist <= 2.3 and player.position.y < 1.35:
 				en.atk_timer = 1.4
 				damage_player(en.atk)
 			elif en.ranged and dist <= 15.0 and dist > 0.001:
@@ -711,14 +816,14 @@ func _process(delta: float) -> void:
 			alive.append(en)
 	enemies = alive
 
-	# Update Enemy Projectiles
+	# Update Enemy Projectiles (3D height check lets jumping clear low projectiles!)
 	var alive_proj: Array[EnemyProjectile3D] = []
 	for pr in projectiles:
 		if not is_instance_valid(pr):
 			continue
 		pr.life -= dt
 		pr.position += pr.direction * 9.5 * dt
-		if pr.position.distance_to(Vector3(player.position.x, 1.2, player.position.z)) < 1.15:
+		if pr.position.distance_to(player.position + Vector3(0.0, 1.2, 0.0)) < 1.15:
 			damage_player(pr.dmg)
 			pr.queue_free()
 			continue

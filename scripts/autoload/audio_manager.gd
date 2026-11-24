@@ -83,8 +83,15 @@ func play_sfx(sfx_type: String) -> void:
 			_trigger_chord(["A4", "E5", "A5", "C#6"], 0.30, 0.0, "sine", 0.26)
 			_trigger_punch(160.0, 48.0, 0.18, 0.0, 0.32, "sine")
 		"dash":
-			_trigger_chord(["C6"], 0.08, 0.0, "sine", 0.20)
-			_trigger_noise(0.09, 0.0, 0.14, 10.0)
+			_trigger_chord(["C6"], 0.09, 0.0, "sine", 0.22)
+			_trigger_punch(240.0, 95.0, 0.11, 0.0, 0.20, "sine")
+			_trigger_noise(0.11, 0.0, 0.18, 9.0)
+		"jump":
+			_trigger_punch(220.0, 520.0, 0.11, 0.0, 0.22, "sine")
+			_trigger_noise(0.06, 0.0, 0.10, 14.0)
+		"land":
+			_trigger_punch(95.0, 42.0, 0.075, 0.0, 0.18, "sine")
+			_trigger_noise(0.045, 0.0, 0.09, 16.0)
 		"hit":
 			_trigger_punch(120.0, 44.0, 0.18, 0.0, 0.42, "square")
 			_trigger_noise(0.10, 0.0, 0.26, 12.0)

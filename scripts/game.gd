@@ -44,6 +44,7 @@ func _ready() -> void:
 
 	# HUD -> BattleManager / Modals
 	hud_ui.attack_pressed.connect(battle_manager.perform_attack_a)
+	hud_ui.jump_pressed.connect(battle_manager.perform_jump)
 	hud_ui.dash_pressed.connect(battle_manager.perform_dash)
 	hud_ui.sig_skill_pressed.connect(func() -> void: battle_manager.initiate_skill_chant("sig"))
 	hud_ui.ult_skill_pressed.connect(func() -> void: battle_manager.initiate_skill_chant("ult"))
