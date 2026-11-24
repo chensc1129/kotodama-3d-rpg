@@ -13,10 +13,27 @@ var _is_dragging: bool = false
 var _drag_touch_index: int = -1
 var _last_pos: Vector2 = Vector2.ZERO
 
+var _trauma: float = 0.0
+var _shake_time: float = 0.0
+var _base_pos: Vector3 = Vector3(0.0, 9.0, 17.0)
+var _base_fov: float = 50.0
+var _fov_offset: float = 0.0
+
 
 func _ready() -> void:
 	if camera == null:
 		camera = get_node_or_null("Camera3D") as Camera3D
+	if camera != null:
+		_base_fov = camera.fov
+		_base_pos = camera.global_position
+
+
+func add_trauma(amount: float) -> void:
+	_trauma = clampf(_trauma + amount, 0.0, 1.0)
+
+
+func add_fov_punch(delta_fov: float) -> void:
+	_fov_offset = clampf(_fov_offset + delta_fov, -8.5, 6.5)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -57,5 +74,29 @@ func _process(delta: float) -> void:
 		tp.z + cos(cam_yaw) * cos(cam_pitch) * cam_dist
 	)
 	var lerp_weight := clampf(delta * 8.5, 0.0, 1.0)
-	camera.global_position = camera.global_position.lerp(desired, lerp_weight)
-	camera.look_at(Vector3(tp.x, tp.y + 1.4, tp.z), Vector3.UP)
+	_base_pos = _base_pos.lerp(desired, lerp_weight)
+
+	# Trauma-based damped high-frequency camera shake (runs crisply even during hitstop!)
+	var shake_offset := Vector3.ZERO
+	var roll_offset := 0.0
+	if _trauma > 0.001:
+		_shake_time += delta * 58.0
+		var shake := _trauma * _trauma
+		var sx := sin(_shake_time * 1.7 + 0.3) * 0.55 + cos(_shake_time * 3.1) * 0.45
+		var sy := cos(_shake_time * 2.3 + 1.1) * 0.55 + sin(_shake_time * 3.7) * 0.45
+		var sz := sin(_shake_time * 2.9 + 2.4) * 0.45
+		shake_offset = Vector3(sx, sy, sz) * shake * 0.82
+		roll_offset = sin(_shake_time * 2.1) * shake * 0.042
+		_trauma = maxf(0.0, _trauma - delta * 2.65)
+
+	camera.global_position = _base_pos + shake_offset
+	camera.look_at(Vector3(tp.x, tp.y + 1.4, tp.z) + shake_offset * 0.35, Vector3.UP)
+	if absf(roll_offset) > 0.0001:
+		camera.rotate_object_local(Vector3.FORWARD, roll_offset)
+
+	# Dynamic impact FOV punch spring
+	if absf(_fov_offset) > 0.01:
+		_fov_offset = lerpf(_fov_offset, 0.0, clampf(delta * 10.5, 0.0, 1.0))
+	else:
+		_fov_offset = 0.0
+	camera.fov = _base_fov + _fov_offset

@@ -22,6 +22,7 @@ var projectiles: Array[EnemyProjectile3D] = []
 
 var _pending_skill_type: String = ""
 var _pending_word: Dictionary = {}
+var _hitstop_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -87,6 +88,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func start_new_battle() -> void:
 	GameState.reset_battle_state()
+	_hitstop_timer = 0.0
 	var stats := GameState.get_computed_stats()
 	GameState.battle["active"] = true
 	GameState.battle["paused"] = false
@@ -165,6 +167,33 @@ func spawn_ring_vfx(world_pos: Vector3, color: Color, max_radius: float = 6.0, d
 	vfx.setup(world_pos, color, max_radius, duration)
 
 
+func spawn_hit_spark(world_pos: Vector3, color: Color, is_crit: bool = false, intensity: float = 1.0) -> void:
+	if vfx_root == null:
+		return
+	var vfx := HitVfx3D.new()
+	vfx_root.add_child(vfx)
+	vfx.setup_hit_spark(world_pos, color, is_crit, intensity)
+
+
+func spawn_death_burst(world_pos: Vector3, color: Color, is_boss: bool = false) -> void:
+	if vfx_root == null:
+		return
+	var vfx := HitVfx3D.new()
+	vfx_root.add_child(vfx)
+	vfx.setup_death_burst(world_pos, color, is_boss)
+
+
+func trigger_hitstop(duration: float) -> void:
+	_hitstop_timer = maxf(_hitstop_timer, duration)
+
+
+func _trigger_camera_impact(trauma: float, fov_delta: float = 0.0) -> void:
+	if camera_rig != null:
+		camera_rig.add_trauma(trauma)
+		if absf(fov_delta) > 0.01:
+			camera_rig.add_fov_punch(fov_delta)
+
+
 func perform_attack_a() -> void:
 	var b := GameState.battle
 	if not b["active"] or b["paused"] or float(b["atk_cooldown"]) > 0.0:
@@ -176,6 +205,11 @@ func perform_attack_a() -> void:
 	var step: int = int(b["atk_step"])
 	if player != null:
 		player.trigger_slash(step)
+		# Weighty forward combat lunge step toward slash direction
+		var lunge_dist: float = 0.78 if step == 3 else 0.38
+		var forward := Vector3(sin(player.facing), 0.0, cos(player.facing))
+		player.position += forward * lunge_dist
+		player.clamp_to_arena()
 
 	AudioManager.play_sfx("slash%d" % step)
 
@@ -183,13 +217,14 @@ func perform_attack_a() -> void:
 	var normal_lv: int = int(GameState.player["skills"].get("normal_a", 1))
 	var skill_mult: float = 1.0 + float(normal_lv - 1) * 0.14
 	var step_mult: float = 1.55 if step == 3 else (1.2 if step == 2 else 1.0)
-	var reach: float = 5.2 if step == 3 else 4.2
+	var reach: float = 5.4 if step == 3 else 4.35
 
 	var char_cfg: Dictionary = GameData.get_character(GameState.player["char_id"])
 	var vfx_color := Color.html("#fbbf24") if step == 3 else Color.html(char_cfg["color_primary"])
 	spawn_ring_vfx(player.position, vfx_color, reach, 0.28)
 
 	var hit_count: int = 0
+	var any_crit: bool = false
 	for en: Enemy3D in enemies.duplicate():
 		if not is_instance_valid(en) or en.dead:
 			continue
@@ -198,12 +233,14 @@ func perform_attack_a() -> void:
 			hit_count += 1
 			var dmg := int(round(float(stats["atk"]) * skill_mult * step_mult * (0.92 + randf() * 0.16)))
 			var tag := "あ!! 暴擊" if step == 3 else "あ"
+			var is_crit := (step == 3)
 
 			# Petrified Shatter Crit (Sakura synergy)
 			if en.petrify_timer > 0.0:
 				var stone_bonus := 1.5 + float(b["blessings"].get("stone_bonus", 0.0))
 				dmg = int(round(float(dmg) * stone_bonus))
 				tag = "🪨碎石暴擊!"
+				is_crit = true
 			elif (en.freeze_timer > 0.0 or en.stun_timer > 0.0) and float(b["blessings"].get("stone_bonus", 0.0)) > 0.0:
 				dmg = int(round(float(dmg) * (1.0 + float(b["blessings"]["stone_bonus"]))))
 
@@ -211,18 +248,45 @@ func perform_attack_a() -> void:
 			if en.shock_timer > 0.0:
 				dmg = int(round(float(dmg) * 1.25))
 
-			var pop_color := Color.html("#fde047") if step == 3 else Color.WHITE
-			damage_enemy(en, dmg, tag, pop_color)
+			if is_crit:
+				any_crit = true
 
-			# Knockback
 			var push_dir := en.position - player.position
 			push_dir.y = 0.0
 			if push_dir.length_squared() > 0.001:
 				push_dir = push_dir.normalized()
-				en.position += push_dir * (1.35 if step == 3 else 0.45)
+
+			# Impact hit sparks, white flash, squash recoil & stagger
+			var hit_pos := en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0)
+			spawn_hit_spark(hit_pos, vfx_color, is_crit, 1.15 if is_crit else 0.92)
+			en.trigger_hit_react(push_dir, is_crit or step == 2)
+
+			var pop_color := Color.html("#fde047") if is_crit else Color.WHITE
+			damage_enemy(en, dmg, tag, pop_color)
+
+			# Knockback (if still alive)
+			if is_instance_valid(en) and not en.dead and push_dir.length_squared() > 0.001:
+				var kb: float = (1.55 if is_crit else (0.72 if step == 2 else 0.48)) * (0.45 if en.is_boss else 1.0)
+				en.position += push_dir * kb
 				en.clamp_to_arena()
 
 	if hit_count > 0:
+		if any_crit:
+			AudioManager.play_sfx("impact_crit")
+			_trigger_camera_impact(0.48, -3.4)
+			trigger_hitstop(0.068)
+		elif step == 2 or hit_count >= 2:
+			AudioManager.play_sfx("impact_heavy")
+			_trigger_camera_impact(0.28, -1.6)
+			trigger_hitstop(0.038)
+		else:
+			AudioManager.play_sfx("impact_light")
+			_trigger_camera_impact(0.18, -0.9)
+			trigger_hitstop(0.026)
+
+		if player != null:
+			player.trigger_hit_punch(any_crit)
+
 		b["sp"] = minf(float(b["max_sp"]), float(b["sp"]) + 7.0 * float(hit_count))
 		b["combo"] = int(b["combo"]) + hit_count
 		b["combo_timer"] = 3.2
@@ -245,6 +309,7 @@ func perform_dash() -> void:
 	b["invuln_timer"] = 0.45
 	b["dash_cooldown"] = maxf(0.6, 1.3 - float(dash_lv - 1) * 0.06)
 	spawn_ring_vfx(player.position, Color.html("#38bdf8"), 2.5, 0.30)
+	_trigger_camera_impact(0.10, 1.8)
 
 
 func initiate_skill_chant(skill_type: String) -> void:
@@ -287,6 +352,7 @@ func complete_skill_chant(is_success: bool, is_typed_perfect: bool) -> void:
 
 	if not is_success:
 		AudioManager.play_sfx("hit")
+		_trigger_camera_impact(0.22)
 		GameState.toast_requested.emit("❌ 詠唱讀音錯誤，技能發動失敗！")
 		return
 
@@ -303,8 +369,17 @@ func complete_skill_chant(is_success: bool, is_typed_perfect: bool) -> void:
 		var ult_mult: float = 1.0 + float(ult_lv - 1) * 0.22
 		var dmg := int(round(float(stats["atk"]) * 3.8 * ult_mult * crit_mult))
 		spawn_ring_vfx(player.position, Color.html("#fbbf24"), 18.0, 0.75)
+		AudioManager.play_sfx("impact_crit")
+		_trigger_camera_impact(0.78, -5.5)
+		trigger_hitstop(0.095)
+		if player != null:
+			player.trigger_hit_punch(true)
 		for en: Enemy3D in enemies.duplicate():
 			if is_instance_valid(en) and not en.dead:
+				var push := en.position - player.position
+				push.y = 0.0
+				en.trigger_hit_react(push, true)
+				spawn_hit_spark(en.position + Vector3(0.0, 1.45 * en.scale.y, 0.0), Color.html("#fde047"), true, 1.4)
 				damage_enemy(en, dmg, "🌟完美奧義!" if is_typed_perfect else "🌟言霊奧義", Color.html("#fde047"))
 		GameState.toast_requested.emit("🌟 完美詠唱！1.5 倍全屏言霊奧義爆發！" if is_typed_perfect else "🌟 言霊奧義發動！")
 	else:
@@ -318,6 +393,7 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 	var sig_lv: int = int(GameState.player["skills"].get("sig_skill", 1))
 	var sig_mult: float = 1.0 + float(sig_lv - 1) * 0.20
 	var cid: String = char_cfg["id"]
+	var any_hit: bool = false
 
 	if cid == "sakura":
 		var duration: float = 5.0 + float(sig_lv - 1) * 0.35
@@ -325,7 +401,10 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 		spawn_ring_vfx(player.position, Color.html("#f472b6"), 13.0, 0.65)
 		for en: Enemy3D in enemies.duplicate():
 			if is_instance_valid(en) and not en.dead and en.position.distance_to(player.position) <= 13.5:
+				any_hit = true
 				en.petrify_timer = duration
+				en.trigger_hit_react(en.position - player.position, true)
+				spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#f472b6"), true, 1.2)
 				damage_enemy(en, dmg, "🪨石化封印!", Color.html("#f9a8d4"))
 		GameState.toast_requested.emit("🪨「石頭」石化魔眼！妖怪石化 %.1f 秒，快用「あ」碎石暴擊！" % duration)
 	elif cid == "kickboxer":
@@ -337,11 +416,14 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 		spawn_ring_vfx(player.position, Color.html("#38bdf8"), 9.5, 0.55)
 		for en: Enemy3D in enemies.duplicate():
 			if is_instance_valid(en) and not en.dead and en.position.distance_to(player.position) <= 9.5:
+				any_hit = true
 				en.stun_timer = 2.6
 				var push := en.position - player.position
 				push.y = 0.0
+				en.trigger_hit_react(push, true)
+				spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#38bdf8"), true, 1.3)
 				if push.length_squared() > 0.001:
-					en.position += push.normalized() * 4.5
+					en.position += push.normalized() * (2.2 if en.is_boss else 4.5)
 					en.clamp_to_arena()
 				damage_enemy(en, dmg, "🦶超烈風神腳!", Color.html("#7dd3fc"))
 		GameState.toast_requested.emit("🦶「腳」超烈風神腳！轟飛並暈眩周圍妖怪！")
@@ -350,7 +432,10 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 		spawn_ring_vfx(player.position, Color.html("#facc15"), 12.0, 0.60)
 		for en: Enemy3D in enemies.duplicate():
 			if is_instance_valid(en) and not en.dead and en.position.distance_to(player.position) <= 12.0:
+				any_hit = true
 				en.shock_timer = 5.0
+				en.trigger_hit_react(en.position - player.position, true)
+				spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#facc15"), true, 1.25)
 				damage_enemy(en, dmg, "⚡九天雷鳴!", Color.html("#fef08a"))
 		GameState.toast_requested.emit("⚡「雷光」九天雷鳴陣！妖怪陷入感電易傷狀態！")
 	elif cid == "yukionna":
@@ -358,8 +443,11 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 		spawn_ring_vfx(player.position, Color.html("#06b6d4"), 12.5, 0.65)
 		for en: Enemy3D in enemies.duplicate():
 			if is_instance_valid(en) and not en.dead and en.position.distance_to(player.position) <= 12.5:
+				any_hit = true
 				en.freeze_timer = 4.5
 				en.frost_tick_timer = 0.6
+				en.trigger_hit_react(en.position - player.position, true)
+				spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#67e8f9"), true, 1.2)
 				damage_enemy(en, dmg, "❄️絶対零度!", Color.html("#67e8f9"))
 		GameState.toast_requested.emit("❄️「冰結」絶対零度氷華！凍結周圍妖怪！")
 	else:
@@ -367,9 +455,21 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 		spawn_ring_vfx(player.position, Color.html("#ef4444"), 10.5, 0.60)
 		for en: Enemy3D in enemies.duplicate():
 			if is_instance_valid(en) and not en.dead and en.position.distance_to(player.position) <= 10.5:
+				any_hit = true
 				en.burn_timer = 4.0
+				en.trigger_hit_react(en.position - player.position, true)
+				spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#ef4444"), true, 1.3)
 				damage_enemy(en, dmg, "🔥紅蓮烈焰!", Color.html("#fca5a5"))
 		GameState.toast_requested.emit("🔥「火炎斬」紅蓮烈焰斬爆發！")
+
+	if any_hit:
+		AudioManager.play_sfx("impact_crit")
+		_trigger_camera_impact(0.56, -3.8)
+		trigger_hitstop(0.072)
+		if player != null:
+			player.trigger_hit_punch(true)
+	else:
+		_trigger_camera_impact(0.24, -1.5)
 
 
 func damage_enemy(en: Enemy3D, dmg: int, tag: String, color: Color = Color.WHITE) -> void:
@@ -379,14 +479,28 @@ func damage_enemy(en: Enemy3D, dmg: int, tag: String, color: Color = Color.WHITE
 	popup_requested.emit(en.position + Vector3(0.0, 2.2, 0.0), "%s -%d" % [tag, dmg], color)
 
 	if en.hp <= 0:
+		var death_pos := en.position + Vector3(0.0, 1.15 * en.scale.y, 0.0)
+		var death_col := en.primary_color
+		var was_boss := en.is_boss
 		en.dead = true
 		en.queue_free()
+
+		# Explosive Yokai spirit-shatter VFX + audio + boss finisher impact!
+		spawn_death_burst(death_pos, death_col, was_boss)
+		spawn_ring_vfx(Vector3(death_pos.x, 0.0, death_pos.z), death_col, 7.5 if was_boss else 3.2, 0.55 if was_boss else 0.30)
+		AudioManager.play_sfx("boss_die" if was_boss else "enemy_die")
+		if was_boss:
+			_trigger_camera_impact(0.85, -5.2)
+			trigger_hitstop(0.10)
+		else:
+			_trigger_camera_impact(0.18)
+
 		GameState.player["total_kills"] = int(GameState.player["total_kills"]) + 1
 
 		var mode_mult: float = 2.0 if GameState.player["mode"] == "hard_endless" else (1.5 if GameState.is_hard_mode() else 1.0)
 		var neko_bonus: float = 1.2 if GameState.player["active_shikigami"] == "neko" else 1.0
-		var gold_gain := int(round((120.0 if en.is_boss else 18.0) * mode_mult * neko_bonus))
-		var exp_gain := int(round((160.0 if en.is_boss else 26.0) * mode_mult))
+		var gold_gain := int(round((120.0 if was_boss else 18.0) * mode_mult * neko_bonus))
+		var exp_gain := int(round((160.0 if was_boss else 26.0) * mode_mult))
 
 		GameState.player["gold"] = int(GameState.player["gold"]) + gold_gain
 		GameState.grant_exp(exp_gain)
@@ -400,7 +514,10 @@ func damage_player(dmg: int) -> void:
 	b["invuln_timer"] = 0.65
 	b["hp"] = maxi(0, int(b["hp"]) - dmg)
 	AudioManager.play_sfx("hit")
-	popup_requested.emit(player.position + Vector3(0.0, 2.2, 0.0), "-%d" % dmg, Color.html("#f43f5e"))
+	_trigger_camera_impact(0.42, 2.4)
+	if player != null:
+		spawn_hit_spark(player.position + Vector3(0.0, 1.35, 0.0), Color.html("#f43f5e"), false, 0.95)
+		popup_requested.emit(player.position + Vector3(0.0, 2.2, 0.0), "-%d" % dmg, Color.html("#f43f5e"))
 
 	if int(b["hp"]) <= 0:
 		b["active"] = false
@@ -423,6 +540,11 @@ func _process(delta: float) -> void:
 	if not b["active"] or b["paused"]:
 		if player != null:
 			player.update_animations(dt, false)
+		return
+
+	# Crisp action-RPG hitstop freeze frames (CameraRig keeps shaking smoothly!)
+	if _hitstop_timer > 0.0:
+		_hitstop_timer = maxf(0.0, _hitstop_timer - dt)
 		return
 
 	# Timers & cooldowns
@@ -485,6 +607,8 @@ func _process(delta: float) -> void:
 			b["shikigami_timer"] = 0.0
 			var target := _find_nearest_enemy()
 			if target != null:
+				target.trigger_hit_react(target.position - player.position, false)
+				spawn_hit_spark(target.position + Vector3(0.0, 1.2 * target.scale.y, 0.0), Color.html("#f97316"), false, 0.75)
 				damage_enemy(target, int(round(float(stats["atk"]) * 0.85)), "🦊狐火", Color.html("#fb923c"))
 				spawn_ring_vfx(target.position, Color.html("#f97316"), 2.2, 0.3)
 		elif active_sh == "neko" and float(b["shikigami_timer"]) >= 4.0:
@@ -496,6 +620,8 @@ func _process(delta: float) -> void:
 			b["shikigami_timer"] = 0.0
 			var target := _find_nearest_enemy()
 			if target != null:
+				target.trigger_hit_react(target.position - player.position, false)
+				spawn_hit_spark(target.position + Vector3(0.0, 1.2 * target.scale.y, 0.0), Color.html("#38bdf8"), false, 0.75)
 				damage_enemy(target, int(round(float(stats["atk"]) * 0.90)), "🐺雷撃", Color.html("#38bdf8"))
 				b["sp"] = minf(float(b["max_sp"]), float(b["sp"]) + 4.0)
 
@@ -525,7 +651,7 @@ func _process(delta: float) -> void:
 					continue
 
 		en.update_status_visuals(dt)
-		if en.is_controlled():
+		if en.is_controlled() or en.is_staggered():
 			continue
 
 		var to_player := player.position - en.position

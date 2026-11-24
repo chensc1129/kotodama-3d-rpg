@@ -17,6 +17,7 @@ uniform float emission_energy : hint_range(0.0, 6.0) = 0.0;
 
 uniform vec4 status_tint : source_color = vec4(1.0, 1.0, 1.0, 1.0);
 uniform float status_mix : hint_range(0.0, 1.0) = 0.0;
+uniform float hit_flash : hint_range(0.0, 1.0) = 0.0;
 
 void fragment() {
 	vec4 base = albedo_color;
@@ -24,14 +25,15 @@ void fragment() {
 		base *= texture(albedo_texture, UV);
 	}
 	vec3 final_col = mix(base.rgb, status_tint.rgb, status_mix);
-	ALBEDO = final_col;
+	ALBEDO = mix(final_col, vec3(1.0), hit_flash);
 	ROUGHNESS = roughness_val;
 	METALLIC = metallic_val;
 
 	// Subtle Fresnel anime rim light
 	float fresnel = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), rim_power);
 	vec3 rim = rim_color.rgb * fresnel * rim_strength;
-	EMISSION = emission_color.rgb * emission_energy + rim * (1.0 - status_mix * 0.5);
+	vec3 flash_glow = vec3(1.0, 0.96, 0.88) * hit_flash * 1.45;
+	EMISSION = emission_color.rgb * emission_energy + rim * (1.0 - status_mix * 0.5) + flash_glow;
 }
 
 void light() {

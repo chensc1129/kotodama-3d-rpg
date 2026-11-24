@@ -32,6 +32,7 @@ var shock_timer: float = 0.0
 var burn_timer: float = 0.0
 var frost_tick_timer: float = 0.0
 var dead: bool = false
+var primary_color: Color = Color.WHITE
 
 var _visual_root: Node3D
 var _anim_nodes: Array[Node3D] = []
@@ -40,11 +41,18 @@ var _status_ring: MeshInstance3D
 var _status_mat: StandardMaterial3D
 var _elapsed: float = 0.0
 
+var _hit_flash_timer: float = 0.0
+var _hit_flash_max: float = 0.12
+var _stagger_timer: float = 0.0
+var _recoil_scale: Vector3 = Vector3.ONE
+var _recoil_tilt: Vector3 = Vector3.ZERO
+
 
 func setup(tpl: Dictionary, p_is_boss: bool, wave_num: int, is_hard: bool) -> void:
 	enemy_name = tpl["name"]
 	template_id = tpl["id"]
 	is_boss = p_is_boss
+	primary_color = Color.html(tpl["color"])
 	_elapsed = randf() * TAU
 
 	var scale_factor: float = 1.0 + float(wave_num - 1) * 0.24 + (0.45 if is_hard else 0.0)
@@ -65,7 +73,7 @@ func setup(tpl: Dictionary, p_is_boss: bool, wave_num: int, is_hard: bool) -> vo
 func _build_mesh(tpl: Dictionary) -> void:
 	var model_path: String = ENEMY_MODELS.get(template_id, ENEMY_MODELS["aooni"])
 	var packed: PackedScene = load(model_path) as PackedScene
-	var rim_col := Color.html(tpl["color"]).lerp(Color.WHITE, 0.4)
+	var rim_col := primary_color.lerp(Color.WHITE, 0.4)
 
 	if packed != null:
 		var inst := packed.instantiate()
@@ -102,13 +110,61 @@ func _build_mesh(tpl: Dictionary) -> void:
 	scale = Vector3(s, s, s)
 
 
+func trigger_hit_react(knock_dir: Vector3, heavy: bool = false) -> void:
+	_hit_flash_max = 0.14 if heavy else 0.10
+	_hit_flash_timer = _hit_flash_max
+	var stagger_dur := (0.14 if is_boss else 0.25) if heavy else (0.06 if is_boss else 0.14)
+	_stagger_timer = maxf(_stagger_timer, stagger_dur)
+	_recoil_scale = Vector3(1.34, 0.68, 1.34) if heavy else Vector3(1.20, 0.82, 1.20)
+
+	if knock_dir.length_squared() > 0.001:
+		var local_dir := knock_dir.normalized().rotated(Vector3.UP, -rotation.y)
+		var tilt_amp := (0.28 if is_boss else 0.44) if heavy else (0.16 if is_boss else 0.26)
+		_recoil_tilt = Vector3(local_dir.z * tilt_amp, 0.0, -local_dir.x * tilt_amp)
+	else:
+		_recoil_tilt = Vector3(-0.30 if heavy else -0.18, 0.0, 0.0)
+
+	_set_hit_flash(1.0)
+	if _visual_root != null:
+		_visual_root.scale = _recoil_scale
+		_visual_root.rotation = _recoil_tilt
+
+
+func is_staggered() -> bool:
+	return _stagger_timer > 0.0
+
+
 func _process(delta: float) -> void:
-	if dead or is_controlled():
+	if dead:
 		return
+
+	# Always update hit-flash, stagger & elastic squash-recoil springs
+	if _stagger_timer > 0.0:
+		_stagger_timer = maxf(0.0, _stagger_timer - delta)
+
+	if _hit_flash_timer > 0.0:
+		_hit_flash_timer = maxf(0.0, _hit_flash_timer - delta)
+		var ratio := _hit_flash_timer / maxf(0.001, _hit_flash_max)
+		# Hold full white for first ~45% of flash for snappy anime impact readability
+		var flash_val := 1.0 if ratio > 0.55 else (ratio / 0.55)
+		_set_hit_flash(flash_val)
+
+	if _visual_root != null:
+		var spring := clampf(delta * 15.0, 0.0, 1.0)
+		_recoil_scale = _recoil_scale.lerp(Vector3.ONE, spring)
+		_recoil_tilt = _recoil_tilt.lerp(Vector3.ZERO, spring)
+		_visual_root.scale = _recoil_scale
+		_visual_root.rotation = _recoil_tilt
+
+	if is_controlled():
+		return
+
 	_elapsed += delta
 	if _visual_root != null:
 		if template_id == "kasa" or template_id == "chochin":
 			_visual_root.position.y = absf(sin(_elapsed * 5.2)) * 0.35
+		elif template_id == "dogu" or template_id == "kyubi":
+			_visual_root.position.y = sin(_elapsed * 3.4) * 0.14
 		else:
 			_visual_root.position.y = sin(_elapsed * 4.0) * 0.06
 
@@ -119,11 +175,24 @@ func _process(delta: float) -> void:
 		var phase := _elapsed * 5.0 + float(idx) * 1.3
 		if template_id == "tengu_boss":
 			var sign_dir := -1.0 if idx == 0 else 1.0
-			n.rotation.y = sign_dir * (0.25 + sin(_elapsed * 6.5) * 0.35)
+			n.rotation.y = sign_dir * (0.22 + sin(_elapsed * 6.5) * 0.36)
 		elif template_id == "jorogumo":
-			n.rotation.z = sin(phase * 1.8) * 0.22
+			n.rotation.z = sin(phase * 1.9) * 0.24
+			n.rotation.y = cos(phase * 1.9) * 0.10
+		elif template_id == "chochin":
+			n.rotation.z = sin(_elapsed * 7.0) * 0.28
+			n.rotation.x = sin(_elapsed * 4.2) * 0.18
+		elif template_id == "kasa":
+			var s_dir := -1.0 if idx == 0 else 1.0
+			n.rotation.z = s_dir * (0.18 + sin(_elapsed * 7.5 + float(idx) * PI) * 0.32)
+		elif template_id == "kyubi":
+			n.rotation.y = sin(_elapsed * 3.2) * 0.16
+			n.rotation.x = sin(_elapsed * 2.4) * 0.08
+		elif template_id == "orochi_boss":
+			n.rotation.y = sin(_elapsed * 3.5 + float(idx) * 2.1) * 0.24
+			n.rotation.x = cos(_elapsed * 4.4 + float(idx) * 1.4) * 0.16
 		else:
-			n.rotation.x = sin(phase) * 0.18
+			n.rotation.x = sin(phase) * 0.22
 
 
 func is_controlled() -> bool:
@@ -155,6 +224,11 @@ func _set_status_shader(col: Color, mix_val: float) -> void:
 	for sm in _toon_mats:
 		sm.set_shader_parameter("status_tint", col)
 		sm.set_shader_parameter("status_mix", mix_val)
+
+
+func _set_hit_flash(val: float) -> void:
+	for sm in _toon_mats:
+		sm.set_shader_parameter("hit_flash", val)
 
 
 func clamp_to_arena() -> void:

@@ -18,6 +18,7 @@ var kick_anim_timer: float = 0.0
 var _slash_step: int = 1
 var _walk_phase: float = 0.0
 var _elapsed: float = 0.0
+var _punch_scale: Vector3 = Vector3.ONE
 
 var _visual_root: Node3D
 var _body_pivot: Node3D
@@ -32,6 +33,9 @@ var _orbit_group: Node3D
 var _aura_mesh: MeshInstance3D
 var _slash_arc_mesh: MeshInstance3D
 var _slash_arc_mat: StandardMaterial3D
+var _slash_core_mesh: MeshInstance3D
+var _slash_core_mat: StandardMaterial3D
+var _slash_base_color: Color = Color.WHITE
 var _name_label: Label3D
 
 
@@ -56,7 +60,13 @@ func _ready() -> void:
 
 func trigger_slash(step: int) -> void:
 	_slash_step = clampi(step, 1, 3)
-	slash_anim_timer = 0.28
+	slash_anim_timer = 0.30 if _slash_step == 3 else 0.25
+
+
+func trigger_hit_punch(heavy: bool = false) -> void:
+	_punch_scale = Vector3(1.16, 0.88, 1.16) if heavy else Vector3(1.09, 0.93, 1.09)
+	if _body_pivot != null:
+		_body_pivot.scale = _punch_scale
 
 
 func rebuild_mesh() -> void:
@@ -72,6 +82,8 @@ func rebuild_mesh() -> void:
 	_right_leg = null
 	_scarf_node = null
 	_orbit_group = null
+	_slash_arc_mesh = null
+	_slash_core_mesh = null
 
 	var char_cfg: Dictionary = GameData.get_character(GameState.player["char_id"])
 	var eq_w: Dictionary = GameData.get_equipment(GameState.player["equipped"].get("weapon", "w1"))
@@ -85,6 +97,7 @@ func rebuild_mesh() -> void:
 	var blade_col := Color.html(eq_w.get("blade_color", "#d6d3d1"))
 	var aura_col := Color.html(eq_a.get("aura_color", "#94a3b8"))
 	var rim_col := Color.html(char_cfg["color_primary"]).lerp(Color.WHITE, 0.55)
+	_slash_base_color = Color.html(char_cfg["color_primary"]).lerp(blade_col, 0.5)
 
 	# 1. Ground Armor Aura Ring
 	_aura_mesh = _build_aura_ring(aura_col)
@@ -125,8 +138,8 @@ func rebuild_mesh() -> void:
 				bm.set_shader_parameter("metallic_val", 0.85)
 				bm.set_shader_parameter("roughness_val", 0.16)
 
-	# 3. 3D Glowing Crescent Slash Arc VFX
-	_build_slash_arc(blade_col)
+	# 3. 3D Dual-Layer Glowing Crescent Slash Arc VFX
+	_build_slash_arc(_slash_base_color)
 
 	update_name_badge()
 
@@ -150,23 +163,45 @@ func _build_aura_ring(aura_col: Color) -> MeshInstance3D:
 
 
 func _build_slash_arc(blade_col: Color) -> void:
+	var parent_n: Node3D = _body_pivot if _body_pivot != null else _visual_root
+
+	# Outer wide energy crescent
 	var torus := TorusMesh.new()
-	torus.inner_radius = 1.15
-	torus.outer_radius = 1.68
-	torus.rings = 28
+	torus.inner_radius = 1.05
+	torus.outer_radius = 1.92
+	torus.rings = 32
 	torus.ring_segments = 6
 	_slash_arc_mat = StandardMaterial3D.new()
 	_slash_arc_mat.albedo_color = Color(blade_col.r, blade_col.g, blade_col.b, 0.0)
 	_slash_arc_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_slash_arc_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_slash_arc_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_slash_arc_mesh = MeshInstance3D.new()
 	_slash_arc_mesh.mesh = torus
 	_slash_arc_mesh.material_override = _slash_arc_mat
-	_slash_arc_mesh.position = Vector3(0.0, 1.25, 0.45)
-	_slash_arc_mesh.scale = Vector3(1.0, 0.08, 1.0)
+	_slash_arc_mesh.position = Vector3(0.0, 1.25, 0.55)
+	_slash_arc_mesh.scale = Vector3(1.0, 0.07, 1.0)
 	_slash_arc_mesh.visible = false
-	var parent_n: Node3D = _body_pivot if _body_pivot != null else _visual_root
 	parent_n.add_child(_slash_arc_mesh)
+
+	# Razor-bright white-hot inner edge flash
+	var core_torus := TorusMesh.new()
+	core_torus.inner_radius = 1.48
+	core_torus.outer_radius = 1.88
+	core_torus.rings = 32
+	core_torus.ring_segments = 6
+	_slash_core_mat = StandardMaterial3D.new()
+	_slash_core_mat.albedo_color = Color(1.0, 0.98, 0.90, 0.0)
+	_slash_core_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_slash_core_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_slash_core_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_slash_core_mesh = MeshInstance3D.new()
+	_slash_core_mesh.mesh = core_torus
+	_slash_core_mesh.material_override = _slash_core_mat
+	_slash_core_mesh.position = Vector3(0.0, 1.25, 0.55)
+	_slash_core_mesh.scale = Vector3(1.0, 0.05, 1.0)
+	_slash_core_mesh.visible = false
+	parent_n.add_child(_slash_core_mesh)
 
 
 func update_name_badge() -> void:
@@ -201,6 +236,10 @@ func update_animations(delta: float, is_moving: bool) -> void:
 	if _body_pivot == null:
 		return
 
+	# Impact hit-punch scale recovery
+	_punch_scale = _punch_scale.lerp(Vector3.ONE, clampf(delta * 16.0, 0.0, 1.0))
+	_body_pivot.scale = _punch_scale
+
 	# Subtle head life motion
 	if _head_pivot != null:
 		_head_pivot.rotation.z = sin(_elapsed * 2.4) * 0.035
@@ -212,7 +251,8 @@ func update_animations(delta: float, is_moving: bool) -> void:
 		_body_pivot.rotation.x = -0.35
 	else:
 		_body_pivot.position.y = sin(_elapsed * (10.0 if is_moving else 3.2)) * (0.06 if is_moving else 0.03)
-		_body_pivot.rotation.x = lerpf(_body_pivot.rotation.x, 0.14 if is_moving else 0.0, clampf(delta * 10.0, 0.0, 1.0))
+		var target_lean := 0.22 if slash_anim_timer > 0.0 else (0.14 if is_moving else 0.0)
+		_body_pivot.rotation.x = lerpf(_body_pivot.rotation.x, target_lean, clampf(delta * 12.0, 0.0, 1.0))
 
 	# Leg & Arm Locomotion
 	if is_moving and kick_anim_timer <= 0.0:
@@ -241,37 +281,51 @@ func update_animations(delta: float, is_moving: bool) -> void:
 			_right_arm.rotation.x = lerpf(_right_arm.rotation.x, -0.25, smooth)
 			_right_arm.rotation.z = lerpf(_right_arm.rotation.z, 0.12, smooth)
 
-	# 3-Hit Combo Slash Animation + Glowing Crescent Slash Arc
+	# 3-Hit Combo Slash Animation + Dual-Layer Glowing Crescent Slash Arc
 	if slash_anim_timer > 0.0:
-		var p := 1.0 - (slash_anim_timer / 0.28)
+		var max_t := 0.30 if _slash_step == 3 else 0.25
+		var p := clampf(1.0 - (slash_anim_timer / max_t), 0.0, 1.0)
+		# Snappy ease-out swing curve (fast strike, crisp follow-through!)
+		var ease_p := 1.0 - pow(1.0 - p, 2.4)
 		if _right_arm != null:
 			if _slash_step == 1:
-				_right_arm.rotation.x = lerpf(-1.6, 0.9, p)
-				_right_arm.rotation.z = lerpf(0.6, -0.5, p)
-				_body_pivot.rotation.y = lerpf(-0.35, 0.35, p)
+				_right_arm.rotation.x = lerpf(-1.75, 1.05, ease_p)
+				_right_arm.rotation.z = lerpf(0.75, -0.55, ease_p)
+				_body_pivot.rotation.y = lerpf(-0.42, 0.42, ease_p)
 			elif _slash_step == 2:
-				_right_arm.rotation.x = lerpf(0.7, -1.5, p)
-				_right_arm.rotation.z = lerpf(-0.6, 0.7, p)
-				_body_pivot.rotation.y = lerpf(0.35, -0.35, p)
+				_right_arm.rotation.x = lerpf(0.85, -1.65, ease_p)
+				_right_arm.rotation.z = lerpf(-0.68, 0.78, ease_p)
+				_body_pivot.rotation.y = lerpf(0.42, -0.42, ease_p)
 			else:
-				_right_arm.rotation.x = lerpf(-2.2, 1.25, p)
+				_right_arm.rotation.x = lerpf(-2.35, 1.35, ease_p)
 				_right_arm.rotation.z = 0.0
-				_body_pivot.rotation.y = p * TAU
+				_body_pivot.rotation.y = ease_p * TAU
 		if _weapon_pivot != null:
-			_weapon_pivot.rotation.x = 1.65
+			_weapon_pivot.rotation.x = 1.75
 		if _slash_arc_mesh != null and _slash_arc_mat != null:
+			var arc_col := Color.html("#fbbf24") if _slash_step == 3 else _slash_base_color
+			var tilt_z := 0.38 if _slash_step == 1 else (-0.38 if _slash_step == 2 else 0.08)
+			var sc := (1.55 if _slash_step == 3 else 1.12) * (0.78 + ease_p * 0.62)
+			var alpha_val := clampf((1.0 - p) * 1.15, 0.0, 0.94)
 			_slash_arc_mesh.visible = true
-			_slash_arc_mesh.rotation.z = 0.35 if _slash_step == 1 else (-0.35 if _slash_step == 2 else 0.0)
-			_slash_arc_mesh.rotation.y = p * 2.8
-			var sc := (1.35 if _slash_step == 3 else 1.0) * (0.85 + p * 0.55)
-			_slash_arc_mesh.scale = Vector3(sc, 0.08, sc)
-			_slash_arc_mat.albedo_color.a = (1.0 - p) * 0.85
+			_slash_arc_mesh.rotation.z = tilt_z
+			_slash_arc_mesh.rotation.y = ease_p * 3.4
+			_slash_arc_mesh.scale = Vector3(sc, 0.085, sc)
+			_slash_arc_mat.albedo_color = Color(arc_col.r, arc_col.g, arc_col.b, alpha_val)
+			if _slash_core_mesh != null and _slash_core_mat != null:
+				_slash_core_mesh.visible = true
+				_slash_core_mesh.rotation.z = tilt_z
+				_slash_core_mesh.rotation.y = ease_p * 3.4
+				_slash_core_mesh.scale = Vector3(sc * 1.03, 0.055, sc * 1.03)
+				_slash_core_mat.albedo_color = Color(1.0, 0.98, 0.92, clampf((1.0 - p * 1.25) * 0.98, 0.0, 0.98))
 	else:
 		_body_pivot.rotation.y = lerpf(_body_pivot.rotation.y, 0.0, clampf(delta * 14.0, 0.0, 1.0))
 		if _weapon_pivot != null:
 			_weapon_pivot.rotation.x = lerpf(_weapon_pivot.rotation.x, 0.85, clampf(delta * 12.0, 0.0, 1.0))
 		if _slash_arc_mesh != null:
 			_slash_arc_mesh.visible = false
+		if _slash_core_mesh != null:
+			_slash_core_mesh.visible = false
 
 
 func clamp_to_arena() -> void:

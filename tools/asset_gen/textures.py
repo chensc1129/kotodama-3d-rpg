@@ -343,46 +343,64 @@ def paint_katana_hilt():
 
 # ==================== YOKAI & SHIKIGAMI TEXTURES ====================
 def paint_chochin_lantern():
-    """Glowing ribbed Japanese paper lantern with glaring anime eye & jagged yokai grin."""
+    """Glowing weathered Japanese washi-paper lantern with glaring bloodshot eye, jagged grin & kanji."""
     W, H = 512, 512
     img = Image.new("RGBA", (W, H), _hex("#fb923c"))
     draw = ImageDraw.Draw(img, "RGBA")
     for y in range(H):
         v = abs(y - 256) / 256.0
-        col = _lerp_col(_hex("#fed7aa"), _hex("#ea580c"), v)
+        col = _lerp_col(_hex("#ffedd5"), _hex("#c2410c"), v ** 0.85)
         draw.line([(0, y), (W, y)], fill=col)
-    # Horizontal bamboo ribs
-    for y in range(40, H, 52):
-        draw.line([(0, y), (W, y)], fill=(124, 45, 18, 170), width=6)
-    # Center +Z is u=0.5 (x=256): huge single eye + jagged mouth
-    cx, cy = 256, 195
-    draw.ellipse([cx - 66, cy - 48, cx + 66, cy + 48], fill=(255, 255, 245, 255), outline=(28, 15, 12, 255), width=8)
-    draw.ellipse([cx - 28, cy - 28, cx + 28, cy + 28], fill=(220, 38, 38, 255))
-    draw.ellipse([cx - 14, cy - 14, cx + 14, cy + 14], fill=(15, 10, 15, 255))
-    draw.ellipse([cx - 16, cy - 22, cx - 2, cy - 8], fill=(255, 255, 255, 255))
-    # Jagged grin
-    draw.rounded_rectangle([cx - 90, 295, cx + 90, 365], radius=24, fill=(38, 12, 16, 255), outline=(15, 10, 12, 255), width=6)
-    for tx in range(cx - 72, cx + 76, 24):
-        draw.polygon([(tx, 298), (tx + 12, 326), (tx + 24, 298)], fill=(255, 250, 235, 255))
-    return img
+
+    # Subtle vertical paper grain & dark bamboo ribs
+    def _ribs(d):
+        for x in range(0, W, 16):
+            d.line([(x, 0), (x, H)], fill=(154, 52, 18, 28), width=2)
+        for y in range(36, H, 48):
+            d.line([(0, y), (W, y)], fill=(90, 28, 12, 175), width=6)
+    img = _overlay(img, _ribs)
+    draw = ImageDraw.Draw(img, "RGBA")
+
+    # Front (+Z, u=0.5 -> x=256): furious glaring bloodshot demon eye
+    cx, cy = 256, 188
+    draw.ellipse([cx - 74, cy - 52, cx + 74, cy + 52], fill=(255, 252, 240, 255), outline=(28, 12, 10, 255), width=9)
+    # Bloodshot veins
+    for ang_d in (-25, 0, 22, 155, 180, 205):
+        a = math.radians(ang_d)
+        draw.line([(cx + math.cos(a) * 34, cy + math.sin(a) * 24), (cx + math.cos(a) * 66, cy + math.sin(a) * 44)], fill=(220, 38, 38, 200), width=3)
+    draw.ellipse([cx - 32, cy - 32, cx + 32, cy + 32], fill=(220, 38, 38, 255), outline=(90, 10, 10, 255), width=4)
+    draw.ellipse([cx - 15, cy - 15, cx + 15, cy + 15], fill=(15, 8, 12, 255))
+    draw.ellipse([cx - 18, cy - 22, cx - 4, cy - 8], fill=(255, 255, 255, 255))
+    # Heavy furrowed eyelid brow
+    draw.arc([cx - 82, cy - 72, cx + 82, cy + 18], 195, 345, fill=(38, 14, 12, 255), width=14)
+
+    # Jagged tearing mouth cavity
+    draw.rounded_rectangle([cx - 104, 288, cx + 104, 376], radius=28, fill=(32, 8, 12, 255), outline=(18, 8, 10, 255), width=7)
+    for tx in range(cx - 84, cx + 84, 24):
+        draw.polygon([(tx, 292), (tx + 12, 326), (tx + 24, 292)], fill=(255, 248, 225, 255))
+        draw.polygon([(tx + 6, 372), (tx + 16, 346), (tx + 26, 372)], fill=(255, 248, 225, 255))
+    return img.convert("RGB")
 
 
 def paint_kasa_umbrella():
-    """Purple & gold striped Wagasa umbrella canopy with glaring cyclops eye."""
+    """Purple & gold striped Wagasa umbrella canopy with expressive cyclops eye & mischievous grin."""
     W, H = 512, 512
-    img = Image.new("RGBA", (W, H), _hex("#7e22ce"))
+    img = Image.new("RGBA", (W, H), _hex("#6b21a8"))
     draw = ImageDraw.Draw(img, "RGBA")
     for x in range(0, W, 64):
-        draw.rectangle([x, 0, x + 32, H], fill=_hex("#a855f7"))
+        draw.rectangle([x, 0, x + 32, H], fill=_hex("#9333ea"))
         draw.line([(x, 0), (x, H)], fill=_hex("#3b0764"), width=4)
-    draw.rectangle([0, H - 36, W, H], fill=_hex("#fbbf24"))
-    # Glaring cyclops eye on front
-    cx, cy = 256, 280
-    draw.ellipse([cx - 62, cy - 52, cx + 62, cy + 52], fill=(255, 255, 255, 255), outline=(25, 12, 42, 255), width=8)
-    draw.ellipse([cx - 28, cy - 28, cx + 28, cy + 28], fill=_hex("#f59e0b"))
-    draw.ellipse([cx - 14, cy - 14, cx + 14, cy + 14], fill=(15, 10, 20, 255))
-    draw.ellipse([cx - 16, cy - 20, cx - 4, cy - 8], fill=(255, 255, 255, 255))
-    return img
+        draw.line([(x + 32, 0), (x + 32, H)], fill=_hex("#3b0764"), width=4)
+    draw.rectangle([0, H - 44, W, H - 36], fill=_hex("#fde047"))
+    draw.rectangle([0, H - 36, W, H], fill=_hex("#f59e0b"))
+
+    cx, cy = 256, 278
+    draw.ellipse([cx - 66, cy - 54, cx + 66, cy + 54], fill=(255, 255, 255, 255), outline=(25, 10, 42, 255), width=9)
+    draw.ellipse([cx - 32, cy - 32, cx + 32, cy + 32], fill=_hex("#f59e0b"), outline=(60, 20, 10, 255), width=4)
+    draw.ellipse([cx - 15, cy - 15, cx + 15, cy + 15], fill=(15, 8, 20, 255))
+    draw.ellipse([cx - 18, cy - 22, cx - 4, cy - 8], fill=(255, 255, 255, 255))
+    draw.arc([cx - 72, cy - 68, cx + 72, cy + 10], 200, 340, fill=(25, 10, 42, 255), width=12)
+    return img.convert("RGB")
 
 
 def paint_tiger_stripes():
@@ -391,69 +409,173 @@ def paint_tiger_stripes():
     img = Image.new("RGBA", (W, H), _hex("#facc15"))
     draw = ImageDraw.Draw(img, "RGBA")
     ink = _hex("#1c1917")
-    for y in range(18, H, 42):
+    for y in range(18, H, 40):
         pts = [(0, y), (64, y + 14), (128, y - 6), (192, y + 16), (256, y)]
         draw.line(pts, fill=ink, width=14)
-    return img
+    return img.convert("RGB")
 
 
 def paint_lava_oni(base_hex="#dc2626", crack_hex="#facc15"):
-    """Muscular Oni skin with dramatic glowing battle-scar / lava-crack patterns."""
+    """Muscular Oni skin with dramatic anatomical shading and glowing battle/lava veins."""
     W, H = 256, 256
     c1 = _hex(base_hex)
-    c2 = _lerp_col(c1, (15, 10, 20, 255), 0.28)
+    c2 = _lerp_col(c1, (15, 10, 22, 255), 0.30)
     img = Image.new("RGBA", (W, H), c1)
     draw = ImageDraw.Draw(img, "RGBA")
     for y in range(H):
         draw.line([(0, y), (W, y)], fill=_lerp_col(c1, c2, y / float(H)))
     ck = _hex(crack_hex)
-    for x0 in (48, 128, 208):
-        pts = [(x0, 20), (x0 - 16, 90), (x0 + 14, 155), (x0 - 8, 230)]
-        draw.line(pts, fill=(ck[0], ck[1], ck[2], 195), width=4)
-    return img
+    def _veins(d):
+        for x0 in (44, 128, 212):
+            pts = [(x0, 14), (x0 - 18, 84), (x0 + 14, 152), (x0 - 10, 236)]
+            d.line(pts, fill=(ck[0], ck[1], ck[2], 215), width=4)
+    return _overlay(img, _veins).convert("RGB")
+
+
+def paint_oni_face(skin_hex="#2563eb", eye_hex="#fef08a", mark_hex="#1e1b4b"):
+    """Fierce sculpted Japanese Oni demon face texture with kumadori warpaint, glowing eyes & snarl."""
+    W, H = 512, 512
+    skin = _hex(skin_hex)
+    mark = _hex(mark_hex)
+    eye = _hex(eye_hex)
+    ink = (18, 12, 24, 255)
+    img = Image.new("RGBA", (W, H), skin)
+    draw = ImageDraw.Draw(img, "RGBA")
+
+    cx, cy = 256, 258
+    # Tribal kumadori cheek warpaint stripes
+    for side in (-1, 1):
+        draw.line([(cx + side * 26, cy - 42), (cx + side * 72, cy - 58)], fill=mark, width=10)
+        draw.line([(cx + side * 34, cy + 28), (cx + side * 86, cy + 42)], fill=mark, width=8)
+        # Fierce slanted glowing demon eyes
+        ex = cx + side * 46
+        draw.polygon([
+            (ex - side * 26, cy - 4),
+            (ex + side * 26, cy - 22),
+            (ex + side * 22, cy + 12),
+            (ex - side * 22, cy + 16),
+        ], fill=eye, outline=ink)
+        draw.ellipse([ex - 9, cy - 9, ex + 9, cy + 9], fill=(185, 28, 28, 255))
+        draw.ellipse([ex - 4, cy - 4, ex + 4, cy + 4], fill=ink)
+        # Heavy furrowed brows
+        draw.line([(ex - side * 28, cy - 14), (ex + side * 30, cy - 34)], fill=ink, width=10)
+
+    # Scowling fanged demon mouth
+    draw.rounded_rectangle([cx - 56, cy + 48, cx + 56, cy + 88], radius=14, fill=(38, 8, 14, 255), outline=ink, width=5)
+    for tx in range(cx - 42, cx + 44, 16):
+        draw.polygon([(tx, cy + 50), (tx + 8, cy + 68), (tx + 16, cy + 50)], fill=(255, 250, 235, 255))
+    return img.convert("RGB")
+
+
+def paint_tengu_face():
+    """Regal crimson Japanese Great Tengu mask face with fierce golden eyes & white brows."""
+    W, H = 512, 512
+    img = Image.new("RGBA", (W, H), _hex("#dc2626"))
+    draw = ImageDraw.Draw(img, "RGBA")
+    ink = (22, 10, 14, 255)
+    cx, cy = 256, 256
+    for side in (-1, 1):
+        ex = cx + side * 46
+        draw.ellipse([ex - 26, cy - 18, ex + 26, cy + 18], fill=(255, 255, 255, 255), outline=ink, width=5)
+        draw.ellipse([ex - 14, cy - 14, ex + 14, cy + 14], fill=_hex("#facc15"), outline=ink, width=3)
+        draw.ellipse([ex - 6, cy - 6, ex + 6, cy + 6], fill=ink)
+        # Sweeping bushy white eyebrows
+        draw.line([(ex - side * 28, cy - 22), (ex + side * 34, cy - 42)], fill=(248, 250, 252, 255), width=11)
+    # Stern downturned warrior mouth
+    draw.arc([cx - 38, cy + 54, cx + 38, cy + 88], 195, 345, fill=ink, width=7)
+    return img.convert("RGB")
+
+
+def paint_jorogumo_face():
+    """Pale porcelain spider-empress demon face with 6 glowing toxic-emerald eyes & dark violet lips."""
+    W, H = 512, 512
+    img = Image.new("RGBA", (W, H), _hex("#ede9fe"))
+    draw = ImageDraw.Draw(img, "RGBA")
+    ink = (24, 12, 38, 255)
+    neon = _hex("#4ade80")
+    emerald = _hex("#059669")
+    cx, cy = 256, 260
+    for side in (-1, 1):
+        ex = cx + side * 44
+        # Main alluring slanted spider eyes
+        draw.ellipse([ex - 24, cy - 16, ex + 24, cy + 16], fill=ink)
+        draw.ellipse([ex - 15, cy - 12, ex + 15, cy + 12], fill=emerald)
+        draw.ellipse([ex - 8, cy - 8, ex + 8, cy + 8], fill=neon)
+        draw.ellipse([ex - 3, cy - 9, ex + 3, cy + 9], fill=ink)
+        # Secondary smaller spider eyes above brows!
+        draw.ellipse([ex + side * 8 - 8, cy - 36 - 8, ex + side * 8 + 8, cy - 36 + 8], fill=neon, outline=ink, width=3)
+        draw.ellipse([ex - side * 10 - 6, cy - 42 - 6, ex - side * 10 + 6, cy - 42 + 6], fill=neon, outline=ink, width=2)
+    # Smirking dark violet lips
+    draw.arc([cx - 24, cy + 44, cx + 24, cy + 68], 15, 165, fill=(109, 40, 217, 255), width=6)
+    return img.convert("RGB")
+
+
+def paint_kyubi_kimono():
+    """Luxurious crimson-and-gold Kyubi shrine enchantress silk with swirling golden foxfire clouds."""
+    W, H = 512, 512
+    c1 = _hex("#fffbeb")
+    c2 = _hex("#fef3c7")
+    img = Image.new("RGBA", (W, H), c1)
+    draw = ImageDraw.Draw(img, "RGBA")
+    for y in range(H):
+        draw.line([(0, y), (W, y)], fill=_lerp_col(c1, c2, y / float(H)))
+    red = _hex("#dc2626")
+    gold = _hex("#f59e0b")
+    draw.rectangle([0, H - 72, W, H], fill=red)
+    draw.rectangle([0, H - 78, W, H - 68], fill=gold)
+    for x in range(32, W, 96):
+        draw.ellipse([x - 22, H - 54, x + 22, H - 20], outline=gold, width=4)
+        draw.ellipse([x + 14, 180, x + 46, 224], fill=gold)
+    return img.convert("RGB")
 
 
 def paint_dogu_clay():
-    """Ancient Jomon clay figurine terracotta with spiral cord-markings & cyan runes."""
+    """Ancient Jomon clay figurine terracotta with carved spiral cord-markings & glowing cyan runes."""
     W, H = 256, 256
     img = Image.new("RGBA", (W, H), _hex("#78716c"))
     draw = ImageDraw.Draw(img, "RGBA")
     dark = _hex("#44403c")
+    light = _hex("#a8a29e")
     rune = _hex("#38bdf8")
     for y in range(16, H, 32):
         draw.line([(0, y), (W, y)], fill=dark, width=4)
+        draw.line([(0, y + 4), (W, y + 4)], fill=light, width=2)
         for x in range(16, W, 48):
             draw.ellipse([x - 10, y - 10, x + 10, y + 10], outline=dark, width=3)
-    draw.line([(128, 20), (128, 236)], fill=rune, width=4)
-    return img
+    draw.line([(128, 16), (128, 240)], fill=rune, width=5)
+    return img.convert("RGB")
 
 
 def paint_dragon_scales(base_hex="#059669", hi_hex="#34d399"):
-    """Overlapping iridescent emerald dragon scales for Yamata-no-Orochi."""
+    """Overlapping iridescent emerald dragon scales with gold belly accents for Yamata-no-Orochi."""
     W, H = 256, 256
     img = Image.new("RGBA", (W, H), _hex(base_hex))
     draw = ImageDraw.Draw(img, "RGBA")
     hi = _hex(hi_hex)
     sh = _hex("#064e3b")
-    for row in range(0, H + 32, 24):
-        ox = 16 if (row // 24) % 2 else 0
+    for row in range(0, H + 32, 22):
+        ox = 16 if (row // 22) % 2 else 0
         for x in range(-32 + ox, W + 32, 32):
             draw.pieslice([x, row - 16, x + 32, row + 16], 0, 180, fill=hi, outline=sh, width=3)
-    return img
+    return img.convert("RGB")
 
 
 def paint_spider_venom():
-    """Glossy obsidian spider carapace with neon-emerald venom hourglass markings."""
+    """Glossy obsidian spider carapace with neon-emerald venom hourglass & web filigree."""
     W, H = 256, 256
     img = Image.new("RGBA", (W, H), _hex("#0f172a"))
     draw = ImageDraw.Draw(img, "RGBA")
     venom = _hex("#10b981")
     hi = _hex("#4ade80")
-    draw.polygon([(128, 128), (88, 60), (168, 60)], fill=venom)
-    draw.polygon([(128, 128), (88, 196), (168, 196)], fill=venom)
-    draw.polygon([(128, 128), (104, 78), (152, 78)], fill=hi)
-    draw.polygon([(128, 128), (104, 178), (152, 178)], fill=hi)
-    return img
+    web = _hex("#1e293b")
+    for a in range(0, 360, 30):
+        r = math.radians(a)
+        draw.line([(128, 128), (128 + math.cos(r) * 140, 128 + math.sin(r) * 140)], fill=web, width=2)
+    draw.polygon([(128, 128), (88, 56), (168, 56)], fill=venom)
+    draw.polygon([(128, 128), (88, 200), (168, 200)], fill=venom)
+    draw.polygon([(128, 128), (104, 76), (152, 76)], fill=hi)
+    draw.polygon([(128, 128), (104, 180), (152, 180)], fill=hi)
+    return img.convert("RGB")
 
 
 def paint_kitsune_mask():
@@ -464,15 +586,12 @@ def paint_kitsune_mask():
     red = _hex("#dc2626")
     ink = _hex("#1e1b4b")
     cx, cy = 128, 128
-    # Red forehead shrine mark
     draw.polygon([(cx, cy - 64), (cx - 18, cy - 38), (cx, cy - 24), (cx + 18, cy - 38)], fill=red)
     for side in (-1, 1):
-        # Slanted fox eyes + crimson eyeliner
         draw.line([(cx + side * 14, cy - 4), (cx + side * 52, cy - 18)], fill=ink, width=7)
         draw.line([(cx + side * 12, cy - 12), (cx + side * 58, cy - 26)], fill=red, width=5)
-        # Cheek swirls
         draw.arc([cx + side * 24 - 16, cy + 16, cx + side * 24 + 16, cy + 44], 0, 260, fill=red, width=4)
-    return img
+    return img.convert("RGB")
 
 
 def paint_neko_face():
@@ -484,18 +603,17 @@ def paint_neko_face():
     pink = _hex("#fb7185")
     gold = _hex("#f59e0b")
     cx, cy = 128, 134
-    # Calico gold forehead patch
     draw.ellipse([cx - 56, cy - 92, cx + 18, cy - 36], fill=gold)
+    def _cheeks(d):
+        for side in (-1, 1):
+            d.ellipse([cx + side * 52 - 14, cy + 4, cx + side * 52 + 14, cy + 20], fill=(pink[0], pink[1], pink[2], 145))
+    img = _overlay(img, _cheeks)
+    draw = ImageDraw.Draw(img, "RGBA")
     for side in (-1, 1):
-        # Happy smiling crescent eyes
         draw.arc([cx + side * 34 - 18, cy - 22, cx + side * 34 + 18, cy + 8], 195, 345, fill=ink, width=6)
-        # Pink cheeks
-        draw.ellipse([cx + side * 52 - 14, cy + 4, cx + side * 52 + 14, cy + 20], fill=(pink[0], pink[1], pink[2], 140))
-        # Whiskers
         for wy in (-2, 10, 22):
             draw.line([(cx + side * 46, cy + wy), (cx + side * 88, cy + wy - 4)], fill=ink, width=3)
-    # Tiny pink nose & ":3" cat mouth
     draw.polygon([(cx - 8, cy + 4), (cx + 8, cy + 4), (cx, cy + 14)], fill=pink)
     draw.arc([cx - 20, cy + 10, cx, cy + 28], 10, 175, fill=ink, width=4)
     draw.arc([cx, cy + 10, cx + 20, cy + 28], 5, 170, fill=ink, width=4)
-    return img
+    return img.convert("RGB")

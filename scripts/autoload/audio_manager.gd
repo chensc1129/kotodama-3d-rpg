@@ -51,20 +51,46 @@ func play_sfx(sfx_type: String) -> void:
 		return
 	match sfx_type:
 		"slash1":
-			_trigger_chord(["E5", "B5"], 0.09, 0.0, "tri")
+			_trigger_chord(["E5", "B5"], 0.085, 0.0, "tri", 0.22)
+			_trigger_noise(0.065, 0.0, 0.14, 12.0)
 		"slash2":
-			_trigger_chord(["G5", "D6"], 0.09, 0.0, "tri")
+			_trigger_chord(["G5", "D6"], 0.085, 0.0, "tri", 0.24)
+			_trigger_noise(0.070, 0.0, 0.16, 11.0)
 		"slash3":
-			_trigger_chord(["C5", "G5", "E6"], 0.16, 0.0, "tri")
+			_trigger_chord(["C5", "G5", "E6"], 0.16, 0.0, "tri", 0.28)
+			_trigger_noise(0.11, 0.0, 0.20, 8.5)
+		"impact_light":
+			_trigger_punch(135.0, 52.0, 0.095, 0.0, 0.34, "sine")
+			_trigger_noise(0.060, 0.0, 0.24, 15.0)
+		"impact_heavy":
+			_trigger_punch(155.0, 42.0, 0.15, 0.0, 0.44, "sine")
+			_trigger_punch(320.0, 95.0, 0.09, 0.0, 0.22, "square")
+			_trigger_noise(0.10, 0.0, 0.32, 11.0)
+		"impact_crit":
+			_trigger_punch(175.0, 38.0, 0.22, 0.0, 0.50, "sine")
+			_trigger_punch(420.0, 110.0, 0.12, 0.0, 0.26, "square")
+			_trigger_noise(0.14, 0.0, 0.36, 9.0)
+			_trigger_chord(["G5", "D6", "E6"], 0.24, 0.015, "tri", 0.24)
+		"enemy_die":
+			_trigger_punch(210.0, 65.0, 0.16, 0.0, 0.30, "sine")
+			_trigger_noise(0.12, 0.0, 0.22, 9.5)
+			_trigger_chord(["C6", "E6"], 0.16, 0.02, "sine", 0.16)
+		"boss_die":
+			_trigger_punch(140.0, 32.0, 0.42, 0.0, 0.52, "sine")
+			_trigger_noise(0.30, 0.0, 0.32, 5.5)
+			_trigger_chord(["C5", "G5", "C6", "E6"], 0.45, 0.06, "tri", 0.30)
 		"skill":
-			_trigger_chord(["A4", "E5", "A5", "C#6"], 0.30, 0.0, "sine")
+			_trigger_chord(["A4", "E5", "A5", "C#6"], 0.30, 0.0, "sine", 0.26)
+			_trigger_punch(160.0, 48.0, 0.18, 0.0, 0.32, "sine")
 		"dash":
-			_trigger_chord(["C6"], 0.08, 0.0, "sine")
+			_trigger_chord(["C6"], 0.08, 0.0, "sine", 0.20)
+			_trigger_noise(0.09, 0.0, 0.14, 10.0)
 		"hit":
-			_trigger_chord(["F2", "C3"], 0.16, 0.0, "square")
+			_trigger_punch(120.0, 44.0, 0.18, 0.0, 0.42, "square")
+			_trigger_noise(0.10, 0.0, 0.26, 12.0)
 		"levelup":
-			_trigger_chord(["C5", "E5", "G5"], 0.14, 0.0, "tri")
-			_trigger_chord(["G5", "B5", "D6"], 0.28, 0.14, "tri")
+			_trigger_chord(["C5", "E5", "G5"], 0.14, 0.0, "tri", 0.26)
+			_trigger_chord(["G5", "B5", "D6"], 0.28, 0.14, "tri", 0.28)
 
 
 func speak_japanese(text: String) -> void:
@@ -79,18 +105,46 @@ func speak_japanese(text: String) -> void:
 	DisplayServer.tts_speak(text, voices[0], 60, 1.0, 1.05)
 
 
-func _trigger_chord(notes: Array, duration: float, delay: float, wave: String) -> void:
-	var amp := 0.24 / maxf(1.0, float(notes.size()))
+func _trigger_chord(notes: Array, duration: float, delay: float, wave: String, total_amp: float = 0.24) -> void:
+	var amp := total_amp / maxf(1.0, float(notes.size()))
 	for note in notes:
 		var freq: float = float(NOTE_FREQ.get(note, 440.0))
 		_voices.append({
 			"freq": freq,
+			"freq_end": freq,
 			"phase": 0.0,
 			"time": -delay,
 			"duration": duration,
 			"amp": amp,
 			"wave": wave,
+			"decay": 4.2,
 		})
+
+
+func _trigger_punch(freq_start: float, freq_end: float, duration: float, delay: float, amp: float, wave: String) -> void:
+	_voices.append({
+		"freq": freq_start,
+		"freq_end": freq_end,
+		"phase": 0.0,
+		"time": -delay,
+		"duration": duration,
+		"amp": amp,
+		"wave": wave,
+		"decay": 5.8,
+	})
+
+
+func _trigger_noise(duration: float, delay: float, amp: float, decay: float = 10.0) -> void:
+	_voices.append({
+		"freq": 0.0,
+		"freq_end": 0.0,
+		"phase": 0.0,
+		"time": -delay,
+		"duration": duration,
+		"amp": amp,
+		"wave": "noise",
+		"decay": decay,
+	})
 
 
 func _process(_delta: float) -> void:
@@ -112,23 +166,29 @@ func _process(_delta: float) -> void:
 				var v: Dictionary = _voices[idx]
 				v["time"] = float(v["time"]) + dt
 				var t: float = float(v["time"])
-				if t >= float(v["duration"]):
+				var dur: float = float(v["duration"])
+				if t >= dur:
 					_voices.remove_at(idx)
 				elif t >= 0.0:
-					var progress: float = t / float(v["duration"])
-					var env: float = minf(1.0, t / 0.008) * exp(-progress * 4.2)
-					var phase: float = float(v["phase"]) + float(v["freq"]) * dt
-					if phase >= 1.0:
-						phase -= floor(phase)
-					v["phase"] = phase
+					var progress: float = t / dur
+					var decay: float = float(v.get("decay", 4.2))
+					var env: float = minf(1.0, t / 0.004) * exp(-progress * decay)
 					var osc := 0.0
-					if v["wave"] == "tri":
-						osc = 4.0 * absf(phase - 0.5) - 1.0
-					elif v["wave"] == "square":
-						osc = 0.65 if phase < 0.5 else -0.65
+					if v["wave"] == "noise":
+						osc = randf_range(-1.0, 1.0)
 					else:
-						osc = sin(phase * TAU)
+						var cur_freq: float = lerpf(float(v["freq"]), float(v.get("freq_end", v["freq"])), progress)
+						var phase: float = float(v["phase"]) + cur_freq * dt
+						if phase >= 1.0:
+							phase -= floor(phase)
+						v["phase"] = phase
+						if v["wave"] == "tri":
+							osc = 4.0 * absf(phase - 0.5) - 1.0
+						elif v["wave"] == "square":
+							osc = 0.65 if phase < 0.5 else -0.65
+						else:
+							osc = sin(phase * TAU)
 					sample += osc * env * float(v["amp"])
 				idx -= 1
-		sample = clampf(sample, -0.9, 0.9)
+		sample = clampf(sample, -0.92, 0.92)
 		_playback.push_frame(Vector2(sample, sample))
