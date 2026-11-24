@@ -268,6 +268,14 @@ func spawn_death_burst(world_pos: Vector3, color: Color, is_boss: bool = false) 
 	vfx.setup_death_burst(world_pos, color, is_boss)
 
 
+func spawn_kotodama_vfx(world_pos: Vector3, word: Dictionary, is_perfect: bool = false) -> void:
+	if vfx_root == null:
+		return
+	var vfx := KotodamaVfx3D.new()
+	vfx_root.add_child(vfx)
+	vfx.setup(world_pos, word, is_perfect)
+
+
 func trigger_hitstop(duration: float) -> void:
 	_hitstop_timer = maxf(_hitstop_timer, duration)
 
@@ -518,26 +526,85 @@ func complete_skill_chant(is_success: bool, is_typed_perfect: bool) -> void:
 	if skill_type == "ult":
 		var ult_lv: int = int(GameState.player["skills"].get("ult_skill", 1))
 		var ult_mult: float = 1.0 + float(ult_lv - 1) * 0.22
-		var dmg := int(round(float(stats["atk"]) * 3.8 * ult_mult * crit_mult))
-		spawn_ring_vfx(player.position, Color.html("#fbbf24"), 18.0, 0.75)
+		var vfx_type: String = String(word.get("vfx", "sacred_halo"))
+		var w_col := Color.html(String(word.get("color", "#fbbf24")))
+		var w_icon: String = String(word.get("icon", "🌟"))
+		var w_kanji: String = String(word.get("kanji", "言霊"))
+		var w_label: String = String(word.get("vfx_label", "言霊奧義"))
+
+		var archetype_dmg_mult := 1.0
+		if vfx_type == "sword_rain":
+			archetype_dmg_mult = 1.25
+		elif vfx_type == "lightning":
+			archetype_dmg_mult = 1.15
+
+		var dmg := int(round(float(stats["atk"]) * 3.8 * ult_mult * crit_mult * archetype_dmg_mult))
+		if player != null:
+			spawn_kotodama_vfx(player.position, word, is_typed_perfect)
+			spawn_ring_vfx(player.position, w_col, 18.0, 0.78)
 		AudioManager.play_sfx("impact_crit")
-		_trigger_camera_impact(0.78, -5.5)
+		_trigger_camera_impact(0.82 if is_typed_perfect else 0.72, -5.8)
 		trigger_hitstop(0.095)
 		if player != null:
 			player.trigger_hit_punch(true)
+
+		# Apply self-buffs / healing archetypes
+		var b := GameState.battle
+		if vfx_type == "sakura_storm":
+			var heal := int(round(float(b["max_hp"]) * 0.22))
+			b["hp"] = mini(int(b["max_hp"]), int(b["hp"]) + heal)
+			b["stamina"] = minf(float(b["max_stamina"]), float(b["stamina"]) + 45.0)
+			if player != null:
+				popup_requested.emit(player.position + Vector3(0.0, 2.7, 0.0), "%s +%d HP" % [w_icon, heal], Color.html("#f9a8d4"))
+		elif vfx_type == "sacred_halo":
+			var heal := int(round(float(b["max_hp"]) * 0.30))
+			b["hp"] = mini(int(b["max_hp"]), int(b["hp"]) + heal)
+			b["stamina"] = float(b["max_stamina"])
+			b["sp"] = minf(100.0, float(b["sp"]) + 25.0)
+			if player != null:
+				popup_requested.emit(player.position + Vector3(0.0, 2.7, 0.0), "%s +%d HP / +25 SP" % [w_icon, heal], Color.html("#86efac"))
+		elif vfx_type == "dragon_vortex":
+			_wind_buff_timer = maxf(_wind_buff_timer, 5.0)
+			if player != null:
+				popup_requested.emit(player.position + Vector3(0.0, 2.7, 0.0), "%s 疾風加速 5s!" % w_icon, Color.html("#5eead4"))
+
 		var ult_hit := false
-		for en: Enemy3D in enemies.duplicate():
-			if is_instance_valid(en) and not en.dead:
+		var dmg_tag := "%s%s!" % [w_icon, ("完美・" + w_kanji) if is_typed_perfect else w_kanji]
+		for item in enemies.duplicate():
+			if not is_instance_valid(item):
+				continue
+			var en := item as Enemy3D
+			if en != null and not en.dead:
 				ult_hit = true
 				var push := en.position - player.position
 				push.y = 0.0
 				en.trigger_hit_react(push, true)
-				spawn_hit_spark(en.position + Vector3(0.0, 1.45 * en.scale.y, 0.0), Color.html("#fde047"), true, 1.4)
-				damage_enemy(en, dmg, "🌟完美奧義!" if is_typed_perfect else "🌟言霊奧義", Color.html("#fde047"))
+				match vfx_type:
+					"meteor":
+						en.burn_timer = maxf(en.burn_timer, 5.0)
+					"lightning":
+						en.shock_timer = maxf(en.shock_timer, 5.5)
+					"blizzard":
+						en.freeze_timer = maxf(en.freeze_timer, 4.0)
+						en.frost_tick_timer = 0.55
+					"dragon_vortex":
+						en.stun_timer = maxf(en.stun_timer, 2.2)
+						if push.length_squared() > 0.001:
+							en.position += push.normalized() * (2.2 if en.is_boss else 5.0)
+							en.clamp_to_arena()
+					"earth_shatter":
+						en.petrify_timer = maxf(en.petrify_timer, 4.0)
+						if String(word.get("id", "")) == "phoenix":
+							en.burn_timer = maxf(en.burn_timer, 4.5)
+				spawn_hit_spark(en.position + Vector3(0.0, 1.45 * en.scale.y, 0.0), w_col, true, 1.45)
+				damage_enemy(en, dmg, dmg_tag, w_col.lerp(Color.WHITE, 0.35))
 		if ult_hit:
 			hit_landed.emit(true)
-		GameState.toast_requested.emit("🌟 完美詠唱！1.5 倍全屏言霊奧義爆發！" if is_typed_perfect else "🌟 言霊奧義發動！")
+		var perfect_prefix := "🌟 完美詠唱 1.5x！" if is_typed_perfect else ""
+		GameState.toast_requested.emit("%s%s「%s」%s爆發！" % [perfect_prefix, w_icon, w_kanji, w_label])
 	else:
+		if player != null and not word.is_empty():
+			spawn_kotodama_vfx(player.position, word, is_typed_perfect)
 		_execute_signature_skill(stats, crit_mult)
 
 	hud_updated.emit()

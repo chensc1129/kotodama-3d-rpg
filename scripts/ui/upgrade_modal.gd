@@ -62,17 +62,18 @@ func _build_ui() -> void:
 	vbox.add_child(top_bar)
 
 	var tab_h := 56 if is_mob else 42
-	var tab_fs := 20 if is_mob else 14
+	var tab_fs := 19 if is_mob else 14
 	var tabs := [
 		["skills", "⚡ 技能升級"],
 		["equip", "🎒 裝備鍛造"],
 		["shikigami", "🦊 式神夥伴"],
+		["dict", "📖 言靈辭典"],
 	]
 	for t in tabs:
 		var btn := Button.new()
 		btn.focus_mode = Control.FOCUS_NONE
 		btn.text = t[1]
-		btn.custom_minimum_size = Vector2(180 if is_mob else 136, tab_h)
+		btn.custom_minimum_size = Vector2(158 if is_mob else 124, tab_h)
 		btn.add_theme_font_size_override("font_size", tab_fs)
 		var tab_id: String = t[0]
 		btn.pressed.connect(func() -> void: switch_tab(tab_id))
@@ -273,6 +274,47 @@ func _render_content() -> void:
 			UiStyle.apply_button(btn, "#ec4899" if active else "#f59e0b", "#fbcfe8" if active else "#fde68a", "#0f172a", 12, 1, 1.0)
 			btn.pressed.connect(func() -> void: GameState.contract_or_summon_shikigami(sh_id))
 			hbox.add_child(btn)
+			_body_box.add_child(row)
+
+	elif _current_tab == "dict":
+		var intro := Label.new()
+		intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		intro.text = "📖 共收錄 %d 組日文言靈詞彙・施放 E / Q 詠唱成功即觸發對應 3D 特效與戰鬥加成（點擊「🔊」可聽日文發音）" % GameData.JAPANESE_CHANT_WORDS.size()
+		intro.add_theme_font_size_override("font_size", 17 if is_mob else 13)
+		intro.add_theme_color_override("font_color", Color.html("#bae6fd"))
+		_body_box.add_child(intro)
+
+		for w in GameData.JAPANESE_CHANT_WORDS:
+			var accent_hex: String = String(w.get("color", "#fbbf24"))
+			var row := _make_row_panel("#0b1326", accent_hex)
+			var hbox := HBoxContainer.new()
+			hbox.add_theme_constant_override("separation", 12)
+			row.add_child(hbox)
+
+			var info := Label.new()
+			info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			info.text = "%s  %s（%s） — %s\n✨【%s】%s" % [
+				String(w.get("icon", "✨")),
+				String(w.get("kanji", "")),
+				String(w.get("kana", "")),
+				String(w.get("mean", "")),
+				String(w.get("vfx_label", "言靈特效")),
+				String(w.get("effect_desc", "")),
+			]
+			info.add_theme_font_size_override("font_size", row_fs)
+			info.add_theme_color_override("font_color", Color.html("#f8fafc"))
+			hbox.add_child(info)
+
+			var speak_btn := Button.new()
+			speak_btn.focus_mode = Control.FOCUS_NONE
+			speak_btn.text = "🔊 發音"
+			speak_btn.custom_minimum_size = Vector2(126 if is_mob else 92, btn_h)
+			speak_btn.add_theme_font_size_override("font_size", btn_fs)
+			UiStyle.apply_button(speak_btn, "#172554", accent_hex, "#fef3c7", 12, 1, 0.96)
+			var kana_str: String = String(w.get("kana", ""))
+			speak_btn.pressed.connect(func() -> void: AudioManager.speak_japanese(kana_str))
+			hbox.add_child(speak_btn)
 			_body_box.add_child(row)
 
 

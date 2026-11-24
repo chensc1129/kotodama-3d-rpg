@@ -231,18 +231,43 @@ const BOSS_TEMPLATES: Array = [
 ]
 
 const JAPANESE_CHANT_WORDS: Array = [
-	{"id": "stone", "kanji": "石頭", "kana": "いし", "mean": "石頭 / 岩石", "distractors": ["やま", "かわ", "き"]},
-	{"id": "foot", "kanji": "脚・足", "kana": "あし", "mean": "腳 / 腿部", "distractors": ["て", "め", "くち"]},
-	{"id": "thunder", "kanji": "雷光", "kana": "らいこう", "mean": "雷光 / 閃電", "distractors": ["たいよう", "げっこう", "かぜ"]},
-	{"id": "ice", "kanji": "氷結", "kana": "ひょうけつ", "mean": "冰結 / 凍結", "distractors": ["ねったい", "かんそう", "ふっとう"]},
-	{"id": "flame", "kanji": "火炎", "kana": "かえん", "mean": "火焰 / 烈焰", "distractors": ["すいりゅう", "どしゃ", "しんりん"]},
-	{"id": "sakura", "kanji": "桜花", "kana": "おうか", "mean": "櫻花", "distractors": ["うめ", "もも", "きく"]},
-	{"id": "finisher", "kanji": "必殺", "kana": "ひっさつ", "mean": "必殺", "distractors": ["ぼうぎょ", "かいふく", "とうそう"]},
-	{"id": "victory", "kanji": "勝利", "kana": "しょうり", "mean": "勝利", "distractors": ["はいぼく", "どりょく", "しゅぎょう"]},
-	{"id": "sword", "kanji": "剣術", "kana": "けんじゅつ", "mean": "劍術", "distractors": ["まほう", "たいじゅつ", "きゅうどう"]},
-	{"id": "courage", "kanji": "勇気", "kana": "ゆうき", "mean": "勇氣", "distractors": ["げんき", "てんき", "びょうき"]},
-	{"id": "invincible", "kanji": "無敵", "kana": "むてき", "mean": "無敵", "distractors": ["じゃくてん", "きけん", "あんぜん"]},
-	{"id": "training", "kanji": "修行", "kana": "しゅぎょう", "mean": "修行 / 鍛鍊", "distractors": ["りょこう", "べんきょう", "うんどう"]},
+	# === 角色專屬核心言靈 (5) ===
+	{"id": "stone", "kanji": "石頭", "kana": "いし", "mean": "石頭 / 岩石", "distractors": ["やま", "かわ", "き"], "icon": "🪨", "color": "#a8a29e", "vfx": "earth_shatter", "vfx_label": "裂地岩柱", "effect_desc": "破土岩柱震擊・石化封印周圍妖怪"},
+	{"id": "foot", "kanji": "脚・足", "kana": "あし", "mean": "腳 / 腿部", "distractors": ["て", "め", "くち"], "icon": "🦶", "color": "#38bdf8", "vfx": "dragon_vortex", "vfx_label": "烈風龍捲", "effect_desc": "疾風龍捲擊飛・暈眩並賦予 5 秒加速"},
+	{"id": "thunder", "kanji": "雷光", "kana": "らいこう", "mean": "雷光 / 閃電", "distractors": ["たいよう", "げっこう", "かぜ"], "icon": "⚡", "color": "#facc15", "vfx": "lightning", "vfx_label": "九天天雷", "effect_desc": "六道天雷齊降・感電易傷＋暴擊增傷"},
+	{"id": "ice", "kanji": "氷結", "kana": "ひょうけつ", "mean": "冰結 / 凍結", "distractors": ["ねったい", "かんそう", "ふっとう"], "icon": "❄️", "color": "#22d3ee", "vfx": "blizzard", "vfx_label": "極寒冰柱", "effect_desc": "十座冰晶柱破地・凍結全場並持續凍傷"},
+	{"id": "flame", "kanji": "火炎", "kana": "かえん", "mean": "火焰 / 烈焰", "distractors": ["すいりゅう", "どしゃ", "しんりん"], "icon": "🔥", "color": "#f97316", "vfx": "meteor", "vfx_label": "業火流星", "effect_desc": "赤紅流星墜落轟炸・附加高溫灼燒"},
+
+	# === 原有經典言靈升級特效 (7) ===
+	{"id": "sakura", "kanji": "桜花", "kana": "おうか", "mean": "櫻花", "distractors": ["うめ", "もも", "きく"], "icon": "🌸", "color": "#f472b6", "vfx": "sakura_storm", "vfx_label": "千本櫻嵐", "effect_desc": "螺旋櫻吹雪斬擊・回復 22% HP 與體力"},
+	{"id": "finisher", "kanji": "必殺", "kana": "ひっさつ", "mean": "必殺", "distractors": ["ぼうぎょ", "かいふく", "とうそう"], "icon": "💥", "color": "#fb7185", "vfx": "lightning", "vfx_label": "紅蓮天罰", "effect_desc": "赤金天雷直劈・感電易傷＋暴擊增傷"},
+	{"id": "victory", "kanji": "勝利", "kana": "しょうり", "mean": "勝利", "distractors": ["はいぼく", "どりょく", "しゅぎょう"], "icon": "🏆", "color": "#fbbf24", "vfx": "sacred_halo", "vfx_label": "榮耀聖光", "effect_desc": "黃金天柱降臨・大回血並返還 25 SP"},
+	{"id": "sword", "kanji": "剣術", "kana": "けんじゅつ", "mean": "劍術", "distractors": ["まほう", "たいじゅつ", "きゅうどう"], "icon": "⚔️", "color": "#e2e8f0", "vfx": "sword_rain", "vfx_label": "萬劍歸宗", "effect_desc": "十道光劍凌空墜斬・額外 +25% 穿透傷害"},
+	{"id": "courage", "kanji": "勇気", "kana": "ゆうき", "mean": "勇氣", "distractors": ["げんき", "てんき", "びょうき"], "icon": "🛡️", "color": "#f59e0b", "vfx": "sacred_halo", "vfx_label": "勇者聖環", "effect_desc": "神聖光環守護・回復 30% HP 與滿體力"},
+	{"id": "invincible", "kanji": "無敵", "kana": "むてき", "mean": "無敵", "distractors": ["じゃくてん", "きけん", "あんぜん"], "icon": "👑", "color": "#fde047", "vfx": "sacred_halo", "vfx_label": "霸王金輪", "effect_desc": "雙重黃金光輪爆發・回血並返還 25 SP"},
+	{"id": "training", "kanji": "修行", "kana": "しゅぎょう", "mean": "修行 / 鍛鍊", "distractors": ["りょこう", "べんきょう", "うんどう"], "icon": "📿", "color": "#34d399", "vfx": "sacred_halo", "vfx_label": "靈氣覺醒", "effect_desc": "禪意靈光灌頂・回復 HP 與 25 SP"},
+
+	# === 新增自然天象＆元素詞彙 (9) ===
+	{"id": "meteor", "kanji": "流星", "kana": "りゅうせい", "mean": "流星 / 隕星", "distractors": ["まんげつ", "たいよう", "すいせい"], "icon": "☄️", "color": "#fb923c", "vfx": "meteor", "vfx_label": "星隕天降", "effect_desc": "群星火隕從天而降・全場轟炸並燃燒"},
+	{"id": "starlight", "kanji": "星光", "kana": "せいこう", "mean": "星光 / 星辰", "distractors": ["にっこう", "げっこう", "でんこう"], "icon": "🌟", "color": "#fcd34d", "vfx": "meteor", "vfx_label": "星辰墜擊", "effect_desc": "璀璨星光雨轟炸・範圍爆破與灼燒"},
+	{"id": "hellfire", "kanji": "紅蓮", "kana": "ぐれん", "mean": "紅蓮 / 烈火", "distractors": ["はくれん", "せいれん", "すいれん"], "icon": "🔥", "color": "#ef4444", "vfx": "meteor", "vfx_label": "紅蓮火隕", "effect_desc": "深紅業火流星雨・灼燒全場妖怪 5 秒"},
+	{"id": "lightning_strike", "kanji": "迅雷", "kana": "じんらい", "mean": "迅雷 / 疾電", "distractors": ["しっぷう", "ごうう", "らいめい"], "icon": "⚡", "color": "#38bdf8", "vfx": "lightning", "vfx_label": "蒼穹迅雷", "effect_desc": "蒼藍雷柱瞬降・感電 5.5 秒＋傷害 +15%"},
+	{"id": "snowstorm", "kanji": "吹雪", "kana": "ふぶき", "mean": "暴風雪", "distractors": ["こさめ", "あられ", "きりさめ"], "icon": "❄️", "color": "#67e8f9", "vfx": "blizzard", "vfx_label": "極地吹雪", "effect_desc": "暴雪冰晶陣爆發・凍結全場妖怪 4 秒"},
+	{"id": "moonlight", "kanji": "月光", "kana": "げっこう", "mean": "月光 / 滿月清輝", "distractors": ["にっこう", "ほしぞら", "あさひ"], "icon": "🌙", "color": "#a5b4fc", "vfx": "blizzard", "vfx_label": "銀月冰輝", "effect_desc": "銀藍月華晶柱升騰・凍結並淨化敵群"},
+	{"id": "gale", "kanji": "疾風", "kana": "しっぷう", "mean": "疾風 / 狂風", "distractors": ["そよかぜ", "たいふう", "じんらい"], "icon": "🌪️", "color": "#2dd4bf", "vfx": "dragon_vortex", "vfx_label": "翡翠嵐捲", "effect_desc": "巨型翠風龍捲擊飛・暈眩並加速 5 秒"},
+	{"id": "tsunami", "kanji": "怒涛", "kana": "どとう", "mean": "怒濤 / 驚濤駭浪", "distractors": ["さざなみ", "しずく", "いずみ"], "icon": "🌊", "color": "#0ea5e9", "vfx": "dragon_vortex", "vfx_label": "碧海怒濤", "effect_desc": "奔騰水渦席捲戰場・擊退暈眩＋疾行"},
+	{"id": "earthquake", "kanji": "地震", "kana": "じしん", "mean": "地震 / 大地動", "distractors": ["かざん", "つなみ", "たつまき"], "icon": "🌋", "color": "#d97706", "vfx": "earth_shatter", "vfx_label": "崩山裂地", "effect_desc": "熔岩地刺環狀爆起・強震石化 4 秒"},
+
+	# === 新增武道、神獸＆奇蹟詞彙 (9) ===
+	{"id": "dragon", "kanji": "蒼龍", "kana": "そうりゅう", "mean": "蒼龍 / 神龍", "distractors": ["びゃっこ", "すざく", "げんぶ"], "icon": "🐉", "color": "#10b981", "vfx": "dragon_vortex", "vfx_label": "蒼龍昇天", "effect_desc": "蒼翠龍捲貫穿天際・擊退暈眩＋疾風"},
+	{"id": "phoenix", "kanji": "不死鳥", "kana": "ふしちょう", "mean": "不死鳥 / 鳳凰", "distractors": ["くじゃく", "はくちょう", "らいちょう"], "icon": "🔥", "color": "#f43f5e", "vfx": "earth_shatter", "vfx_label": "鳳凰炎岩", "effect_desc": "赤金炎柱破空震撼・重創石化並燃燒"},
+	{"id": "butterfly", "kanji": "胡蝶", "kana": "こちょう", "mean": "蝴蝶 / 夢幻胡蝶", "distractors": ["とんぼ", "ほたる", "せみ"], "icon": "🦋", "color": "#c084fc", "vfx": "sakura_storm", "vfx_label": "紫蝶亂舞", "effect_desc": "幻紫蝶影螺旋起舞・造成傷害並回血"},
+	{"id": "rainbow", "kanji": "虹色", "kana": "にじいろ", "mean": "七彩虹色", "distractors": ["きんいろ", "ぎんいろ", "ももいろ"], "icon": "🌈", "color": "#f472b6", "vfx": "sakura_storm", "vfx_label": "七彩花嵐", "effect_desc": "霓虹光羽旋風爆發・回復 22% HP 與體力"},
+	{"id": "flash_slash", "kanji": "一閃", "kana": "いっせん", "mean": "居合一閃", "distractors": ["れんげき", "ざんげき", "とつげき"], "icon": "🗡️", "color": "#f8fafc", "vfx": "sword_rain", "vfx_label": "白銀一閃", "effect_desc": "銀白光刃齊落斬殺・額外 +25% 穿透傷害"},
+	{"id": "phantom", "kanji": "幻影", "kana": "げんえい", "mean": "幻影 / 分身", "distractors": ["ざんぞう", "しんきろう", "かがみ"], "icon": "👻", "color": "#a855f7", "vfx": "sword_rain", "vfx_label": "幻影劍陣", "effect_desc": "紫魅劍雨覆蓋戰場・額外 +25% 穿透斬擊"},
+	{"id": "shadow", "kanji": "暗黒", "kana": "あんこく", "mean": "暗黑 / 漆黑", "distractors": ["こうめい", "しんぴ", "せいかい"], "icon": "🌑", "color": "#818cf8", "vfx": "sword_rain", "vfx_label": "冥界魔劍", "effect_desc": "暗紫魔劍自虛空墜落・+25% 破甲重創"},
+	{"id": "miracle", "kanji": "奇跡", "kana": "きせき", "mean": "奇蹟", "distractors": ["うんめい", "きぼう", "ゆめ"], "icon": "✨", "color": "#fef08a", "vfx": "sacred_halo", "vfx_label": "天界奇蹟", "effect_desc": "天界聖光柱降臨・回 30% HP＋滿體力＋25 SP"},
+	{"id": "healing", "kanji": "治癒", "kana": "ちゆ", "mean": "治癒 / 療癒", "distractors": ["こうげき", "ぼうぎょ", "かいひ"], "icon": "💚", "color": "#4ade80", "vfx": "sacred_halo", "vfx_label": "翡翠聖癒", "effect_desc": "翠綠生命光柱綻放・回 30% HP＋滿體力＋25 SP"},
 ]
 
 const BLESSINGS_POOL: Array = [

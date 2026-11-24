@@ -88,7 +88,7 @@ func _build_ui() -> void:
 	)
 	vbox.add_child(resume_btn)
 
-	var upg_btn := _make_btn("⚡ 技能 / 裝備 / 式神整備", "#172038", "#e8c474", "#fef3c7", btn_h, btn_fs)
+	var upg_btn := _make_btn("⚡ 技能 / 裝備 / 式神 / 辭典", "#172038", "#e8c474", "#fef3c7", btn_h, btn_fs)
 	upg_btn.pressed.connect(func() -> void:
 		visible = false
 		upgrade_pressed.emit()

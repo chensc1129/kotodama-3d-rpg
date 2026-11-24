@@ -143,6 +143,7 @@ func _build_ui() -> void:
 		["⚡ 技能", "#e8c474", "#fef3c7", "skills"],
 		["🎒 裝備", "#34d399", "#a7f3d0", "equip"],
 		["🦊 式神", "#f472b6", "#fbcfe8", "shikigami"],
+		["📖 辭典", "#38bdf8", "#bae6fd", "dict"],
 	]:
 		var b := Button.new()
 		b.focus_mode = Control.FOCUS_NONE

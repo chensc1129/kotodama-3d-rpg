@@ -10,6 +10,7 @@ var _timer_label: Label
 var _timer_bar: ProgressBar
 var _kanji_label: Label
 var _meaning_label: Label
+var _vfx_label: Label
 var _input_edit: LineEdit
 var _choices_grid: GridContainer
 
@@ -38,7 +39,7 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(760 if is_mob else 560, 500 if is_mob else 420)
+	panel.custom_minimum_size = Vector2(760 if is_mob else 580, 520 if is_mob else 440)
 	panel.add_theme_stylebox_override("panel", UiStyle.make_shrine_modal("#090e1d", "#e8c474", 24, 30, 22))
 	center.add_child(panel)
 
@@ -102,6 +103,13 @@ func _build_ui() -> void:
 	_meaning_label.add_theme_font_size_override("font_size", 20 if is_mob else 15)
 	_meaning_label.add_theme_color_override("font_color", Color.html("#7dd3fc"))
 	word_box.add_child(_meaning_label)
+
+	_vfx_label = Label.new()
+	_vfx_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_vfx_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_vfx_label.add_theme_font_size_override("font_size", 16 if is_mob else 12)
+	_vfx_label.add_theme_color_override("font_color", Color.html("#fde68a"))
+	word_box.add_child(_vfx_label)
 
 	# Option A: Hiragana Input (1.5x Perfect Crit)
 	var input_lbl := Label.new()
@@ -172,6 +180,12 @@ func open_chant(skill_type: String, word: Dictionary, max_time: float) -> void:
 
 	_kanji_label.text = String(word.get("kanji", ""))
 	_meaning_label.text = "中文意思：%s" % String(word.get("mean", ""))
+	var w_icon: String = String(word.get("icon", "✨"))
+	var w_vfx: String = String(word.get("vfx_label", "言霊爆發"))
+	var w_eff: String = String(word.get("effect_desc", ""))
+	var w_col := Color.html(String(word.get("color", "#fde68a"))).lerp(Color.WHITE, 0.25)
+	_vfx_label.text = "%s 特效【%s】｜%s" % [w_icon, w_vfx, w_eff]
+	_vfx_label.add_theme_color_override("font_color", w_col)
 	_input_edit.text = ""
 	_update_timer_ui()
 
