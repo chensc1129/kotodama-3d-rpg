@@ -509,6 +509,7 @@ func damage_enemy(en: Enemy3D, dmg: int, tag: String, color: Color = Color.WHITE
 		var death_col := en.primary_color
 		var was_boss := en.is_boss
 		en.dead = true
+		enemies.erase(en)
 		en.queue_free()
 
 		# Explosive Yokai spirit-shatter VFX + audio + boss finisher impact!
@@ -652,8 +653,11 @@ func _process(delta: float) -> void:
 				b["sp"] = minf(float(b["max_sp"]), float(b["sp"]) + 4.0)
 
 	# Enemy AI & Status Effects
-	for en: Enemy3D in enemies.duplicate():
-		if not is_instance_valid(en) or en.dead:
+	for item in enemies.duplicate():
+		if not is_instance_valid(item):
+			continue
+		var en := item as Enemy3D
+		if en == null or en.dead:
 			continue
 		if en.petrify_timer > 0.0:
 			en.petrify_timer = maxf(0.0, en.petrify_timer - dt)

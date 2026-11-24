@@ -38,8 +38,8 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(760 if is_mob else 540, 500 if is_mob else 410)
-	panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.96, "#fbbf24", 0.9, 24, 2, 26, 20))
+	panel.custom_minimum_size = Vector2(760 if is_mob else 560, 500 if is_mob else 420)
+	panel.add_theme_stylebox_override("panel", UiStyle.make_shrine_modal("#090e1d", "#e8c474", 24, 30, 22))
 	center.add_child(panel)
 
 	var vbox := VBoxContainer.new()
@@ -51,7 +51,7 @@ func _build_ui() -> void:
 	vbox.add_child(top_row)
 
 	var badge_panel := PanelContainer.new()
-	badge_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#7c3aed", 0.95, "#c4b5fd", 0.6, 12, 1, 12, 6))
+	badge_panel.add_theme_stylebox_override("panel", UiStyle.make_pill("#6d28d9", 0.95, "#e9d5ff", 0.65, 14, 6))
 	_skill_badge = Label.new()
 	_skill_badge.add_theme_font_size_override("font_size", 18 if is_mob else 13)
 	_skill_badge.add_theme_color_override("font_color", Color.WHITE)
@@ -64,7 +64,7 @@ func _build_ui() -> void:
 
 	_timer_label = Label.new()
 	_timer_label.add_theme_font_size_override("font_size", 20 if is_mob else 15)
-	_timer_label.add_theme_color_override("font_color", Color.html("#fb7185"))
+	_timer_label.add_theme_color_override("font_color", Color.html("#fda4af"))
 	top_row.add_child(_timer_label)
 
 	# Countdown bar
@@ -72,12 +72,12 @@ func _build_ui() -> void:
 	_timer_bar.custom_minimum_size = Vector2(0, 12 if is_mob else 10)
 	_timer_bar.max_value = 100.0
 	_timer_bar.value = 100.0
-	UiStyle.apply_bar(_timer_bar, "#f59e0b", "#1e293b", 5)
+	UiStyle.apply_bar(_timer_bar, "#f59e0b", "#0d152b", 5, "#fde68a", 0.35)
 	vbox.add_child(_timer_bar)
 
 	# Japanese Word Card
 	var word_card := PanelContainer.new()
-	word_card.add_theme_stylebox_override("panel", UiStyle.make_panel("#0b1120", 0.95, "#334155", 0.9, 16, 1, 16, 14))
+	word_card.add_theme_stylebox_override("panel", UiStyle.make_panel("#0d152b", 0.92, "#e6c37a", 0.35, 18, 1, 18, 14, 8))
 	vbox.add_child(word_card)
 
 	var word_box := VBoxContainer.new()
@@ -93,8 +93,8 @@ func _build_ui() -> void:
 
 	_kanji_label = Label.new()
 	_kanji_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_kanji_label.add_theme_font_size_override("font_size", 46 if is_mob else 36)
-	_kanji_label.add_theme_color_override("font_color", Color.html("#fcd34d"))
+	_kanji_label.add_theme_font_size_override("font_size", 48 if is_mob else 38)
+	_kanji_label.add_theme_color_override("font_color", Color.html("#fef3c7"))
 	word_box.add_child(_kanji_label)
 
 	_meaning_label = Label.new()
@@ -120,15 +120,16 @@ func _build_ui() -> void:
 	_input_edit.placeholder_text = "輸入平假名，例如：いし"
 	_input_edit.custom_minimum_size = Vector2(0, 56 if is_mob else 42)
 	_input_edit.add_theme_font_size_override("font_size", 21 if is_mob else 15)
-	UiStyle.apply_line_edit(_input_edit, "#fbbf24")
+	UiStyle.apply_line_edit(_input_edit, "#e8c474")
 	_input_edit.text_submitted.connect(func(_t: String) -> void: _submit_input())
 	input_row.add_child(_input_edit)
 
 	var cast_btn := Button.new()
+	cast_btn.focus_mode = Control.FOCUS_NONE
 	cast_btn.text = "詠唱！"
-	cast_btn.custom_minimum_size = Vector2(124 if is_mob else 88, 56 if is_mob else 42)
+	cast_btn.custom_minimum_size = Vector2(124 if is_mob else 92, 56 if is_mob else 42)
 	cast_btn.add_theme_font_size_override("font_size", 20 if is_mob else 15)
-	UiStyle.apply_button(cast_btn, "#f59e0b", "#fde68a", "#0f172a", 12, 1, 1.0)
+	UiStyle.apply_button(cast_btn, "#d97706", "#fde68a", "#ffffff", 14, 2, 1.0)
 	cast_btn.pressed.connect(_submit_input)
 	input_row.add_child(cast_btn)
 
@@ -148,6 +149,7 @@ func _build_ui() -> void:
 
 	# Cancel
 	var cancel_btn := Button.new()
+	cancel_btn.focus_mode = Control.FOCUS_NONE
 	cancel_btn.text = "取消詠唱（不消耗 SP）"
 	cancel_btn.flat = true
 	cancel_btn.add_theme_font_size_override("font_size", 17 if is_mob else 13)
@@ -184,11 +186,12 @@ func open_chant(skill_type: String, word: Dictionary, max_time: float) -> void:
 	var is_mob := UiStyle.is_mobile_device()
 	for kana in options:
 		var btn := Button.new()
+		btn.focus_mode = Control.FOCUS_NONE
 		btn.text = String(kana)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.custom_minimum_size = Vector2(0, 72 if is_mob else 46)
-		btn.add_theme_font_size_override("font_size", 26 if is_mob else 17)
-		UiStyle.apply_button(btn, "#1e293b", "#fbbf24", "#ffffff", 14, 2, 0.95)
+		btn.custom_minimum_size = Vector2(0, 72 if is_mob else 48)
+		btn.add_theme_font_size_override("font_size", 26 if is_mob else 18)
+		UiStyle.apply_button(btn, "#141e38", "#e8c474", "#fef3c7", 14, 1, 0.96)
 		var picked: String = String(kana)
 		btn.pressed.connect(func() -> void:
 			_finish(picked == String(_word.get("kana", "")), false)

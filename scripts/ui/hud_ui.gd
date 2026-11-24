@@ -1,8 +1,9 @@
 class_name HudUI
 extends Control
-## Main in-game HUD with responsive Desktop vs Mobile layout:
-## - Desktop: hides touch movement wheel/D-Pad, shows keyboard hints & direct input.
-## - Mobile/Touch: shows enlarged 360° joystick/D-Pad and large thumb-friendly action & menu buttons.
+## Genshin-inspired Wafuu Luminous Glass HUD:
+## - Desktop: clean top floating pills, bottom-center HP/SP/EXP bar, glowing circular E/Q/Attack orbs,
+##   and center CrosshairReticle (mobile movement wheel hidden).
+## - Mobile/Touch: enlarged top status card, 360° joystick/D-Pad, and extra-large circular action orbs.
 
 signal attack_pressed
 signal dash_pressed
@@ -15,17 +16,7 @@ signal joystick_changed(vec: Vector2)
 var _is_mobile_ui: bool = false
 
 # Top HUD references
-var _icon_box: PanelContainer
-var _char_icon_lbl: Label
-var _bars_box: VBoxContainer
-var _player_name_lbl: Label
-var _level_lbl: Label
-var _hp_text_lbl: Label
-var _hp_bar: ProgressBar
-var _sp_text_lbl: Label
-var _sp_bar: ProgressBar
-var _exp_bar: ProgressBar
-
+var _stage_card: PanelContainer
 var _stage_lbl: Label
 var _mode_lbl: Label
 var _enemy_count_lbl: Label
@@ -41,6 +32,21 @@ var _boss_name_lbl: Label
 var _boss_hp_lbl: Label
 var _boss_bar: ProgressBar
 
+# Player Status Card (placed top-left on Mobile, bottom-center Genshin-style on Desktop!)
+var _status_card: PanelContainer
+var _mobile_status_slot: HBoxContainer
+var _desktop_status_slot: CenterContainer
+var _icon_box: PanelContainer
+var _char_icon_lbl: Label
+var _bars_box: VBoxContainer
+var _player_name_lbl: Label
+var _level_lbl: Label
+var _hp_text_lbl: Label
+var _hp_bar: ProgressBar
+var _sp_text_lbl: Label
+var _sp_bar: ProgressBar
+var _exp_bar: ProgressBar
+
 # Bottom controls
 var _bot_margin: MarginContainer
 var _left_ctrl: VBoxContainer
@@ -55,6 +61,7 @@ var _combo_panel: PanelContainer
 var _combo_lbl: Label
 var _direct_center: CenterContainer
 var _direct_input: LineEdit
+var _hint_panel: PanelContainer
 var _hint_lbl: Label
 
 var _right_vbox: VBoxContainer
@@ -109,8 +116,6 @@ func trigger_crosshair_hit(is_crit: bool) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	# If a touch event occurs on a tablet/hybrid device in desktop browser mode,
-	# automatically enable the touch-friendly mobile layout.
 	if not _is_mobile_ui and event is InputEventScreenTouch:
 		_is_mobile_ui = true
 		_apply_responsive_layout()
@@ -133,27 +138,27 @@ func _build_ui() -> void:
 	_lock_hint_panel = PanelContainer.new()
 	_lock_hint_panel.visible = false
 	_lock_hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_lock_hint_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.84, "#fbbf24", 0.72, 18, 1, 16, 7))
+	_lock_hint_panel.add_theme_stylebox_override("panel", UiStyle.make_pill("#090e1d", 0.86, "#e8c474", 0.72, 18, 7))
 	_lock_hint_lbl = Label.new()
-	_lock_hint_lbl.text = "點擊畫面鎖定滑鼠視角與準心（Esc 解鎖）"
+	_lock_hint_lbl.text = "點擊畫面鎖定視角與準心 ｜ Esc 暫停"
 	_lock_hint_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_lock_hint_lbl.add_theme_font_size_override("font_size", 14)
-	_lock_hint_lbl.add_theme_color_override("font_color", Color.html("#fde68a"))
+	_lock_hint_lbl.add_theme_font_size_override("font_size", 13)
+	_lock_hint_lbl.add_theme_color_override("font_color", Color.html("#fef3c7"))
 	_lock_hint_panel.add_child(_lock_hint_lbl)
 	lock_center.add_child(_lock_hint_panel)
 
-	# ==================== TOP BAR ====================
+	# ==================== TOP FLOATING BAR ====================
 	var top_margin := MarginContainer.new()
 	top_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_margin.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	top_margin.add_theme_constant_override("margin_left", 14)
-	top_margin.add_theme_constant_override("margin_right", 14)
-	top_margin.add_theme_constant_override("margin_top", 10)
+	top_margin.add_theme_constant_override("margin_left", 18)
+	top_margin.add_theme_constant_override("margin_right", 18)
+	top_margin.add_theme_constant_override("margin_top", 14)
 	add_child(top_margin)
 
 	var top_vbox := VBoxContainer.new()
 	top_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top_vbox.add_theme_constant_override("separation", 8)
+	top_vbox.add_theme_constant_override("separation", 10)
 	top_margin.add_child(top_vbox)
 
 	var top_row := HBoxContainer.new()
@@ -161,86 +166,30 @@ func _build_ui() -> void:
 	top_row.add_theme_constant_override("separation", 10)
 	top_vbox.add_child(top_row)
 
-	# Left: Player Status Card
-	var status_card := PanelContainer.new()
-	status_card.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.84, "#ffffff", 0.16, 16, 1, 12, 8))
-	top_row.add_child(status_card)
+	# Top-Left Slot: Mobile Status Card (when mobile) + Sleek Stage/Wave Pill
+	var top_left := HBoxContainer.new()
+	top_left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_left.add_theme_constant_override("separation", 10)
+	top_row.add_child(top_left)
 
-	var st_hbox := HBoxContainer.new()
-	st_hbox.add_theme_constant_override("separation", 10)
-	status_card.add_child(st_hbox)
+	_mobile_status_slot = HBoxContainer.new()
+	_mobile_status_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_left.add_child(_mobile_status_slot)
 
-	_icon_box = PanelContainer.new()
-	_icon_box.custom_minimum_size = Vector2(48, 48)
-	_icon_box.add_theme_stylebox_override("panel", UiStyle.make_panel("#e11d48", 0.9, "#fde68a", 0.5, 12, 1, 4, 4))
-	_char_icon_lbl = Label.new()
-	_char_icon_lbl.text = "👘"
-	_char_icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_char_icon_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_char_icon_lbl.add_theme_font_size_override("font_size", 24)
-	_icon_box.add_child(_char_icon_lbl)
-	st_hbox.add_child(_icon_box)
-
-	_bars_box = VBoxContainer.new()
-	_bars_box.custom_minimum_size = Vector2(185, 0)
-	_bars_box.add_theme_constant_override("separation", 3)
-	st_hbox.add_child(_bars_box)
-
-	var name_row := HBoxContainer.new()
-	_bars_box.add_child(name_row)
-	_player_name_lbl = Label.new()
-	_player_name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_player_name_lbl.add_theme_color_override("font_color", Color.html("#fcd34d"))
-	name_row.add_child(_player_name_lbl)
-
-	_level_lbl = Label.new()
-	_level_lbl.add_theme_color_override("font_color", Color.html("#fde68a"))
-	name_row.add_child(_level_lbl)
-
-	# HP
-	_hp_text_lbl = Label.new()
-	_hp_text_lbl.add_theme_color_override("font_color", Color.html("#fecdd3"))
-	_bars_box.add_child(_hp_text_lbl)
-	_hp_bar = ProgressBar.new()
-	UiStyle.apply_bar(_hp_bar, "#10b981", "#1e293b", 4)
-	_bars_box.add_child(_hp_bar)
-
-	# SP
-	_sp_text_lbl = Label.new()
-	_sp_text_lbl.add_theme_color_override("font_color", Color.html("#bae6fd"))
-	_bars_box.add_child(_sp_text_lbl)
-	_sp_bar = ProgressBar.new()
-	UiStyle.apply_bar(_sp_bar, "#38bdf8", "#1e293b", 3)
-	_bars_box.add_child(_sp_bar)
-
-	# EXP
-	_exp_bar = ProgressBar.new()
-	_exp_bar.custom_minimum_size = Vector2(0, 5)
-	UiStyle.apply_bar(_exp_bar, "#fbbf24", "#1e293b", 2)
-	_bars_box.add_child(_exp_bar)
-
-	# Center: Stage & Wave Info
-	var center_spacer_l := Control.new()
-	center_spacer_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center_spacer_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top_row.add_child(center_spacer_l)
-
-	var stage_card := PanelContainer.new()
-	stage_card.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.84, "#ffffff", 0.16, 16, 1, 16, 8))
-	top_row.add_child(stage_card)
+	_stage_card = PanelContainer.new()
+	_stage_card.add_theme_stylebox_override("panel", UiStyle.make_pill("#0a0f1f", 0.78, "#e6c37a", 0.42, 16, 8))
+	top_left.add_child(_stage_card)
 
 	var stage_vbox := VBoxContainer.new()
 	stage_vbox.add_theme_constant_override("separation", 2)
-	stage_card.add_child(stage_vbox)
+	_stage_card.add_child(stage_vbox)
 
 	_stage_lbl = Label.new()
-	_stage_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_stage_lbl.add_theme_color_override("font_color", Color.html("#fcd34d"))
+	_stage_lbl.add_theme_color_override("font_color", Color.html("#fef3c7"))
 	stage_vbox.add_child(_stage_lbl)
 
 	var sub_row := HBoxContainer.new()
-	sub_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	sub_row.add_theme_constant_override("separation", 12)
+	sub_row.add_theme_constant_override("separation", 10)
 	stage_vbox.add_child(sub_row)
 
 	_mode_lbl = Label.new()
@@ -256,21 +205,21 @@ func _build_ui() -> void:
 	_endless_lbl.visible = false
 	sub_row.add_child(_endless_lbl)
 
-	var center_spacer_r := Control.new()
-	center_spacer_r.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center_spacer_r.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top_row.add_child(center_spacer_r)
+	var top_spacer := Control.new()
+	top_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_row.add_child(top_spacer)
 
-	# Right: Currency & System Menu
+	# Top-Right: Translucent Currency Pill + Compact Wafuu Glass Buttons
 	var menu_row := HBoxContainer.new()
 	menu_row.add_theme_constant_override("separation", 8)
 	top_row.add_child(menu_row)
 
 	var cur_panel := PanelContainer.new()
-	cur_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.84, "#ffffff", 0.16, 12, 1, 10, 6))
+	cur_panel.add_theme_stylebox_override("panel", UiStyle.make_pill("#0a0f1f", 0.78, "#e6c37a", 0.36, 14, 7))
 	var cur_hbox := HBoxContainer.new()
 	cur_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	cur_hbox.add_theme_constant_override("separation", 10)
+	cur_hbox.add_theme_constant_override("separation", 12)
 	cur_panel.add_child(cur_hbox)
 	_gold_lbl = Label.new()
 	_gold_lbl.add_theme_color_override("font_color", Color.html("#fcd34d"))
@@ -280,62 +229,65 @@ func _build_ui() -> void:
 	cur_hbox.add_child(_sp_pts_lbl)
 	menu_row.add_child(cur_panel)
 
-	var b_sk := _make_menu_btn("⚡ 技能", "#fbbf24", "#fcd34d", func() -> void: upgrade_requested.emit("skills"))
-	var b_eq := _make_menu_btn("🎒 裝備", "#34d399", "#6ee7b7", func() -> void: upgrade_requested.emit("equip"))
-	var b_sh := _make_menu_btn("🦊 式神", "#f472b6", "#f9a8d4", func() -> void: upgrade_requested.emit("shikigami"))
-	var b_ps := _make_menu_btn("⏸️ 暫停", "#94a3b8", "#ffffff", func() -> void: pause_requested.emit())
-	_audio_btn = _make_menu_btn("🔊", "#94a3b8", "#ffffff", func() -> void: AudioManager.toggle_audio())
+	var b_sk := _make_menu_btn("⚡ 技能", "#e6c37a", "#fef3c7", func() -> void: upgrade_requested.emit("skills"))
+	var b_eq := _make_menu_btn("🎒 裝備", "#34d399", "#a7f3d0", func() -> void: upgrade_requested.emit("equip"))
+	var b_sh := _make_menu_btn("🦊 式神", "#f472b6", "#fbcfe8", func() -> void: upgrade_requested.emit("shikigami"))
+	var b_ps := _make_menu_btn("⏸️ 暫停", "#cbd5e1", "#ffffff", func() -> void: pause_requested.emit())
+	_audio_btn = _make_menu_btn("🔊", "#cbd5e1", "#ffffff", func() -> void: AudioManager.toggle_audio())
 
 	_menu_buttons = [b_sk, b_eq, b_sh, b_ps]
 	for mb in _menu_buttons:
 		menu_row.add_child(mb)
 	menu_row.add_child(_audio_btn)
 
-	# Boss HP Bar (centered under top bar)
+	# ==================== GENSHIN-STYLE BOSS HP BAR ====================
 	var boss_center := CenterContainer.new()
 	boss_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_vbox.add_child(boss_center)
 
 	_boss_panel = PanelContainer.new()
 	_boss_panel.visible = false
-	_boss_panel.custom_minimum_size = Vector2(480, 0)
-	_boss_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.88, "#f43f5e", 0.75, 16, 2, 16, 8))
+	_boss_panel.custom_minimum_size = Vector2(540, 0)
+	_boss_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0a0d1c", 0.86, "#fb7185", 0.65, 18, 1, 20, 10, 16))
 	boss_center.add_child(_boss_panel)
 
 	var boss_v := VBoxContainer.new()
-	boss_v.add_theme_constant_override("separation", 4)
+	boss_v.add_theme_constant_override("separation", 5)
 	_boss_panel.add_child(boss_v)
 
 	var boss_h := HBoxContainer.new()
 	boss_v.add_child(boss_h)
 	_boss_name_lbl = Label.new()
 	_boss_name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_boss_name_lbl.add_theme_color_override("font_color", Color.html("#fb7185"))
+	_boss_name_lbl.add_theme_color_override("font_color", Color.html("#fecdd3"))
 	boss_h.add_child(_boss_name_lbl)
 
 	_boss_hp_lbl = Label.new()
-	_boss_hp_lbl.add_theme_color_override("font_color", Color.WHITE)
+	_boss_hp_lbl.add_theme_color_override("font_color", Color.html("#fef3c7"))
 	boss_h.add_child(_boss_hp_lbl)
 
 	_boss_bar = ProgressBar.new()
-	_boss_bar.custom_minimum_size = Vector2(0, 14)
-	UiStyle.apply_bar(_boss_bar, "#e11d48", "#0f172a", 6)
+	_boss_bar.custom_minimum_size = Vector2(0, 13)
+	UiStyle.apply_bar(_boss_bar, "#e11d48", "#180b16", 6, "#fb7185", 0.45)
 	boss_v.add_child(_boss_bar)
+
+	# ==================== PLAYER STATUS CARD (Reparented by Platform) ====================
+	_status_card = _build_status_card()
 
 	# ==================== TOAST ====================
 	var toast_center := CenterContainer.new()
 	toast_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toast_center.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	toast_center.offset_top = 118
+	toast_center.offset_top = 128
 	add_child(toast_center)
 
 	_toast_panel = PanelContainer.new()
 	_toast_panel.visible = false
 	_toast_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_toast_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.94, "#fbbf24", 0.75, 20, 2, 20, 8))
+	_toast_panel.add_theme_stylebox_override("panel", UiStyle.make_pill("#090e1d", 0.92, "#e8c474", 0.80, 22, 8))
 	_toast_lbl = Label.new()
 	_toast_lbl.add_theme_font_size_override("font_size", 15)
-	_toast_lbl.add_theme_color_override("font_color", Color.html("#fcd34d"))
+	_toast_lbl.add_theme_color_override("font_color", Color.html("#fef3c7"))
 	_toast_panel.add_child(_toast_lbl)
 	toast_center.add_child(_toast_panel)
 
@@ -343,7 +295,7 @@ func _build_ui() -> void:
 	_bot_margin = MarginContainer.new()
 	_bot_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_bot_margin.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_bot_margin.offset_top = -225
+	_bot_margin.offset_top = -245
 	_bot_margin.add_theme_constant_override("margin_left", 24)
 	_bot_margin.add_theme_constant_override("margin_right", 24)
 	_bot_margin.add_theme_constant_override("margin_bottom", 18)
@@ -377,16 +329,16 @@ func _build_ui() -> void:
 	_ctrl_toggle_btn = Button.new()
 	_ctrl_toggle_btn.focus_mode = Control.FOCUS_NONE
 	_ctrl_toggle_btn.text = "🕹️ 輪盤 ⇄ 十字鍵"
-	UiStyle.apply_button(_ctrl_toggle_btn, "#0f172a", "#fbbf24", "#fde68a", 16, 2, 0.88)
+	UiStyle.apply_button(_ctrl_toggle_btn, "#0a0f1f", "#e6c37a", "#fef3c7", 18, 2, 0.88)
 	_ctrl_toggle_btn.pressed.connect(_toggle_control_mode)
 	_left_ctrl.add_child(_ctrl_toggle_btn)
 
-	# Center: Combo Banner + Desktop Direct Input + Desktop Keyboard Hint
+	# Center: Combo Pill + Genshin Bottom-Center HP/SP/EXP Status Card + Slim Keybind Legend
 	var mid_vbox := VBoxContainer.new()
 	mid_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid_vbox.alignment = BoxContainer.ALIGNMENT_END
 	mid_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	mid_vbox.add_theme_constant_override("separation", 6)
+	mid_vbox.add_theme_constant_override("separation", 7)
 	bot_row.add_child(mid_vbox)
 
 	var combo_center := CenterContainer.new()
@@ -395,44 +347,57 @@ func _build_ui() -> void:
 
 	_combo_panel = PanelContainer.new()
 	_combo_panel.visible = false
-	_combo_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#e11d48", 0.95, "#fde68a", 0.8, 16, 1, 16, 5))
+	_combo_panel.add_theme_stylebox_override("panel", UiStyle.make_pill("#be123c", 0.94, "#fde68a", 0.88, 18, 5))
 	_combo_lbl = Label.new()
 	_combo_lbl.add_theme_font_size_override("font_size", 18)
 	_combo_lbl.add_theme_color_override("font_color", Color.WHITE)
 	_combo_panel.add_child(_combo_lbl)
 	combo_center.add_child(_combo_panel)
 
+	_desktop_status_slot = CenterContainer.new()
+	_desktop_status_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mid_vbox.add_child(_desktop_status_slot)
+
 	_direct_center = CenterContainer.new()
 	_direct_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mid_vbox.add_child(_direct_center)
 
 	var direct_panel := PanelContainer.new()
-	direct_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.84, "#475569", 0.7, 14, 1, 10, 6))
+	direct_panel.add_theme_stylebox_override("panel", UiStyle.make_pill("#0a0f1f", 0.74, "#64748b", 0.36, 12, 4))
 	var direct_row := HBoxContainer.new()
 	direct_row.add_theme_constant_override("separation", 8)
 	direct_panel.add_child(direct_row)
 	var direct_lbl := Label.new()
 	direct_lbl.text = "日文感應："
-	direct_lbl.add_theme_font_size_override("font_size", 12)
+	direct_lbl.add_theme_font_size_override("font_size", 11)
 	direct_lbl.add_theme_color_override("font_color", Color.html("#cbd5e1"))
 	direct_row.add_child(direct_lbl)
 
 	_direct_input = LineEdit.new()
-	_direct_input.custom_minimum_size = Vector2(250, 32)
+	_direct_input.custom_minimum_size = Vector2(230, 28)
+	_direct_input.add_theme_font_size_override("font_size", 12)
 	_direct_input.placeholder_text = "輸入 あ 攻擊，或 石頭/腳/雷光/冰結"
-	UiStyle.apply_line_edit(_direct_input, "#64748b")
+	UiStyle.apply_line_edit(_direct_input, "#475569")
 	_direct_input.text_changed.connect(_on_direct_input_changed)
 	direct_row.add_child(_direct_input)
 	_direct_center.add_child(direct_panel)
 
+	var hint_center := CenterContainer.new()
+	hint_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mid_vbox.add_child(hint_center)
+
+	_hint_panel = PanelContainer.new()
+	_hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hint_panel.add_theme_stylebox_override("panel", UiStyle.make_pill("#090d1a", 0.64, "#e6c37a", 0.24, 14, 4))
 	_hint_lbl = Label.new()
-	_hint_lbl.text = "滑鼠鎖定轉視角 ｜ 左鍵/J/あ 攻擊 ｜ E 專屬技 ｜ Q 奧義 ｜ 右鍵/Space 瞬步 ｜ WASD 移動 ｜ Esc 解鎖/暫停"
+	_hint_lbl.text = "滑鼠轉視角 ｜ 左鍵 斬撃 ｜ E 專屬技 ｜ Q 奧義 ｜ 右鍵/Space 瞬步 ｜ WASD 移動 ｜ Esc 暫停"
 	_hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hint_lbl.add_theme_font_size_override("font_size", 11)
-	_hint_lbl.add_theme_color_override("font_color", Color(0.82, 0.86, 0.92, 0.84))
-	mid_vbox.add_child(_hint_lbl)
+	_hint_lbl.add_theme_color_override("font_color", Color(0.88, 0.90, 0.95, 0.88))
+	_hint_panel.add_child(_hint_lbl)
+	hint_center.add_child(_hint_panel)
 
-	# Right: Skill Row + Big Red 'あ' Attack Button
+	# Right: Genshin-Style Circular Skill Orbs + Luminous 'あ' Attack Orb
 	_right_vbox = VBoxContainer.new()
 	_right_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_right_vbox.alignment = BoxContainer.ALIGNMENT_END
@@ -445,20 +410,18 @@ func _build_ui() -> void:
 
 	_btn_dash = Button.new()
 	_btn_dash.focus_mode = Control.FOCUS_NONE
-	_btn_dash.text = "💨\n瞬步"
 	_btn_dash.pressed.connect(func() -> void: dash_pressed.emit())
 	_skill_row.add_child(_btn_dash)
-
-	_btn_ult = Button.new()
-	_btn_ult.focus_mode = Control.FOCUS_NONE
-	_btn_ult.text = "🌟\n全屏奧義\n70 SP"
-	_btn_ult.pressed.connect(func() -> void: ult_skill_pressed.emit())
-	_skill_row.add_child(_btn_ult)
 
 	_btn_sig = Button.new()
 	_btn_sig.focus_mode = Control.FOCUS_NONE
 	_btn_sig.pressed.connect(func() -> void: sig_skill_pressed.emit())
 	_skill_row.add_child(_btn_sig)
+
+	_btn_ult = Button.new()
+	_btn_ult.focus_mode = Control.FOCUS_NONE
+	_btn_ult.pressed.connect(func() -> void: ult_skill_pressed.emit())
+	_skill_row.add_child(_btn_ult)
 
 	var atk_row := HBoxContainer.new()
 	atk_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -467,21 +430,102 @@ func _build_ui() -> void:
 
 	_btn_atk = Button.new()
 	_btn_atk.focus_mode = Control.FOCUS_NONE
-	_btn_atk.text = "あ\n三段斬撃"
 	_btn_atk.pressed.connect(func() -> void: attack_pressed.emit())
 	atk_row.add_child(_btn_atk)
 
 
+func _build_status_card() -> PanelContainer:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", UiStyle.make_panel("#0a0f1f", 0.80, "#e6c37a", 0.44, 18, 1, 14, 9, 14))
+
+	var st_hbox := HBoxContainer.new()
+	st_hbox.add_theme_constant_override("separation", 12)
+	card.add_child(st_hbox)
+
+	_icon_box = PanelContainer.new()
+	_icon_box.custom_minimum_size = Vector2(46, 46)
+	_icon_box.add_theme_stylebox_override("panel", UiStyle.make_panel("#be123c", 0.92, "#fde68a", 0.72, 23, 2, 2, 2, 8))
+	_char_icon_lbl = Label.new()
+	_char_icon_lbl.text = "👘"
+	_char_icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_char_icon_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_icon_box.add_child(_char_icon_lbl)
+	st_hbox.add_child(_icon_box)
+
+	_bars_box = VBoxContainer.new()
+	_bars_box.add_theme_constant_override("separation", 4)
+	st_hbox.add_child(_bars_box)
+
+	var name_row := HBoxContainer.new()
+	name_row.add_theme_constant_override("separation", 8)
+	_bars_box.add_child(name_row)
+
+	_player_name_lbl = Label.new()
+	_player_name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_player_name_lbl.add_theme_color_override("font_color", Color.html("#fef3c7"))
+	name_row.add_child(_player_name_lbl)
+
+	_level_lbl = Label.new()
+	_level_lbl.add_theme_color_override("font_color", Color.html("#fcd34d"))
+	name_row.add_child(_level_lbl)
+
+	# HP row
+	var hp_row := HBoxContainer.new()
+	hp_row.add_theme_constant_override("separation", 8)
+	_bars_box.add_child(hp_row)
+	_hp_bar = ProgressBar.new()
+	_hp_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_hp_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	UiStyle.apply_bar(_hp_bar, "#22c55e", "#09121a", 5, "#4ade80", 0.28)
+	hp_row.add_child(_hp_bar)
+	_hp_text_lbl = Label.new()
+	_hp_text_lbl.add_theme_color_override("font_color", Color.html("#d1fae5"))
+	hp_row.add_child(_hp_text_lbl)
+
+	# SP row
+	var sp_row := HBoxContainer.new()
+	sp_row.add_theme_constant_override("separation", 8)
+	_bars_box.add_child(sp_row)
+	_sp_bar = ProgressBar.new()
+	_sp_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_sp_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	UiStyle.apply_bar(_sp_bar, "#38bdf8", "#091220", 4, "#7dd3fc", 0.28)
+	sp_row.add_child(_sp_bar)
+	_sp_text_lbl = Label.new()
+	_sp_text_lbl.add_theme_color_override("font_color", Color.html("#bae6fd"))
+	sp_row.add_child(_sp_text_lbl)
+
+	# EXP hairline
+	_exp_bar = ProgressBar.new()
+	_exp_bar.custom_minimum_size = Vector2(0, 4)
+	UiStyle.apply_bar(_exp_bar, "#fbbf24", "#111827", 2, "#fde68a", 0.16)
+	_bars_box.add_child(_exp_bar)
+
+	return card
+
+
+func _reparent_status_card(to_mobile: bool) -> void:
+	if _status_card == null:
+		return
+	var target_parent: Node = _mobile_status_slot if to_mobile else _desktop_status_slot
+	if _status_card.get_parent() == target_parent:
+		return
+	if _status_card.get_parent() != null:
+		_status_card.get_parent().remove_child(_status_card)
+	target_parent.add_child(_status_card)
+
+
 func _apply_responsive_layout() -> void:
+	_reparent_status_card(_is_mobile_ui)
 	if _is_mobile_ui:
-		# Mobile / Touch Mode: hide desktop crosshair/hints, show extra-large thumb-friendly controls
+		# Mobile / Touch Mode: enlarged thumb-friendly layout
 		if _crosshair != null:
 			_crosshair.visible = false
 		if _lock_hint_panel != null:
 			_lock_hint_panel.visible = false
 		_left_ctrl.visible = true
 		_direct_center.visible = false
-		_hint_lbl.visible = false
+		_hint_panel.visible = false
 
 		_bot_margin.offset_top = -425
 		_bot_margin.add_theme_constant_override("margin_left", 28)
@@ -498,31 +542,26 @@ func _apply_responsive_layout() -> void:
 		_ctrl_toggle_btn.add_theme_font_size_override("font_size", 18)
 
 		_right_vbox.add_theme_constant_override("separation", 16)
-		_skill_row.add_theme_constant_override("separation", 16)
+		_skill_row.add_theme_constant_override("separation", 14)
 
 		_btn_dash.text = "💨\n瞬步"
-		_btn_dash.custom_minimum_size = Vector2(126, 126)
-		_btn_dash.add_theme_font_size_override("font_size", 22)
-		UiStyle.apply_button(_btn_dash, "#0f172a", "#38bdf8", "#7dd3fc", 26, 3, 0.94)
+		_btn_dash.add_theme_font_size_override("font_size", 20)
+		UiStyle.apply_orb_button(_btn_dash, "#0d1b2a", "#38bdf8", "#bae6fd", 122.0, 3, 0.92)
 
-		_btn_ult.text = "🌟\n全屏奧義\n70 SP"
-		_btn_ult.custom_minimum_size = Vector2(154, 126)
-		_btn_ult.add_theme_font_size_override("font_size", 19)
-		UiStyle.apply_button(_btn_ult, "#d97706", "#fde68a", "#ffffff", 26, 3, 0.96)
+		_btn_sig.add_theme_font_size_override("font_size", 18)
+		UiStyle.apply_orb_button(_btn_sig, "#581c87", "#f0abfc", "#ffffff", 142.0, 3, 0.95)
 
-		_btn_sig.custom_minimum_size = Vector2(194, 126)
-		_btn_sig.add_theme_font_size_override("font_size", 20)
-		UiStyle.apply_button(_btn_sig, "#9333ea", "#f9a8d4", "#ffffff", 26, 3, 0.96)
+		_btn_ult.text = "🌟\n奧義\n70SP"
+		_btn_ult.add_theme_font_size_override("font_size", 18)
+		UiStyle.apply_orb_button(_btn_ult, "#b45309", "#fde68a", "#ffffff", 142.0, 3, 0.96)
 
-		_btn_atk.text = "あ\n三段斬撃"
-		_btn_atk.custom_minimum_size = Vector2(236, 236)
+		_btn_atk.text = "あ\n斬撃"
 		_btn_atk.add_theme_font_size_override("font_size", 42)
-		UiStyle.apply_button(_btn_atk, "#dc2626", "#fcd34d", "#ffffff", 118, 5, 0.98)
+		UiStyle.apply_orb_button(_btn_atk, "#be123c", "#fde68a", "#ffffff", 236.0, 5, 0.98)
 
-		# Enlarge Top HUD & Menu Buttons for mobile legibility and thumb tapping
-		_icon_box.custom_minimum_size = Vector2(64, 64)
-		_char_icon_lbl.add_theme_font_size_override("font_size", 32)
-		_bars_box.custom_minimum_size = Vector2(230, 0)
+		_icon_box.custom_minimum_size = Vector2(62, 62)
+		_char_icon_lbl.add_theme_font_size_override("font_size", 30)
+		_bars_box.custom_minimum_size = Vector2(240, 0)
 		_player_name_lbl.add_theme_font_size_override("font_size", 17)
 		_level_lbl.add_theme_font_size_override("font_size", 16)
 		_hp_text_lbl.add_theme_font_size_override("font_size", 14)
@@ -540,69 +579,66 @@ func _apply_responsive_layout() -> void:
 		_boss_hp_lbl.add_theme_font_size_override("font_size", 17)
 
 		for mb in _menu_buttons:
-			mb.custom_minimum_size = Vector2(104, 64)
-			mb.add_theme_font_size_override("font_size", 19)
-		_audio_btn.custom_minimum_size = Vector2(68, 64)
+			mb.custom_minimum_size = Vector2(104, 62)
+			mb.add_theme_font_size_override("font_size", 18)
+		_audio_btn.custom_minimum_size = Vector2(66, 62)
 		_audio_btn.add_theme_font_size_override("font_size", 22)
 	else:
-		# Desktop Mode: hide mobile movement wheel completely, show crosshair & E/Q hints!
+		# Desktop Mode: Genshin-style bottom-center status bar + glowing circular E/Q orbs!
 		if _crosshair != null:
 			_crosshair.visible = true
 		_left_ctrl.visible = false
 		joystick_changed.emit(Vector2.ZERO)
 		_direct_center.visible = true
-		_hint_lbl.visible = true
+		_hint_panel.visible = true
 
-		_bot_margin.offset_top = -225
-		_bot_margin.add_theme_constant_override("margin_left", 20)
-		_bot_margin.add_theme_constant_override("margin_right", 20)
-		_bot_margin.add_theme_constant_override("margin_bottom", 16)
+		_bot_margin.offset_top = -245
+		_bot_margin.add_theme_constant_override("margin_left", 24)
+		_bot_margin.add_theme_constant_override("margin_right", 24)
+		_bot_margin.add_theme_constant_override("margin_bottom", 18)
 
-		_right_vbox.add_theme_constant_override("separation", 8)
-		_skill_row.add_theme_constant_override("separation", 8)
+		_right_vbox.add_theme_constant_override("separation", 10)
+		_skill_row.add_theme_constant_override("separation", 10)
 
-		_btn_dash.text = "💨 瞬步\n[Space]"
-		_btn_dash.custom_minimum_size = Vector2(74, 66)
+		_btn_dash.text = "💨\n瞬步\nSpace"
 		_btn_dash.add_theme_font_size_override("font_size", 11)
-		UiStyle.apply_button(_btn_dash, "#0f172a", "#38bdf8", "#7dd3fc", 16, 2, 0.90)
+		UiStyle.apply_orb_button(_btn_dash, "#0d1b2a", "#38bdf8", "#bae6fd", 74.0, 2, 0.90)
 
-		_btn_ult.text = "🌟 [Q]\n全屏奧義\n70 SP"
-		_btn_ult.custom_minimum_size = Vector2(92, 70)
+		_btn_sig.add_theme_font_size_override("font_size", 11)
+		UiStyle.apply_orb_button(_btn_sig, "#581c87", "#f0abfc", "#ffffff", 86.0, 2, 0.94)
+
+		_btn_ult.text = "🌟 [Q]\n奧義\n70SP"
 		_btn_ult.add_theme_font_size_override("font_size", 11)
-		UiStyle.apply_button(_btn_ult, "#d97706", "#fde68a", "#ffffff", 16, 2, 0.96)
+		UiStyle.apply_orb_button(_btn_ult, "#b45309", "#fde68a", "#ffffff", 86.0, 2, 0.95)
 
-		_btn_sig.custom_minimum_size = Vector2(114, 70)
-		_btn_sig.add_theme_font_size_override("font_size", 12)
-		UiStyle.apply_button(_btn_sig, "#9333ea", "#f9a8d4", "#ffffff", 16, 2, 0.96)
-
-		_btn_atk.text = "あ\n左鍵/J"
-		_btn_atk.custom_minimum_size = Vector2(112, 112)
+		_btn_atk.text = "あ\n左鍵"
 		_btn_atk.add_theme_font_size_override("font_size", 20)
-		UiStyle.apply_button(_btn_atk, "#dc2626", "#fcd34d", "#ffffff", 56, 3, 0.98)
+		UiStyle.apply_orb_button(_btn_atk, "#be123c", "#fde68a", "#ffffff", 104.0, 3, 0.97)
 
+		# Sleek bottom-center Genshin HP/SP/EXP card
 		_icon_box.custom_minimum_size = Vector2(46, 46)
-		_char_icon_lbl.add_theme_font_size_override("font_size", 24)
-		_bars_box.custom_minimum_size = Vector2(180, 0)
+		_char_icon_lbl.add_theme_font_size_override("font_size", 23)
+		_bars_box.custom_minimum_size = Vector2(310, 0)
 		_player_name_lbl.add_theme_font_size_override("font_size", 13)
 		_level_lbl.add_theme_font_size_override("font_size", 12)
-		_hp_text_lbl.add_theme_font_size_override("font_size", 10)
-		_hp_bar.custom_minimum_size = Vector2(0, 8)
-		_sp_text_lbl.add_theme_font_size_override("font_size", 10)
-		_sp_bar.custom_minimum_size = Vector2(0, 6)
+		_hp_text_lbl.add_theme_font_size_override("font_size", 11)
+		_hp_bar.custom_minimum_size = Vector2(0, 10)
+		_sp_text_lbl.add_theme_font_size_override("font_size", 11)
+		_sp_bar.custom_minimum_size = Vector2(0, 8)
 
 		_stage_lbl.add_theme_font_size_override("font_size", 14)
 		_mode_lbl.add_theme_font_size_override("font_size", 11)
 		_enemy_count_lbl.add_theme_font_size_override("font_size", 11)
 		_endless_lbl.add_theme_font_size_override("font_size", 11)
-		_gold_lbl.add_theme_font_size_override("font_size", 12)
-		_sp_pts_lbl.add_theme_font_size_override("font_size", 12)
-		_boss_name_lbl.add_theme_font_size_override("font_size", 13)
+		_gold_lbl.add_theme_font_size_override("font_size", 13)
+		_sp_pts_lbl.add_theme_font_size_override("font_size", 13)
+		_boss_name_lbl.add_theme_font_size_override("font_size", 14)
 		_boss_hp_lbl.add_theme_font_size_override("font_size", 13)
 
 		for mb in _menu_buttons:
-			mb.custom_minimum_size = Vector2(72, 38)
+			mb.custom_minimum_size = Vector2(74, 38)
 			mb.add_theme_font_size_override("font_size", 13)
-		_audio_btn.custom_minimum_size = Vector2(46, 38)
+		_audio_btn.custom_minimum_size = Vector2(44, 38)
 		_audio_btn.add_theme_font_size_override("font_size", 14)
 
 
@@ -610,7 +646,7 @@ func _make_menu_btn(label: String, border_hex: String, text_hex: String, cb: Cal
 	var btn := Button.new()
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.text = label
-	UiStyle.apply_button(btn, "#0f172a", border_hex, text_hex, 12, 1, 0.88)
+	UiStyle.apply_button(btn, "#0a0f1f", border_hex, text_hex, 18, 1, 0.80)
 	btn.pressed.connect(cb)
 	return btn
 
@@ -644,7 +680,7 @@ func _populate_dpad(grid: GridContainer) -> void:
 			b.focus_mode = Control.FOCUS_NONE
 			b.text = lbl
 			b.custom_minimum_size = Vector2(68, 68)
-			UiStyle.apply_button(b, "#0f172a", "#fbbf24", "#fcd34d", 14, 2, 0.90)
+			UiStyle.apply_button(b, "#0a0f1f", "#e6c37a", "#fef3c7", 16, 2, 0.90)
 			b.button_down.connect(func() -> void: joystick_changed.emit(vec))
 			b.button_up.connect(func() -> void: joystick_changed.emit(Vector2.ZERO))
 			grid.add_child(b)
@@ -682,14 +718,14 @@ func refresh(enemy_count: int, boss: Enemy3D) -> void:
 	var mode_cfg: Dictionary = GameData.get_mode(p["mode"])
 
 	_char_icon_lbl.text = char_cfg["icon"]
-	_player_name_lbl.text = String(p["name"])
+	_player_name_lbl.text = "%s・%s" % [String(p["name"]), char_cfg["name"]]
 	_level_lbl.text = "Lv.%d" % int(p["level"])
 
-	_hp_text_lbl.text = "HP  %d / %d" % [int(b["hp"]), int(b["max_hp"])]
+	_hp_text_lbl.text = "%d / %d" % [int(b["hp"]), int(b["max_hp"])]
 	_hp_bar.max_value = maxf(1.0, float(b["max_hp"]))
 	_hp_bar.value = float(b["hp"])
 
-	_sp_text_lbl.text = "言霊 SP  %d / %d" % [int(floor(float(b["sp"]))), int(b["max_sp"])]
+	_sp_text_lbl.text = "SP %d/%d" % [int(floor(float(b["sp"]))), int(b["max_sp"])]
 	_sp_bar.max_value = float(b["max_sp"])
 	_sp_bar.value = float(b["sp"])
 
@@ -697,9 +733,9 @@ func refresh(enemy_count: int, boss: Enemy3D) -> void:
 	_exp_bar.max_value = 100.0
 	_exp_bar.value = 100.0 if int(p["level"]) >= GameData.MAX_LEVEL else minf(100.0, (float(p["exp"]) / float(exp_need)) * 100.0)
 
-	_stage_lbl.text = "%s %s  |  第 %d 幕" % [stage_cfg["icon"], stage_cfg["name"], int(b["wave"])]
+	_stage_lbl.text = "%s %s  ・  第 %d 幕" % [stage_cfg["icon"], stage_cfg["name"], int(b["wave"])]
 	_mode_lbl.text = mode_cfg["label"]
-	_enemy_count_lbl.text = "👹 剩餘: %d" % enemy_count
+	_enemy_count_lbl.text = "👹 剩餘 %d" % enemy_count
 
 	_endless_lbl.visible = GameState.is_endless_mode()
 	if _endless_lbl.visible:
@@ -710,9 +746,9 @@ func refresh(enemy_count: int, boss: Enemy3D) -> void:
 	_sp_pts_lbl.text = "✨ %dpt" % int(p["skill_points"])
 
 	if _is_mobile_ui:
-		_btn_sig.text = "%s %s\n%s (30SP)" % [char_cfg["sig_icon"], char_cfg["sig_key"], char_cfg["sig_name"]]
+		_btn_sig.text = "%s\n%s\n30SP" % [char_cfg["sig_icon"], char_cfg["sig_key"]]
 	else:
-		_btn_sig.text = "%s [E] %s\n%s (30SP)" % [char_cfg["sig_icon"], char_cfg["sig_key"], char_cfg["sig_name"]]
+		_btn_sig.text = "%s [E]\n%s\n30SP" % [char_cfg["sig_icon"], char_cfg["sig_key"]]
 	_btn_sig.disabled = float(b["sp"]) < 30.0
 	_btn_ult.disabled = float(b["sp"]) < 70.0
 

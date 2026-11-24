@@ -14,6 +14,7 @@ const MAIN_MENU_SCENE_PATH: String = "res://scenes/main_menu.tscn"
 @onready var result_modal: ResultModal = $UILayer/ResultModal
 
 var _opened_upgrade_from_pause: bool = false
+var _was_mouse_captured: bool = false
 
 
 func _ready() -> void:
@@ -125,6 +126,7 @@ func _lock_mouse() -> void:
 
 
 func _unlock_mouse() -> void:
+	_was_mouse_captured = false
 	if Input.mouse_mode != Input.MOUSE_MODE_VISIBLE:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
@@ -140,6 +142,16 @@ func _process(_delta: float) -> void:
 		return
 	var in_combat: bool = bool(GameState.battle["active"]) and (not bool(GameState.battle["paused"])) and (not _has_any_modal_open())
 	var locked: bool = (Input.mouse_mode == Input.MOUSE_MODE_CAPTURED)
+
+	# In Web browsers, pressing ESC exits Pointer Lock natively without emitting KEY_ESCAPE.
+	# Detect that CAPTURED -> VISIBLE transition during active combat and open Pause UI immediately!
+	if in_combat and (not hud_ui.is_mobile_mode()) and _was_mouse_captured and (not locked):
+		_was_mouse_captured = false
+		_open_pause_menu()
+		hud_ui.set_mouse_lock_ui(false, false, false)
+		return
+
+	_was_mouse_captured = locked and in_combat
 	hud_ui.set_mouse_lock_ui(locked, in_combat, in_combat)
 
 
@@ -166,12 +178,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				_resume_from_pause()
 				get_viewport().set_input_as_handled()
 			elif not chant_overlay.visible and not upgrade_modal.visible and not blessing_modal.visible and not result_modal.visible:
-				if ke.keycode == KEY_ESCAPE and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-					_unlock_mouse()
-					get_viewport().set_input_as_handled()
-				else:
-					_open_pause_menu()
-					get_viewport().set_input_as_handled()
+				# ESC or P ALWAYS opens the Pause UI directly (and unlocks the mouse!)
+				_open_pause_menu()
+				get_viewport().set_input_as_handled()
 
 
 func _open_pause_menu() -> void:

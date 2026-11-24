@@ -78,7 +78,7 @@ func _build_ui() -> void:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override(
 		"panel",
-		UiStyle.make_panel("#0f172a", 0.92, "#fbbf24", 0.65, 22, 2, 24 if is_mob else 24, 18)
+		UiStyle.make_shrine_modal("#090e1d", "#e8c474", 24, 26, 20)
 	)
 	if is_mob:
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -89,7 +89,7 @@ func _build_ui() -> void:
 		center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		margin.add_child(center)
-		panel.custom_minimum_size = Vector2(960, 640)
+		panel.custom_minimum_size = Vector2(980, 650)
 		center.add_child(panel)
 
 	var scroll := ScrollContainer.new()
@@ -100,7 +100,7 @@ func _build_ui() -> void:
 
 	var vbox := VBoxContainer.new()
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.add_theme_constant_override("separation", 18 if is_mob else 14)
+	vbox.add_theme_constant_override("separation", 16 if is_mob else 13)
 	scroll.add_child(vbox)
 
 	# ==================== HEADER ====================
@@ -113,7 +113,7 @@ func _build_ui() -> void:
 	header.add_child(title_box)
 
 	var ver_lbl := Label.new()
-	ver_lbl.text = "Ver 2.0 資料片｜百鬼夜行・新角色與新關卡（Godot 4.3 主選單）"
+	ver_lbl.text = "✨  Ver 2.0 資料片｜百鬼夜行・越肩動作版  ✨"
 	ver_lbl.add_theme_font_size_override("font_size", 16 if is_mob else 12)
 	ver_lbl.add_theme_color_override("font_color", Color.html("#fda4af"))
 	title_box.add_child(ver_lbl)
@@ -121,7 +121,7 @@ func _build_ui() -> void:
 	var main_title := Label.new()
 	main_title.text = "⛩️ 言霊剣士・あの一撃 3D"
 	main_title.add_theme_font_size_override("font_size", 36 if is_mob else 28)
-	main_title.add_theme_color_override("font_color", Color.html("#fcd34d"))
+	main_title.add_theme_color_override("font_color", Color.html("#fef3c7"))
 	title_box.add_child(main_title)
 
 	# Player Stats + Quick Prep Buttons
@@ -130,28 +130,31 @@ func _build_ui() -> void:
 	header.add_child(header_right)
 
 	var stat_panel := PanelContainer.new()
-	stat_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#1e293b", 0.95, "#fbbf24", 0.45, 12, 1, 14, 8))
+	stat_panel.add_theme_stylebox_override("panel", UiStyle.make_pill("#0d152b", 0.92, "#e8c474", 0.45, 16, 8))
 	_stats_badge_lbl = Label.new()
 	_stats_badge_lbl.add_theme_font_size_override("font_size", 18 if is_mob else 13)
-	_stats_badge_lbl.add_theme_color_override("font_color", Color.html("#fde68a"))
+	_stats_badge_lbl.add_theme_color_override("font_color", Color.html("#fef3c7"))
 	stat_panel.add_child(_stats_badge_lbl)
 	header_right.add_child(stat_panel)
 
-	var btn_h := 58 if is_mob else 38
+	var btn_h := 58 if is_mob else 40
 	var btn_fs := 19 if is_mob else 13
 	for item in [
-		["⚡ 技能", "#fbbf24", "#fcd34d", "skills"],
-		["🎒 裝備", "#34d399", "#6ee7b7", "equip"],
-		["🦊 式神", "#f472b6", "#f9a8d4", "shikigami"],
+		["⚡ 技能", "#e8c474", "#fef3c7", "skills"],
+		["🎒 裝備", "#34d399", "#a7f3d0", "equip"],
+		["🦊 式神", "#f472b6", "#fbcfe8", "shikigami"],
 	]:
 		var b := Button.new()
+		b.focus_mode = Control.FOCUS_NONE
 		b.text = item[0]
-		b.custom_minimum_size = Vector2(110 if is_mob else 74, btn_h)
+		b.custom_minimum_size = Vector2(110 if is_mob else 76, btn_h)
 		b.add_theme_font_size_override("font_size", btn_fs)
-		UiStyle.apply_button(b, "#1e293b", item[1], item[2], 12, 2 if is_mob else 1, 0.95)
+		UiStyle.apply_button(b, "#131c36", item[1], item[2], 18, 2 if is_mob else 1, 0.94)
 		var tab_id: String = item[3]
 		b.pressed.connect(func() -> void: _upgrade_modal.open_modal(tab_id))
 		header_right.add_child(b)
+
+	vbox.add_child(UiStyle.make_divider("#e6c37a", 0.30, 1))
 
 	if is_mob:
 		var fs_btn := Button.new()

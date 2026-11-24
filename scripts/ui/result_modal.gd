@@ -29,21 +29,23 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(640 if is_mob else 460, 0)
-	panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.96, "#fbbf24", 0.85, 24, 2, 28, 24))
+	panel.custom_minimum_size = Vector2(640 if is_mob else 470, 0)
+	panel.add_theme_stylebox_override("panel", UiStyle.make_shrine_modal("#090e1d", "#e8c474", 24, 30, 26))
 	center.add_child(panel)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 18)
+	vbox.add_theme_constant_override("separation", 16)
 	panel.add_child(vbox)
 
 	_title_lbl = Label.new()
 	_title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title_lbl.add_theme_font_size_override("font_size", 36 if is_mob else 25)
+	_title_lbl.add_theme_font_size_override("font_size", 36 if is_mob else 26)
 	vbox.add_child(_title_lbl)
 
+	vbox.add_child(UiStyle.make_divider("#e6c37a", 0.38, 1))
+
 	var info_card := PanelContainer.new()
-	info_card.add_theme_stylebox_override("panel", UiStyle.make_panel("#0b1120", 0.95, "#334155", 0.9, 16, 1, 18, 14))
+	info_card.add_theme_stylebox_override("panel", UiStyle.make_panel("#0d152b", 0.90, "#e6c37a", 0.28, 16, 1, 20, 16, 8))
 	vbox.add_child(info_card)
 
 	_summary_lbl = Label.new()
@@ -56,10 +58,11 @@ func _build_ui() -> void:
 	var btn_fs := 23 if is_mob else 16
 
 	var replay_btn := Button.new()
+	replay_btn.focus_mode = Control.FOCUS_NONE
 	replay_btn.text = "🔄 再戰一場"
 	replay_btn.custom_minimum_size = Vector2(0, btn_h)
 	replay_btn.add_theme_font_size_override("font_size", btn_fs)
-	UiStyle.apply_button(replay_btn, "#dc2626", "#fde68a", "#ffffff", 14, 2, 1.0)
+	UiStyle.apply_button(replay_btn, "#be123c", "#fde68a", "#ffffff", 16, 2, 1.0)
 	replay_btn.pressed.connect(func() -> void:
 		visible = false
 		replay_pressed.emit()
@@ -67,10 +70,11 @@ func _build_ui() -> void:
 	vbox.add_child(replay_btn)
 
 	var menu_btn := Button.new()
+	menu_btn.focus_mode = Control.FOCUS_NONE
 	menu_btn.text = "⛩️ 返回主選單（更換角色／關卡）"
 	menu_btn.custom_minimum_size = Vector2(0, btn_h)
 	menu_btn.add_theme_font_size_override("font_size", btn_fs)
-	UiStyle.apply_button(menu_btn, "#1e293b", "#94a3b8", "#f8fafc", 14, 2, 0.96)
+	UiStyle.apply_button(menu_btn, "#172038", "#e6c37a", "#fef3c7", 16, 1, 0.96)
 	menu_btn.pressed.connect(func() -> void:
 		visible = false
 		return_to_menu_pressed.emit()

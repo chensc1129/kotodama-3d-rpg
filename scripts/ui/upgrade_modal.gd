@@ -39,7 +39,7 @@ func _build_ui() -> void:
 	add_child(margin)
 
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0f172a", 0.96, "#fbbf24", 0.75, 22, 2, 24, 18))
+	panel.add_theme_stylebox_override("panel", UiStyle.make_shrine_modal("#090e1d", "#e8c474", 24, 26, 20))
 	if is_mob:
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -49,7 +49,7 @@ func _build_ui() -> void:
 		center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		margin.add_child(center)
-		panel.custom_minimum_size = Vector2(780, 560)
+		panel.custom_minimum_size = Vector2(820, 580)
 		center.add_child(panel)
 
 	var vbox := VBoxContainer.new()
@@ -61,7 +61,7 @@ func _build_ui() -> void:
 	top_bar.add_theme_constant_override("separation", 10 if is_mob else 8)
 	vbox.add_child(top_bar)
 
-	var tab_h := 56 if is_mob else 40
+	var tab_h := 56 if is_mob else 42
 	var tab_fs := 20 if is_mob else 14
 	var tabs := [
 		["skills", "⚡ 技能升級"],
@@ -70,8 +70,9 @@ func _build_ui() -> void:
 	]
 	for t in tabs:
 		var btn := Button.new()
+		btn.focus_mode = Control.FOCUS_NONE
 		btn.text = t[1]
-		btn.custom_minimum_size = Vector2(180 if is_mob else 130, tab_h)
+		btn.custom_minimum_size = Vector2(180 if is_mob else 136, tab_h)
 		btn.add_theme_font_size_override("font_size", tab_fs)
 		var tab_id: String = t[0]
 		btn.pressed.connect(func() -> void: switch_tab(tab_id))
@@ -83,16 +84,19 @@ func _build_ui() -> void:
 	top_bar.add_child(spacer)
 
 	var close_btn := Button.new()
+	close_btn.focus_mode = Control.FOCUS_NONE
 	close_btn.text = "✖ 關閉"
-	close_btn.custom_minimum_size = Vector2(120 if is_mob else 84, tab_h)
+	close_btn.custom_minimum_size = Vector2(120 if is_mob else 88, tab_h)
 	close_btn.add_theme_font_size_override("font_size", tab_fs)
-	UiStyle.apply_button(close_btn, "#1e293b", "#64748b", "#f8fafc", 12, 1, 0.95)
+	UiStyle.apply_button(close_btn, "#172038", "#94a3b8", "#f8fafc", 14, 1, 0.95)
 	close_btn.pressed.connect(close_modal)
 	top_bar.add_child(close_btn)
 
+	vbox.add_child(UiStyle.make_divider("#e6c37a", 0.32, 1))
+
 	# Resource Bar
 	var res_panel := PanelContainer.new()
-	res_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0b1120", 0.95, "#334155", 0.9, 12, 1, 16, 10))
+	res_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0d152b", 0.90, "#e6c37a", 0.30, 14, 1, 18, 10, 6))
 	vbox.add_child(res_panel)
 
 	var res_row := HBoxContainer.new()
