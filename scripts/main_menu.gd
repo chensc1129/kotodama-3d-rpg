@@ -154,7 +154,7 @@ func _build_ui() -> void:
 
 	if is_mob:
 		var fs_btn := Button.new()
-		fs_btn.text = "⛶ 橫向全螢幕"
+		fs_btn.text = "📱 橫向全螢幕"
 		fs_btn.custom_minimum_size = Vector2(150, btn_h)
 		fs_btn.add_theme_font_size_override("font_size", 18)
 		UiStyle.apply_button(fs_btn, "#0c4a6e", "#38bdf8", "#e0f2fe", 12, 2, 0.95)

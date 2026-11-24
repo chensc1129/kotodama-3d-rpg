@@ -83,7 +83,7 @@ func _build_ui() -> void:
 	top_bar.add_child(spacer)
 
 	var close_btn := Button.new()
-	close_btn.text = "✕ 關閉"
+	close_btn.text = "✖ 關閉"
 	close_btn.custom_minimum_size = Vector2(120 if is_mob else 84, tab_h)
 	close_btn.add_theme_font_size_override("font_size", tab_fs)
 	UiStyle.apply_button(close_btn, "#1e293b", "#64748b", "#f8fafc", 12, 1, 0.95)
