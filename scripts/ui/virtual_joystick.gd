@@ -12,8 +12,13 @@ var _mouse_active: bool = false
 
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(132, 132)
+	custom_minimum_size = Vector2(204, 204)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+
+
+func set_joystick_size(diameter: float) -> void:
+	custom_minimum_size = Vector2(diameter, diameter)
+	queue_redraw()
 
 
 func _draw() -> void:

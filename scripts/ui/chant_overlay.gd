@@ -181,9 +181,9 @@ func open_chant(skill_type: String, word: Dictionary, max_time: float) -> void:
 		var btn := Button.new()
 		btn.text = String(kana)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.custom_minimum_size = Vector2(0, 44)
-		btn.add_theme_font_size_override("font_size", 17)
-		UiStyle.apply_button(btn, "#1e293b", "#fbbf24", "#ffffff", 12, 1, 0.95)
+		btn.custom_minimum_size = Vector2(0, 56 if UiStyle.is_mobile_device() else 46)
+		btn.add_theme_font_size_override("font_size", 21 if UiStyle.is_mobile_device() else 17)
+		UiStyle.apply_button(btn, "#1e293b", "#fbbf24", "#ffffff", 14, 2, 0.95)
 		var picked: String = String(kana)
 		btn.pressed.connect(func() -> void:
 			_finish(picked == String(_word.get("kana", "")), false)
@@ -191,7 +191,8 @@ func open_chant(skill_type: String, word: Dictionary, max_time: float) -> void:
 		_choices_grid.add_child(btn)
 
 	visible = true
-	_input_edit.grab_focus()
+	if not UiStyle.is_mobile_device():
+		_input_edit.grab_focus()
 
 
 func _submit_input() -> void:

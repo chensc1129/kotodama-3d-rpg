@@ -1,6 +1,17 @@
 class_name UiStyle
 extends RefCounted
-## Reusable dark-slate glassmorphism StyleBox helpers for consistent Godot UI styling.
+## Reusable dark-slate glassmorphism StyleBox helpers and responsive device detection.
+
+
+static func is_mobile_device() -> bool:
+	if OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios"):
+		return true
+	if OS.has_feature("web"):
+		var res: Variant = JavaScriptBridge.eval(
+			"(function(){try{return window.matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);}catch(e){return false;}})()"
+		)
+		return bool(res)
+	return false
 
 
 static func make_panel(
