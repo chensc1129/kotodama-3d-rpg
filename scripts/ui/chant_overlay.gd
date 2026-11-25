@@ -160,7 +160,7 @@ func _build_ui() -> void:
 	body_container.add_child(action_col)
 
 	var choice_lbl := Label.new()
-	choice_lbl.text = "✨ 點選正確平假名發動（2.2秒內神速答對享 1.5 倍暴擊！）" if is_mob else "✨ 點選或按 1-4 鍵選擇正確讀音（2.2秒內神速答對享 1.5 倍暴擊！）"
+	choice_lbl.text = "✨ 點選正確平假名發動（2.2秒內神速答對享 1.35 倍暴擊！）" if is_mob else "✨ 點選或按 1-4 鍵選擇正確讀音（2.2秒內神速答對享 1.35 倍暴擊！）"
 	choice_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	choice_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	choice_lbl.add_theme_font_size_override("font_size", 15 if is_mob else 13)

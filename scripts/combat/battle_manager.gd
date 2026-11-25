@@ -338,8 +338,8 @@ func perform_attack_a() -> void:
 
 	var stats := GameState.get_computed_stats()
 	var normal_lv: int = int(GameState.player["skills"].get("normal_a", 1))
-	var skill_mult: float = 1.0 + float(normal_lv - 1) * 0.14
-	var sakura_mult: float = 1.25 if _in_sakura_buff else 1.0
+	var skill_mult: float = 1.0 + float(normal_lv - 1) * 0.08
+	var sakura_mult: float = 1.20 if _in_sakura_buff else 1.0
 
 	var vfx_color := Color.html("#fbbf24") if step == 3 else Color.html(char_cfg["color_primary"])
 	if player != null:
@@ -381,15 +381,15 @@ func perform_attack_a() -> void:
 			var tag := crit_tag if step == 3 else base_tag
 			var is_crit := (step == 3)
 
-			# High-Ground Advantage (+20% damage when attacking from elevated terrain or mid-air!)
+			# High-Ground Advantage (+15% damage when attacking from elevated terrain or mid-air!)
 			if player.position.y > en.position.y + 0.70:
-				dmg = int(round(float(dmg) * 1.20))
+				dmg = int(round(float(dmg) * 1.15))
 				if step != 3:
 					tag = "⛰️高地斬"
 
 			# Petrified Shatter Crit (Sakura synergy)
 			if en.petrify_timer > 0.0:
-				var stone_bonus := 1.5 + float(b["blessings"].get("stone_bonus", 0.0))
+				var stone_bonus := 1.35 + float(b["blessings"].get("stone_bonus", 0.0))
 				dmg = int(round(float(dmg) * stone_bonus))
 				tag = "🪨碎石暴擊!"
 				is_crit = true
@@ -398,7 +398,7 @@ func perform_attack_a() -> void:
 
 			# Electro vulnerability bonus (Raijin synergy)
 			if en.shock_timer > 0.0:
-				dmg = int(round(float(dmg) * 1.25))
+				dmg = int(round(float(dmg) * 1.20))
 
 			# Per-Hero 3rd-Hit Signature Micro-Effect!
 			if step == 3:
@@ -578,12 +578,12 @@ func complete_skill_chant(is_success: bool, is_typed_perfect: bool) -> void:
 	AudioManager.speak_japanese(String(word.get("kana", "")))
 	AudioManager.play_sfx("skill")
 
-	var crit_mult: float = 1.5 if is_typed_perfect else 1.0
+	var crit_mult: float = 1.35 if is_typed_perfect else 1.0
 	var stats := GameState.get_computed_stats()
 
 	if skill_type == "ult":
 		var ult_lv: int = int(GameState.player["skills"].get("ult_skill", 1))
-		var ult_mult: float = 1.0 + float(ult_lv - 1) * 0.22
+		var ult_mult: float = 1.0 + float(ult_lv - 1) * 0.11
 		var vfx_type: String = String(word.get("vfx", "sacred_halo"))
 		var w_col := Color.html(String(word.get("color", "#fbbf24")))
 		var w_icon: String = String(word.get("icon", "🌟"))
@@ -592,11 +592,11 @@ func complete_skill_chant(is_success: bool, is_typed_perfect: bool) -> void:
 
 		var archetype_dmg_mult := 1.0
 		if vfx_type == "sword_rain":
-			archetype_dmg_mult = 1.25
+			archetype_dmg_mult = 1.20
 		elif vfx_type == "lightning":
-			archetype_dmg_mult = 1.15
+			archetype_dmg_mult = 1.12
 
-		var dmg := int(round(float(stats["atk"]) * 3.8 * ult_mult * crit_mult * archetype_dmg_mult))
+		var dmg := int(round(float(stats["atk"]) * 2.8 * ult_mult * crit_mult * archetype_dmg_mult))
 		if player != null:
 			spawn_kotodama_vfx(player.position, word, is_typed_perfect)
 			spawn_ring_vfx(player.position, w_col, 18.0, 0.78)
@@ -658,7 +658,7 @@ func complete_skill_chant(is_success: bool, is_typed_perfect: bool) -> void:
 				damage_enemy(en, dmg, dmg_tag, w_col.lerp(Color.WHITE, 0.35))
 		if ult_hit:
 			hit_landed.emit(true)
-		var perfect_prefix := "🌟 完美詠唱 1.5x！" if is_typed_perfect else ""
+		var perfect_prefix := "🌟 神速詠唱 1.35x！" if is_typed_perfect else ""
 		GameState.toast_requested.emit("%s%s「%s」%s爆發！" % [perfect_prefix, w_icon, w_kanji, w_label])
 	else:
 		if player != null and not word.is_empty():
@@ -671,13 +671,13 @@ func complete_skill_chant(is_success: bool, is_typed_perfect: bool) -> void:
 func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 	var char_cfg: Dictionary = GameData.get_character(GameState.player["char_id"])
 	var sig_lv: int = int(GameState.player["skills"].get("sig_skill", 1))
-	var sig_mult: float = 1.0 + float(sig_lv - 1) * 0.20
+	var sig_mult: float = 1.0 + float(sig_lv - 1) * 0.10
 	var cid: String = char_cfg["id"]
 	var any_hit: bool = false
 
 	if cid == "sakura":
-		var duration: float = 5.0 + float(sig_lv - 1) * 0.35
-		var dmg := int(round(float(stats["atk"]) * 1.6 * sig_mult * crit_mult))
+		var duration: float = 4.6 + float(sig_lv - 1) * 0.25
+		var dmg := int(round(float(stats["atk"]) * 1.45 * sig_mult * crit_mult))
 		spawn_ring_vfx(player.position, Color.html("#f472b6"), 13.0, 0.65)
 		for en: Enemy3D in enemies.duplicate():
 			if is_instance_valid(en) and not en.dead and en.position.distance_to(player.position) <= 13.5:
@@ -694,12 +694,12 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 		var forward := Vector3(sin(player.facing), 0.0, cos(player.facing))
 		player.position += forward * 4.0
 		player.clamp_to_arena()
-		var dmg := int(round(float(stats["atk"]) * 2.9 * sig_mult * crit_mult))
+		var dmg := int(round(float(stats["atk"]) * 2.35 * sig_mult * crit_mult))
 		spawn_ring_vfx(player.position, Color.html("#38bdf8"), 9.5, 0.55)
 		for en: Enemy3D in enemies.duplicate():
 			if is_instance_valid(en) and not en.dead and en.position.distance_to(player.position) <= 9.5:
 				any_hit = true
-				en.stun_timer = 2.6
+				en.stun_timer = 2.4
 				var push := en.position - player.position
 				push.y = 0.0
 				en.trigger_hit_react(push, true)
@@ -710,30 +710,30 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 				damage_enemy(en, dmg, "🦶超烈風神腳!", Color.html("#7dd3fc"))
 		GameState.toast_requested.emit("🦶「腳」超烈風神腳！轟飛並暈眩周圍妖怪！")
 	elif cid == "raijin":
-		var dmg := int(round(float(stats["atk"]) * 2.6 * sig_mult * crit_mult))
+		var dmg := int(round(float(stats["atk"]) * 2.15 * sig_mult * crit_mult))
 		spawn_ring_vfx(player.position, Color.html("#facc15"), 12.0, 0.60)
 		for en: Enemy3D in enemies.duplicate():
 			if is_instance_valid(en) and not en.dead and en.position.distance_to(player.position) <= 12.0:
 				any_hit = true
-				en.shock_timer = 5.0
+				en.shock_timer = 4.6
 				en.trigger_hit_react(en.position - player.position, true)
 				spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#facc15"), true, 1.25)
 				damage_enemy(en, dmg, "⚡九天雷鳴!", Color.html("#fef08a"))
 		GameState.toast_requested.emit("⚡「雷光」九天雷鳴陣！妖怪陷入感電易傷狀態！")
 	elif cid == "yukionna":
-		var dmg := int(round(float(stats["atk"]) * 2.2 * sig_mult * crit_mult))
+		var dmg := int(round(float(stats["atk"]) * 1.90 * sig_mult * crit_mult))
 		spawn_ring_vfx(player.position, Color.html("#06b6d4"), 12.5, 0.65)
 		for en: Enemy3D in enemies.duplicate():
 			if is_instance_valid(en) and not en.dead and en.position.distance_to(player.position) <= 12.5:
 				any_hit = true
-				en.freeze_timer = 4.5
+				en.freeze_timer = 4.2
 				en.frost_tick_timer = 0.6
 				en.trigger_hit_react(en.position - player.position, true)
 				spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#67e8f9"), true, 1.2)
 				damage_enemy(en, dmg, "❄️絶対零度!", Color.html("#67e8f9"))
 		GameState.toast_requested.emit("❄️「冰結」絶対零度氷華！凍結周圍妖怪！")
 	else:
-		var dmg := int(round(float(stats["atk"]) * 2.75 * sig_mult * crit_mult))
+		var dmg := int(round(float(stats["atk"]) * 2.25 * sig_mult * crit_mult))
 		spawn_ring_vfx(player.position, Color.html("#ef4444"), 10.5, 0.60)
 		for en: Enemy3D in enemies.duplicate():
 			if is_instance_valid(en) and not en.dead and en.position.distance_to(player.position) <= 10.5:

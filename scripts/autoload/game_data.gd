@@ -222,20 +222,20 @@ const GAME_MODES: Array = [
 
 const EQUIPMENT_LIST: Array = [
 	{"id": "w1", "slot": "weapon", "name": "木霊の練習刀", "icon": "🗡️", "atk": 6, "hp": 0, "cost": 0, "blade_color": "#d6d3d1"},
-	{"id": "w2", "slot": "weapon", "name": "桜吹雪・太刀", "icon": "🌸", "atk": 16, "hp": 15, "cost": 180, "blade_color": "#f472b6"},
-	{"id": "w3", "slot": "weapon", "name": "雷切・黄金丸", "icon": "⚡", "atk": 30, "hp": 25, "cost": 420, "blade_color": "#facc15"},
-	{"id": "w4", "slot": "weapon", "name": "氷輪・蒼穹刃", "icon": "❄️", "atk": 48, "hp": 40, "cost": 850, "blade_color": "#38bdf8"},
-	{"id": "w5", "slot": "weapon", "name": "天叢雲・神滅剣", "icon": "👑", "atk": 75, "hp": 80, "cost": 1600, "blade_color": "#f97316"},
+	{"id": "w2", "slot": "weapon", "name": "桜吹雪・太刀", "icon": "🌸", "atk": 12, "hp": 10, "cost": 180, "blade_color": "#f472b6"},
+	{"id": "w3", "slot": "weapon", "name": "雷切・黄金丸", "icon": "⚡", "atk": 20, "hp": 20, "cost": 420, "blade_color": "#facc15"},
+	{"id": "w4", "slot": "weapon", "name": "氷輪・蒼穹刃", "icon": "❄️", "atk": 30, "hp": 32, "cost": 850, "blade_color": "#38bdf8"},
+	{"id": "w5", "slot": "weapon", "name": "天叢雲・神滅剣", "icon": "👑", "atk": 42, "hp": 48, "cost": 1600, "blade_color": "#f97316"},
 
 	{"id": "a1", "slot": "armor", "name": "道場稽古着", "icon": "🥋", "atk": 0, "hp": 20, "cost": 0, "aura_color": "#94a3b8"},
-	{"id": "a2", "slot": "armor", "name": "緋袴・巫女装束", "icon": "👘", "atk": 5, "hp": 65, "cost": 200, "aura_color": "#f43f5e"},
-	{"id": "a3", "slot": "armor", "name": "黒鉄・武者鎧", "icon": "🛡️", "atk": 12, "hp": 130, "cost": 480, "aura_color": "#3b82f6"},
-	{"id": "a4", "slot": "armor", "name": "龍鱗・神楽羽織", "icon": "🐉", "atk": 24, "hp": 240, "cost": 980, "aura_color": "#10b981"},
+	{"id": "a2", "slot": "armor", "name": "緋袴・巫女装束", "icon": "👘", "atk": 4, "hp": 48, "cost": 200, "aura_color": "#f43f5e"},
+	{"id": "a3", "slot": "armor", "name": "黒鉄・武者鎧", "icon": "🛡️", "atk": 9, "hp": 84, "cost": 480, "aura_color": "#3b82f6"},
+	{"id": "a4", "slot": "armor", "name": "龍鱗・神楽羽織", "icon": "🐉", "atk": 15, "hp": 130, "cost": 980, "aura_color": "#10b981"},
 
-	{"id": "r1", "slot": "accessory", "name": "お守り・木札", "icon": "🧿", "atk": 3, "hp": 15, "cost": 0, "gem_color": "#a8a29e"},
-	{"id": "r2", "slot": "accessory", "name": "八尺瓊・翡翠勾玉", "icon": "📿", "atk": 14, "hp": 50, "cost": 260, "gem_color": "#34d399"},
-	{"id": "r3", "slot": "accessory", "name": "狐火・霊珠", "icon": "🔮", "atk": 28, "hp": 90, "cost": 600, "gem_color": "#c084fc"},
-	{"id": "r4", "slot": "accessory", "name": "太陽神・八咫鏡", "icon": "☀️", "atk": 45, "hp": 160, "cost": 1350, "gem_color": "#fbbf24"},
+	{"id": "r1", "slot": "accessory", "name": "お守り・木札", "icon": "🧿", "atk": 3, "hp": 12, "cost": 0, "gem_color": "#a8a29e"},
+	{"id": "r2", "slot": "accessory", "name": "八尺瓊・翡翠勾玉", "icon": "📿", "atk": 9, "hp": 32, "cost": 260, "gem_color": "#34d399"},
+	{"id": "r3", "slot": "accessory", "name": "狐火・霊珠", "icon": "🔮", "atk": 16, "hp": 58, "cost": 600, "gem_color": "#c084fc"},
+	{"id": "r4", "slot": "accessory", "name": "太陽神・八咫鏡", "icon": "☀️", "atk": 24, "hp": 92, "cost": 1350, "gem_color": "#fbbf24"},
 ]
 
 const SHIKIGAMI_LIST: Array = [
@@ -248,16 +248,16 @@ const SHIKIGAMI_LIST: Array = [
 const MONSTER_TEMPLATES: Array = [
 	{"id": "chochin", "name": "提灯小鬼", "color": "#f97316", "hp_mult": 1.0, "spd": 3.8, "atk": 10, "scale": 1.0, "ranged": false},
 	{"id": "kasa", "name": "傘妖・跳躍者", "color": "#a855f7", "hp_mult": 1.15, "spd": 4.6, "atk": 12, "scale": 1.05, "ranged": false},
-	{"id": "aooni", "name": "青鬼武者", "color": "#2563eb", "hp_mult": 1.6, "spd": 3.4, "atk": 16, "scale": 1.25, "ranged": false},
-	{"id": "kyubi", "name": "九尾妖狐", "color": "#facc15", "hp_mult": 1.35, "spd": 4.1, "atk": 15, "scale": 1.15, "ranged": true},
-	{"id": "jorogumo", "name": "絡新婦・毒蛛", "color": "#10b981", "hp_mult": 1.45, "spd": 4.8, "atk": 14, "scale": 1.15, "ranged": true},
-	{"id": "dogu", "name": "古代土偶石魔", "color": "#78716c", "hp_mult": 2.1, "spd": 2.7, "atk": 20, "scale": 1.35, "ranged": false},
+	{"id": "aooni", "name": "青鬼武者", "color": "#2563eb", "hp_mult": 1.55, "spd": 3.4, "atk": 15, "scale": 1.25, "ranged": false},
+	{"id": "kyubi", "name": "九尾妖狐", "color": "#facc15", "hp_mult": 1.35, "spd": 4.1, "atk": 14, "scale": 1.15, "ranged": true},
+	{"id": "jorogumo", "name": "絡新婦・毒蛛", "color": "#10b981", "hp_mult": 1.45, "spd": 4.8, "atk": 13, "scale": 1.15, "ranged": true},
+	{"id": "dogu", "name": "古代土偶石魔", "color": "#78716c", "hp_mult": 2.0, "spd": 2.7, "atk": 18, "scale": 1.35, "ranged": false},
 ]
 
 const BOSS_TEMPLATES: Array = [
-	{"id": "akaoni_boss", "name": "赤鬼大将・獄炎", "color": "#dc2626", "hp_mult": 6.5, "spd": 3.6, "atk": 26, "scale": 2.1, "ranged": true},
-	{"id": "tengu_boss", "name": "大天狗・覇王", "color": "#4f46e5", "hp_mult": 7.5, "spd": 4.5, "atk": 30, "scale": 2.2, "ranged": true},
-	{"id": "orochi_boss", "name": "八岐大蛇・幻影", "color": "#059669", "hp_mult": 9.0, "spd": 3.9, "atk": 34, "scale": 2.4, "ranged": true},
+	{"id": "akaoni_boss", "name": "赤鬼大将・獄炎", "color": "#dc2626", "hp_mult": 6.2, "spd": 3.6, "atk": 22, "scale": 2.1, "ranged": true},
+	{"id": "tengu_boss", "name": "大天狗・覇王", "color": "#4f46e5", "hp_mult": 7.2, "spd": 4.5, "atk": 26, "scale": 2.2, "ranged": true},
+	{"id": "orochi_boss", "name": "八岐大蛇・幻影", "color": "#059669", "hp_mult": 8.5, "spd": 3.9, "atk": 30, "scale": 2.4, "ranged": true},
 ]
 
 const JAPANESE_CHANT_WORDS: Array = [
@@ -301,11 +301,11 @@ const JAPANESE_CHANT_WORDS: Array = [
 ]
 
 const BLESSINGS_POOL: Array = [
-	{"id": "atk", "title": "⚔️ 鬼神剛力", "desc": "全攻擊力永久 +18%"},
-	{"id": "hp", "title": "❤️ 不動明王體", "desc": "最大 HP +20% 並立即回復 40% HP"},
-	{"id": "stone", "title": "🪨 碎石破甲奧義", "desc": "對石化/控場怪物傷害額外 +35%"},
-	{"id": "lifesteal", "title": "🩸 妖刀吸血", "desc": "每次「あ」命中回復 12% 攻擊力 HP"},
-	{"id": "speed", "title": "⚡ 神速疾風步", "desc": "移動速度 +12% 並立即補滿 100 SP"},
+	{"id": "atk", "title": "⚔️ 鬼神剛力", "desc": "全攻擊力 +10%（上限 +80%）"},
+	{"id": "hp", "title": "❤️ 不動明王體", "desc": "最大 HP +12%（上限 +96%）並回復 35% HP"},
+	{"id": "stone", "title": "🪨 碎石破甲奧義", "desc": "對控場怪物傷害 +20%（上限 +100%）"},
+	{"id": "lifesteal", "title": "🩸 妖刀吸血", "desc": "每次「あ」命中回復 6% 攻擊力 HP（上限 30%）"},
+	{"id": "speed", "title": "⚡ 神速疾風步", "desc": "移動速度 +7%（上限 +42%）並回復 80 SP"},
 ]
 
 const RANDOM_NAMES: Array[String] = [

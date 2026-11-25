@@ -55,11 +55,14 @@ func setup(tpl: Dictionary, p_is_boss: bool, wave_num: int, is_hard: bool) -> vo
 	primary_color = Color.html(tpl["color"])
 	_elapsed = randf() * TAU
 
-	var scale_factor: float = 1.0 + float(wave_num - 1) * 0.24 + (0.45 if is_hard else 0.0)
-	max_hp = int(round(75.0 * float(tpl["hp_mult"]) * scale_factor))
+	var scale_factor: float = 1.0 + float(wave_num - 1) * 0.22 + (0.35 if is_hard else 0.0)
+	if wave_num > 12:
+		scale_factor += float(wave_num - 12) * 0.08
+	max_hp = int(round(70.0 * float(tpl["hp_mult"]) * scale_factor))
 	hp = max_hp
-	move_speed = float(tpl["spd"]) * (1.15 if is_hard else 1.0)
-	atk = int(round(float(tpl["atk"]) * (1.0 + float(wave_num - 1) * 0.14) * (1.3 if is_hard else 1.0)))
+	move_speed = float(tpl["spd"]) * (1.12 if is_hard else 1.0)
+	var atk_scale: float = 1.0 + float(mini(wave_num - 1, 12)) * 0.11 + float(maxi(0, wave_num - 13)) * 0.07
+	atk = int(round(float(tpl["atk"]) * atk_scale * (1.25 if is_hard else 1.0)))
 	ranged = bool(tpl["ranged"]) or is_hard
 	atk_timer = 1.2 + randf() * 1.5
 

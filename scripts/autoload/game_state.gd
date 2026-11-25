@@ -154,8 +154,12 @@ func get_exp_to_next_level(lv: int) -> int:
 func get_computed_stats_base() -> Dictionary:
 	var char_cfg: Dictionary = GameData.get_character(player["char_id"])
 	var lv: int = int(player["level"])
-	var lv_bonus_hp: int = (lv - 1) * 18
-	var lv_bonus_atk: int = (lv - 1) * 4
+	# Smooth diminishing returns so late-game stats stay crisp & readable
+	var tier1: int = maxi(0, mini(lv, 15) - 1)
+	var tier2: int = maxi(0, mini(lv, 30) - 15)
+	var tier3: int = maxi(0, lv - 30)
+	var lv_bonus_hp: int = tier1 * 8 + tier2 * 5 + tier3 * 3
+	var lv_bonus_atk: int = int(round(float(tier1) * 2.0 + float(tier2) * 1.0 + float(tier3) * 0.5))
 
 	var equip_hp: int = 0
 	var equip_atk: int = 0
@@ -164,27 +168,27 @@ func get_computed_stats_base() -> Dictionary:
 		var eq: Dictionary = GameData.get_equipment(eq_id)
 		if not eq.is_empty():
 			var plus: int = int(player["equip_enhance"].get(eq_id, 0))
-			equip_hp += int(round(float(eq["hp"]) * (1.0 + float(plus) * 0.18)))
-			equip_atk += int(round(float(eq["atk"]) * (1.0 + float(plus) * 0.18)))
+			equip_hp += int(round(float(eq["hp"]) * (1.0 + float(plus) * 0.08)))
+			equip_atk += int(round(float(eq["atk"]) * (1.0 + float(plus) * 0.08)))
 
 	var dash_lv: int = int(player["skills"].get("dash_skill", 1))
 	return {
 		"max_hp": int(char_cfg["base_hp"]) + lv_bonus_hp + equip_hp,
 		"atk": int(char_cfg["base_atk"]) + lv_bonus_atk + equip_atk,
-		"speed": float(char_cfg["base_spd"]) * (1.0 + float(dash_lv - 1) * 0.03),
+		"speed": float(char_cfg["base_spd"]) * (1.0 + float(dash_lv - 1) * 0.02),
 	}
 
 
 func get_computed_stats() -> Dictionary:
 	var base := get_computed_stats_base()
 	var bless: Dictionary = battle.get("blessings", {})
-	var hp_mult: float = 1.0 + float(bless.get("hp_pct", 0.0))
-	var atk_mult: float = 1.0 + float(bless.get("atk_pct", 0.0))
-	var spd_pct: float = float(bless.get("spd_pct", 0.0))
+	var hp_mult: float = 1.0 + minf(0.96, float(bless.get("hp_pct", 0.0)))
+	var atk_mult: float = 1.0 + minf(0.80, float(bless.get("atk_pct", 0.0)))
+	var spd_pct: float = minf(0.42, float(bless.get("spd_pct", 0.0)))
 
 	var char_cfg: Dictionary = GameData.get_character(player["char_id"])
 	var dash_lv: int = int(player["skills"].get("dash_skill", 1))
-	var speed: float = float(char_cfg["base_spd"]) * (1.0 + float(dash_lv - 1) * 0.03 + spd_pct)
+	var speed: float = float(char_cfg["base_spd"]) * (1.0 + float(dash_lv - 1) * 0.02 + spd_pct)
 
 	return {
 		"max_hp": int(round(float(base["max_hp"]) * hp_mult)),
@@ -331,17 +335,29 @@ func apply_blessing(blessing_id: String) -> void:
 	var bless: Dictionary = battle["blessings"]
 	match blessing_id:
 		"atk":
-			bless["atk_pct"] = float(bless["atk_pct"]) + 0.18
+			if float(bless["atk_pct"]) < 0.80:
+				bless["atk_pct"] = minf(0.80, float(bless["atk_pct"]) + 0.10)
+			else:
+				player["gold"] = int(player["gold"]) + 120
+				toast_requested.emit("⚔️ 鬼神剛力已達上限，轉化為 120 金幣！")
 		"hp":
-			bless["hp_pct"] = float(bless["hp_pct"]) + 0.20
+			bless["hp_pct"] = minf(0.96, float(bless["hp_pct"]) + 0.12)
 			var st := get_computed_stats()
 			battle["max_hp"] = st["max_hp"]
-			battle["hp"] = mini(int(battle["max_hp"]), int(battle["hp"]) + int(round(float(battle["max_hp"]) * 0.4)))
+			battle["hp"] = mini(int(battle["max_hp"]), int(battle["hp"]) + int(round(float(battle["max_hp"]) * 0.35)))
 		"stone":
-			bless["stone_bonus"] = float(bless["stone_bonus"]) + 0.35
+			if float(bless["stone_bonus"]) < 1.00:
+				bless["stone_bonus"] = minf(1.00, float(bless["stone_bonus"]) + 0.20)
+			else:
+				player["gold"] = int(player["gold"]) + 120
+				toast_requested.emit("🪨 破甲奧義已達上限，轉化為 120 金幣！")
 		"lifesteal":
-			bless["lifesteal"] = float(bless["lifesteal"]) + 0.12
+			if float(bless["lifesteal"]) < 0.30:
+				bless["lifesteal"] = minf(0.30, float(bless["lifesteal"]) + 0.06)
+			else:
+				battle["hp"] = mini(int(battle["max_hp"]), int(battle["hp"]) + int(round(float(battle["max_hp"]) * 0.35)))
+				toast_requested.emit("🩸 妖刀吸血已達上限，轉化為立即回復 35% HP！")
 		"speed":
-			bless["spd_pct"] = float(bless["spd_pct"]) + 0.12
-			battle["sp"] = battle["max_sp"]
+			bless["spd_pct"] = minf(0.42, float(bless["spd_pct"]) + 0.07)
+			battle["sp"] = minf(float(battle["max_sp"]), float(battle["sp"]) + 80.0)
 	state_changed.emit()

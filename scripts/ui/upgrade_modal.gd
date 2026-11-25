@@ -201,10 +201,10 @@ func _render_content() -> void:
 
 	if _current_tab == "skills":
 		var items := [
-			{"key": "normal_a", "icon": "あ", "accent": "#f43f5e", "name": "「あ」三段斬撃奥義", "desc": "提升普攻三段連斬威力（每級 +14%）"},
-			{"key": "sig_skill", "icon": char_cfg["sig_icon"], "accent": char_cfg["color_primary"], "name": "專屬奧義・%s（%s）" % [char_cfg["sig_name"], char_cfg["sig_key"]], "desc": "提升角色專屬技能傷害與控場時間（每級 +20%）"},
-			{"key": "ult_skill", "icon": "🌟", "accent": "#f59e0b", "name": "全屏言靈大奧義（Q）", "desc": "提升 70 SP 言靈詠唱奧義毀滅傷害（每級 +22%）"},
-			{"key": "dash_skill", "icon": "💨", "accent": "#38bdf8", "name": "疾風瞬步體術", "desc": "提升移動速度並縮短衝刺冷卻時間"},
+			{"key": "normal_a", "icon": "あ", "accent": "#f43f5e", "name": "「あ」三段斬撃奥義", "desc": "提升普攻三段連斬威力（每級 +8%）"},
+			{"key": "sig_skill", "icon": char_cfg["sig_icon"], "accent": char_cfg["color_primary"], "name": "專屬奧義・%s（%s）" % [char_cfg["sig_name"], char_cfg["sig_key"]], "desc": "提升角色專屬技能傷害與控場時間（每級 +10%）"},
+			{"key": "ult_skill", "icon": "🌟", "accent": "#f59e0b", "name": "全屏言靈大奧義（Q）", "desc": "提升 70 SP 言靈詠唱奧義毀滅傷害（每級 +11%）"},
+			{"key": "dash_skill", "icon": "💨", "accent": "#38bdf8", "name": "疾風瞬步體術", "desc": "提升移動速度、最大體力並縮短衝刺冷卻時間"},
 		]
 		for sk in items:
 			var lv: int = int(GameState.player["skills"].get(sk["key"], 1))
@@ -274,8 +274,8 @@ func _render_content() -> void:
 			var is_eq: bool = GameState.player["equipped"].get(eq["slot"], "") == eq_id
 			var plus: int = int(GameState.player["equip_enhance"].get(eq_id, 0))
 			var enh_cost: int = 80 + plus * 60
-			var atk_val := int(round(float(eq["atk"]) * (1.0 + float(plus) * 0.18)))
-			var hp_val := int(round(float(eq["hp"]) * (1.0 + float(plus) * 0.18)))
+			var atk_val := int(round(float(eq["atk"]) * (1.0 + float(plus) * 0.08)))
+			var hp_val := int(round(float(eq["hp"]) * (1.0 + float(plus) * 0.08)))
 			var swatch_hex: String = String(eq.get("blade_color", eq.get("aura_color", eq.get("gem_color", "#94a3b8"))))
 
 			var row := _make_accent_row("#092226" if is_eq else "#0c1428", "#34d399" if is_eq else swatch_hex, is_eq)
