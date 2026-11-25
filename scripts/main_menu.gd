@@ -17,6 +17,7 @@ var _hero_spotlight_desc: Label
 var _stage_grid: GridContainer
 var _mode_grid: GridContainer
 var _upgrade_modal: UpgradeModal
+var _settings_modal: SettingsModal
 var _loading_overlay: ColorRect
 var _loading_panel: PanelContainer
 var _toast_panel: PanelContainer
@@ -186,6 +187,15 @@ func _build_ui() -> void:
 		fs_btn.pressed.connect(func() -> void: UiStyle.request_mobile_landscape_fullscreen())
 		header_right.add_child(fs_btn)
 
+	var set_btn := Button.new()
+	set_btn.focus_mode = Control.FOCUS_NONE
+	set_btn.text = "⚙️ 設定"
+	set_btn.custom_minimum_size = Vector2(106 if is_mob else 74, btn_h)
+	set_btn.add_theme_font_size_override("font_size", btn_fs)
+	UiStyle.apply_button(set_btn, "#131d38", "#94a3b8", "#e2e8f0", 18, 2 if is_mob else 1, 0.95)
+	set_btn.pressed.connect(func() -> void: _settings_modal.open_settings())
+	header_right.add_child(set_btn)
+
 	_audio_btn = Button.new()
 	_audio_btn.focus_mode = Control.FOCUS_NONE
 	_audio_btn.custom_minimum_size = Vector2(58 if is_mob else 42, btn_h)
@@ -322,6 +332,9 @@ func _build_ui() -> void:
 	# ==================== EMBEDDED UPGRADE & DICTIONARY MODAL ====================
 	_upgrade_modal = UpgradeModal.new()
 	add_child(_upgrade_modal)
+
+	_settings_modal = SettingsModal.new()
+	add_child(_settings_modal)
 
 	# ==================== TOAST ====================
 	var toast_center := CenterContainer.new()

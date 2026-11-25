@@ -7,6 +7,7 @@ signal resume_pressed
 signal restart_pressed
 signal upgrade_pressed
 signal dictionary_pressed
+signal settings_pressed
 signal return_to_menu_pressed
 
 var _backdrop: ColorRect
@@ -108,10 +109,13 @@ func _build_ui() -> void:
 	util_row.add_theme_constant_override("separation", 10)
 	vbox.add_child(util_row)
 
-	_audio_btn = _make_btn("🔊 音效：開啟", "#15203b", "#38bdf8", "#bae6fd", btn_h, btn_fs - 1, 1)
-	_audio_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_audio_btn.pressed.connect(func() -> void: AudioManager.toggle_audio())
-	util_row.add_child(_audio_btn)
+	var set_btn := _make_btn("⚙️ 設定與操作說明", "#132238", "#38bdf8", "#bae6fd", btn_h, btn_fs - 1, 1)
+	set_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	set_btn.pressed.connect(func() -> void:
+		visible = false
+		settings_pressed.emit()
+	)
+	util_row.add_child(set_btn)
 
 	var restart_btn := _make_btn("🔄 重新開局", "#1c1a30", "#f59e0b", "#fde68a", btn_h, btn_fs - 1, 1)
 	restart_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL

@@ -59,12 +59,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			_last_pos = mb.position
 	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
+		var sens: float = GameState.mouse_sens_mult
 		if is_captured:
-			cam_yaw -= mm.relative.x * 0.0040
-			cam_pitch = clampf(cam_pitch + mm.relative.y * 0.0034, -0.14, 0.95)
+			cam_yaw -= mm.relative.x * 0.0040 * sens
+			cam_pitch = clampf(cam_pitch + mm.relative.y * 0.0034 * sens, -0.14, 0.95)
 		elif _is_dragging:
-			cam_yaw -= mm.relative.x * 0.0068
-			cam_pitch = clampf(cam_pitch + mm.relative.y * 0.0058, -0.14, 0.95)
+			cam_yaw -= mm.relative.x * 0.0068 * sens
+			cam_pitch = clampf(cam_pitch + mm.relative.y * 0.0058 * sens, -0.14, 0.95)
 	elif event is InputEventScreenTouch:
 		var st := event as InputEventScreenTouch
 		if st.pressed and _drag_touch_index == -1:

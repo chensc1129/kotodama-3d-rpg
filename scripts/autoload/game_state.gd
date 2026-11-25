@@ -37,6 +37,7 @@ var player: Dictionary = {
 }
 
 var battle: Dictionary = {}
+var mouse_sens_mult: float = 1.0
 
 
 func _ready() -> void:

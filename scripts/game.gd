@@ -12,14 +12,20 @@ const MAIN_MENU_SCENE_PATH: String = "res://scenes/main_menu.tscn"
 @onready var blessing_modal: BlessingModal = $UILayer/BlessingModal
 @onready var pause_modal: PauseModal = $UILayer/PauseModal
 @onready var result_modal: ResultModal = $UILayer/ResultModal
+var settings_modal: SettingsModal
 
 var _opened_upgrade_from_pause: bool = false
+var _opened_settings_from_pause: bool = false
 var _was_mouse_captured: bool = false
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	get_tree().paused = false
+
+	settings_modal = SettingsModal.new()
+	settings_modal.name = "SettingsModal"
+	$UILayer.add_child(settings_modal)
 
 	# BattleManager -> UI
 	battle_manager.hud_updated.connect(_on_hud_updated)
@@ -55,6 +61,13 @@ func _ready() -> void:
 		get_tree().paused = true
 		upgrade_modal.open_modal(tab)
 	)
+	hud_ui.settings_requested.connect(func() -> void:
+		_opened_settings_from_pause = false
+		_unlock_mouse()
+		GameState.battle["paused"] = true
+		get_tree().paused = true
+		settings_modal.open_settings()
+	)
 	hud_ui.pause_requested.connect(_open_pause_menu)
 
 	# ChantOverlay -> BattleManager
@@ -74,7 +87,19 @@ func _ready() -> void:
 		if _opened_upgrade_from_pause:
 			_opened_upgrade_from_pause = false
 			pause_modal.open_pause()
-		elif not chant_overlay.visible and not blessing_modal.visible and not result_modal.visible:
+		elif not chant_overlay.visible and not blessing_modal.visible and not result_modal.visible and not settings_modal.visible:
+			GameState.battle["paused"] = false
+			get_tree().paused = false
+			_lock_mouse()
+		_on_hud_updated()
+	)
+
+	# SettingsModal -> Resume or return to PauseModal
+	settings_modal.modal_closed.connect(func() -> void:
+		if _opened_settings_from_pause:
+			_opened_settings_from_pause = false
+			pause_modal.open_pause()
+		elif not chant_overlay.visible and not blessing_modal.visible and not result_modal.visible and not upgrade_modal.visible:
 			GameState.battle["paused"] = false
 			get_tree().paused = false
 			_lock_mouse()
@@ -102,6 +127,11 @@ func _ready() -> void:
 		_unlock_mouse()
 		upgrade_modal.open_modal("dict")
 	)
+	pause_modal.settings_pressed.connect(func() -> void:
+		_opened_settings_from_pause = true
+		_unlock_mouse()
+		settings_modal.open_settings()
+	)
 	pause_modal.restart_pressed.connect(_restart_battle)
 	pause_modal.return_to_menu_pressed.connect(_return_to_main_menu)
 
@@ -120,7 +150,7 @@ func _exit_tree() -> void:
 
 
 func _has_any_modal_open() -> bool:
-	return chant_overlay.visible or upgrade_modal.visible or blessing_modal.visible or pause_modal.visible or result_modal.visible
+	return chant_overlay.visible or upgrade_modal.visible or blessing_modal.visible or pause_modal.visible or result_modal.visible or (settings_modal != null and settings_modal.visible)
 
 
 func _lock_mouse() -> void:
@@ -158,7 +188,7 @@ func _process(_delta: float) -> void:
 		return
 
 	_was_mouse_captured = locked and in_combat
-	hud_ui.set_mouse_lock_ui(locked, in_combat, in_combat)
+	hud_ui.set_mouse_lock_ui(locked, in_combat, false)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -179,7 +209,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var ke := event as InputEventKey
 		if ke.pressed and not ke.echo and (ke.keycode == KEY_ESCAPE or ke.keycode == KEY_P):
-			if pause_modal.visible:
+			if settings_modal != null and settings_modal.visible:
+				settings_modal.close_modal()
+				get_viewport().set_input_as_handled()
+			elif pause_modal.visible:
 				pause_modal.visible = false
 				_resume_from_pause()
 				get_viewport().set_input_as_handled()

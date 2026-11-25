@@ -909,6 +909,8 @@ func _process(delta: float) -> void:
 			player.facing = atan2(world_dx, world_dz)
 
 	if player != null:
+		if arena != null:
+			player.position = arena.resolve_obstacle_collision(player.position, 0.62)
 		var player_gy := _get_terrain_y(player.position.x, player.position.z, player.position.y)
 		var landed := player.update_vertical_physics(dt, player_gy)
 		if landed:
@@ -990,6 +992,8 @@ func _process(delta: float) -> void:
 		var stop_dist: float = 8.5 if en.ranged else 1.7
 		if dist > stop_dist and dist > 0.001:
 			en.position += to_player_flat.normalized() * en.move_speed * dt
+			if arena != null:
+				en.position = arena.resolve_obstacle_collision(en.position, 0.72 * en.scale.x)
 			en.clamp_to_arena()
 			en.position.y = lerpf(en.position.y, _get_terrain_y(en.position.x, en.position.z, en.position.y), clampf(dt * 14.0, 0.0, 1.0))
 
