@@ -84,6 +84,9 @@ var _btn_atk: Button
 var _toast_panel: PanelContainer
 var _toast_lbl: Label
 var _toast_timer: float = 0.0
+var _last_combo: int = 0
+var _boss_was_visible: bool = false
+var _last_char_id: String = ""
 var _crosshair: CrosshairReticle
 var _lock_hint_panel: PanelContainer
 var _lock_hint_lbl: Label
@@ -215,7 +218,7 @@ func _build_ui() -> void:
 	top_left.add_child(_mobile_status_slot)
 
 	_stage_card = PanelContainer.new()
-	_stage_card.add_theme_stylebox_override("panel", UiStyle.make_pill("#0a0f1f", 0.78, "#e6c37a", 0.42, 16, 8))
+	_stage_card.add_theme_stylebox_override("panel", UiStyle.make_accent_card("#090f1f", "#e8c474", false, 16, 16, 8))
 	top_left.add_child(_stage_card)
 
 	var stage_vbox := VBoxContainer.new()
@@ -224,6 +227,7 @@ func _build_ui() -> void:
 
 	_stage_lbl = Label.new()
 	_stage_lbl.add_theme_color_override("font_color", Color.html("#fef3c7"))
+	UiStyle.style_label_shadow(_stage_lbl, 0.72)
 	stage_vbox.add_child(_stage_lbl)
 
 	var sub_row := HBoxContainer.new()
@@ -255,11 +259,11 @@ func _build_ui() -> void:
 
 	# Top-Right: Translucent Currency Pill + Compact Wafuu Glass Buttons
 	var menu_row := HBoxContainer.new()
-	menu_row.add_theme_constant_override("separation", 8)
+	menu_row.add_theme_constant_override("separation", 7)
 	top_row.add_child(menu_row)
 
 	var cur_panel := PanelContainer.new()
-	cur_panel.add_theme_stylebox_override("panel", UiStyle.make_pill("#0a0f1f", 0.78, "#e6c37a", 0.36, 14, 7))
+	cur_panel.add_theme_stylebox_override("panel", UiStyle.make_pill("#090f1f", 0.84, "#e8c474", 0.44, 14, 7))
 	var cur_hbox := HBoxContainer.new()
 	cur_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	cur_hbox.add_theme_constant_override("separation", 12)
@@ -272,13 +276,14 @@ func _build_ui() -> void:
 	cur_hbox.add_child(_sp_pts_lbl)
 	menu_row.add_child(cur_panel)
 
-	var b_sk := _make_menu_btn("⚡ 技能", "#e6c37a", "#fef3c7", func() -> void: upgrade_requested.emit("skills"))
+	var b_sk := _make_menu_btn("⚡ 技能", "#e8c474", "#fef3c7", func() -> void: upgrade_requested.emit("skills"))
 	var b_eq := _make_menu_btn("🎒 裝備", "#34d399", "#a7f3d0", func() -> void: upgrade_requested.emit("equip"))
 	var b_sh := _make_menu_btn("🦊 式神", "#f472b6", "#fbcfe8", func() -> void: upgrade_requested.emit("shikigami"))
+	var b_dc := _make_menu_btn("📖 辭典", "#38bdf8", "#bae6fd", func() -> void: upgrade_requested.emit("dict"))
 	var b_ps := _make_menu_btn("⏸️ 暫停", "#cbd5e1", "#ffffff", func() -> void: pause_requested.emit())
 	_audio_btn = _make_menu_btn("🔊", "#cbd5e1", "#ffffff", func() -> void: AudioManager.toggle_audio())
 
-	_menu_buttons = [b_sk, b_eq, b_sh, b_ps]
+	_menu_buttons = [b_sk, b_eq, b_sh, b_dc, b_ps]
 	for mb in _menu_buttons:
 		menu_row.add_child(mb)
 	menu_row.add_child(_audio_btn)
@@ -290,8 +295,8 @@ func _build_ui() -> void:
 
 	_boss_panel = PanelContainer.new()
 	_boss_panel.visible = false
-	_boss_panel.custom_minimum_size = Vector2(540, 0)
-	_boss_panel.add_theme_stylebox_override("panel", UiStyle.make_panel("#0a0d1c", 0.86, "#fb7185", 0.65, 18, 1, 20, 10, 16))
+	_boss_panel.custom_minimum_size = Vector2(560, 0)
+	_boss_panel.add_theme_stylebox_override("panel", UiStyle.make_shrine_modal("#120916", "#fb7185", 18, 22, 11))
 	boss_center.add_child(_boss_panel)
 
 	var boss_v := VBoxContainer.new()
@@ -303,15 +308,17 @@ func _build_ui() -> void:
 	_boss_name_lbl = Label.new()
 	_boss_name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_boss_name_lbl.add_theme_color_override("font_color", Color.html("#fecdd3"))
+	UiStyle.style_label_shadow(_boss_name_lbl, 0.78, 1)
 	boss_h.add_child(_boss_name_lbl)
 
 	_boss_hp_lbl = Label.new()
 	_boss_hp_lbl.add_theme_color_override("font_color", Color.html("#fef3c7"))
+	UiStyle.style_label_shadow(_boss_hp_lbl, 0.72)
 	boss_h.add_child(_boss_hp_lbl)
 
 	_boss_bar = ProgressBar.new()
-	_boss_bar.custom_minimum_size = Vector2(0, 13)
-	UiStyle.apply_bar(_boss_bar, "#e11d48", "#180b16", 6, "#fb7185", 0.45)
+	_boss_bar.custom_minimum_size = Vector2(0, 14)
+	UiStyle.apply_bar(_boss_bar, "#e11d48", "#180b16", 6, "#fda4af", 0.50)
 	boss_v.add_child(_boss_bar)
 
 	# ==================== PLAYER STATUS CARD (Reparented by Platform) ====================
@@ -749,6 +756,13 @@ func refresh(enemy_count: int, boss: Enemy3D) -> void:
 	var stage_cfg: Dictionary = GameData.get_stage(p["stage_id"])
 	var mode_cfg: Dictionary = GameData.get_mode(p["mode"])
 
+	var cur_cid: String = String(char_cfg["id"])
+	if cur_cid != _last_char_id:
+		_last_char_id = cur_cid
+		var hero_hex: String = String(char_cfg.get("color_primary", "#be123c"))
+		_icon_box.add_theme_stylebox_override("panel", UiStyle.make_panel(hero_hex, 0.92, "#fde68a", 0.78, 24, 2, 2, 2, 10))
+		_status_card.add_theme_stylebox_override("panel", UiStyle.make_accent_card("#090f1f", hero_hex, false, 18, 14, 9))
+
 	_char_icon_lbl.text = char_cfg["icon"]
 	_player_name_lbl.text = "%s・%s" % [String(p["name"]), char_cfg["name"]]
 	_level_lbl.text = "Lv.%d" % int(p["level"])
@@ -809,26 +823,35 @@ func refresh(enemy_count: int, boss: Enemy3D) -> void:
 	_btn_ult.disabled = float(b["sp"]) < 70.0
 	_btn_dash.disabled = sta < 24.0
 
-	if int(b["combo"]) >= 2:
+	var cur_combo := int(b["combo"])
+	if cur_combo >= 2:
 		_combo_panel.visible = true
-		_combo_lbl.text = "⚔️ %d HITS!" % int(b["combo"])
+		_combo_lbl.text = "⚔️ %d HITS!" % cur_combo
+		if cur_combo > _last_combo:
+			UiStyle.animate_pop_bounce(self, _combo_panel, 1.18, 0.20)
 	else:
 		_combo_panel.visible = false
+	_last_combo = cur_combo
 
-	if boss != null and is_instance_valid(boss) and not boss.dead:
+	var has_boss := boss != null and is_instance_valid(boss) and not boss.dead
+	if has_boss:
 		_boss_panel.visible = true
 		_boss_name_lbl.text = "👹 大頭目・%s" % boss.enemy_name
 		_boss_hp_lbl.text = "%d / %d" % [maxi(0, boss.hp), boss.max_hp]
 		_boss_bar.max_value = maxf(1.0, float(boss.max_hp))
 		_boss_bar.value = float(maxi(0, boss.hp))
+		if not _boss_was_visible:
+			UiStyle.animate_toast_in(self, _boss_panel)
 	else:
 		_boss_panel.visible = false
+	_boss_was_visible = has_boss
 
 
 func show_toast(msg: String) -> void:
 	_toast_lbl.text = msg
 	_toast_panel.visible = true
 	_toast_timer = 2.6
+	UiStyle.animate_toast_in(self, _toast_panel)
 
 
 func _process(delta: float) -> void:

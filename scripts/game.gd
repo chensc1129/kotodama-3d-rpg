@@ -97,6 +97,11 @@ func _ready() -> void:
 		_unlock_mouse()
 		upgrade_modal.open_modal("skills")
 	)
+	pause_modal.dictionary_pressed.connect(func() -> void:
+		_opened_upgrade_from_pause = true
+		_unlock_mouse()
+		upgrade_modal.open_modal("dict")
+	)
 	pause_modal.restart_pressed.connect(_restart_battle)
 	pause_modal.return_to_menu_pressed.connect(_return_to_main_menu)
 
