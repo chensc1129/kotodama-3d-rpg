@@ -93,25 +93,28 @@ func reset_vertical_state(ground_y: float = 0.0) -> void:
 func update_vertical_physics(delta: float, ground_y: float = 0.0) -> bool:
 	_current_ground_y = ground_y
 	if is_grounded:
-		# Step off a steep drop-off into free-fall
-		if ground_y < position.y - 0.55:
+		# Only enter free-fall on a genuine cliff/platform drop (> 1.25m), smoothly hug slopes & bridges!
+		if ground_y < position.y - 1.25:
 			is_grounded = false
-			vertical_velocity = -0.5
+			vertical_velocity = -0.6
 		else:
-			position.y = lerpf(position.y, ground_y, clampf(delta * 20.0, 0.0, 1.0))
+			position.y = lerpf(position.y, ground_y, 1.0 - exp(-18.0 * delta))
 			vertical_velocity = 0.0
 			return false
 
 	vertical_velocity -= GRAVITY * delta
 	position.y += vertical_velocity * delta
 	if position.y <= ground_y and vertical_velocity <= 0.0:
+		var impact_vy := vertical_velocity
 		position.y = ground_y
 		vertical_velocity = 0.0
 		is_grounded = true
-		_punch_scale = Vector3(1.16, 0.84, 1.16)
-		if _body_pivot != null:
-			_body_pivot.scale = _punch_scale
-		return true
+		if impact_vy < -7.0:
+			_punch_scale = Vector3(1.16, 0.84, 1.16)
+			if _body_pivot != null:
+				_body_pivot.scale = _punch_scale
+			return true
+		return false
 	return false
 
 
@@ -285,7 +288,7 @@ func update_animations(delta: float, is_moving: bool, is_sprinting: bool = false
 	if kick_anim_timer > 0.0:
 		kick_anim_timer = maxf(0.0, kick_anim_timer - delta)
 
-	_visual_root.rotation.y = facing
+	_visual_root.rotation.y = lerp_angle(_visual_root.rotation.y, facing, 1.0 - exp(-18.0 * delta))
 
 	if _aura_mesh != null:
 		_aura_mesh.rotation.y = _elapsed * (3.2 if is_sprinting else 1.8)

@@ -583,23 +583,39 @@ func refresh(enemy_count: int, boss: Enemy3D) -> void:
 			String(char_cfg.get("color_primary", "#f43f5e"))
 		)
 
-	_stage_lbl.text = "%s %s  ・  第 %d 幕" % [stage_cfg["icon"], stage_cfg["name"], int(b["wave"])]
-	_mode_lbl.text = mode_cfg["label"]
-	_enemy_count_lbl.text = "👹 剩餘 %d" % enemy_count
+	var st_txt := "%s %s  ・  第 %d 幕" % [stage_cfg["icon"], stage_cfg["name"], int(b["wave"])]
+	if _stage_lbl.text != st_txt:
+		_stage_lbl.text = st_txt
+	var md_txt := String(mode_cfg["label"])
+	if _mode_lbl.text != md_txt:
+		_mode_lbl.text = md_txt
+	var en_txt := "👹 剩餘 %d" % enemy_count
+	if _enemy_count_lbl.text != en_txt:
+		_enemy_count_lbl.text = en_txt
 
 	_endless_lbl.visible = GameState.is_endless_mode()
 	if _endless_lbl.visible:
 		var secs := int(floor(float(b["endless_seconds"])))
-		_endless_lbl.text = "⏱️ %02d:%02d" % [secs / 60, secs % 60]
+		var t_txt := "⏱️ %02d:%02d" % [secs / 60, secs % 60]
+		if _endless_lbl.text != t_txt:
+			_endless_lbl.text = t_txt
 
 	if _stage_mech_lbl != null:
 		var status_txt := String(b.get("stage_status", ""))
-		_stage_mech_lbl.text = status_txt if not status_txt.is_empty() else String(stage_cfg.get("mechanic_name", ""))
+		var m_txt := status_txt if not status_txt.is_empty() else String(stage_cfg.get("mechanic_name", ""))
+		if _stage_mech_lbl.text != m_txt:
+			_stage_mech_lbl.text = m_txt
 
-	_gold_lbl.text = "🪙 %d" % int(p["gold"])
-	_sp_pts_lbl.text = "✨ %dpt" % int(p["skill_points"])
+	var g_txt := "🪙 %d" % int(p["gold"])
+	if _gold_lbl.text != g_txt:
+		_gold_lbl.text = g_txt
+	var sp_txt := "✨ %dpt" % int(p["skill_points"])
+	if _sp_pts_lbl.text != sp_txt:
+		_sp_pts_lbl.text = sp_txt
 
-	_btn_sig.text = "%s\n%s\n30SP" % [char_cfg["sig_icon"], char_cfg["sig_key"]]
+	var sig_txt := "%s\n%s\n30SP" % [char_cfg["sig_icon"], char_cfg["sig_key"]]
+	if _btn_sig.text != sig_txt:
+		_btn_sig.text = sig_txt
 	_btn_sig.disabled = float(b["sp"]) < 30.0
 	_btn_ult.disabled = float(b["sp"]) < 70.0
 	_btn_dash.disabled = sta < 24.0
@@ -607,7 +623,9 @@ func refresh(enemy_count: int, boss: Enemy3D) -> void:
 	var cur_combo := int(b["combo"])
 	if cur_combo >= 2:
 		_combo_panel.visible = true
-		_combo_lbl.text = "⚔️ %d HITS!" % cur_combo
+		var c_txt := "⚔️ %d HITS!" % cur_combo
+		if _combo_lbl.text != c_txt:
+			_combo_lbl.text = c_txt
 		if cur_combo > _last_combo:
 			UiStyle.animate_pop_bounce(self, _combo_panel, 1.18, 0.20)
 	else:
@@ -617,8 +635,12 @@ func refresh(enemy_count: int, boss: Enemy3D) -> void:
 	var has_boss := boss != null and is_instance_valid(boss) and not boss.dead
 	if has_boss:
 		_boss_panel.visible = true
-		_boss_name_lbl.text = "👹 大頭目・%s" % boss.enemy_name
-		_boss_hp_lbl.text = "%d / %d" % [maxi(0, boss.hp), boss.max_hp]
+		var bn_txt := "👹 大頭目・%s" % boss.enemy_name
+		if _boss_name_lbl.text != bn_txt:
+			_boss_name_lbl.text = bn_txt
+		var bhp_txt := "%d / %d" % [maxi(0, boss.hp), boss.max_hp]
+		if _boss_hp_lbl.text != bhp_txt:
+			_boss_hp_lbl.text = bhp_txt
 		_boss_bar.max_value = maxf(1.0, float(boss.max_hp))
 		_boss_bar.value = float(maxi(0, boss.hp))
 		if not _boss_was_visible:

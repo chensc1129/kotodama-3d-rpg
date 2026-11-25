@@ -29,6 +29,7 @@ var _fov_offset: float = 0.0
 
 
 func _ready() -> void:
+	process_priority = 20
 	_target_yaw = cam_yaw
 	_target_pitch = cam_pitch
 	_target_dist = cam_dist
@@ -116,14 +117,17 @@ func _process(delta: float) -> void:
 		cam_pitch = _target_pitch
 		cam_dist = _target_dist
 	else:
-		# Frame-rate-independent exponential damping: silky smooth rotation with ZERO rubber-band chord lag!
+		# Tight XZ follow + smooth Y slope damping + smooth spherical angles = zero walking jitter!
 		var ang_w := 1.0 - exp(-26.0 * dt)
-		var pos_w := 1.0 - exp(-18.0 * dt)
+		var xz_w := 1.0 - exp(-28.0 * dt)
+		var y_w := 1.0 - exp(-14.0 * dt)
 		var dist_w := 1.0 - exp(-14.0 * dt)
 		cam_yaw = lerpf(cam_yaw, _target_yaw, ang_w)
 		cam_pitch = lerpf(cam_pitch, _target_pitch, ang_w)
 		cam_dist = lerpf(cam_dist, _target_dist, dist_w)
-		_follow_pos = _follow_pos.lerp(tp, pos_w)
+		_follow_pos.x = lerpf(_follow_pos.x, tp.x, xz_w)
+		_follow_pos.z = lerpf(_follow_pos.z, tp.z, xz_w)
+		_follow_pos.y = lerpf(_follow_pos.y, tp.y, y_w)
 
 	# Compute camera directly on exact orbital sphere around smoothly-followed hero pivot
 	var back_xz := Vector3(sin(cam_yaw), 0.0, cos(cam_yaw))

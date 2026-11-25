@@ -32,6 +32,8 @@ var _pending_word: Dictionary = {}
 var _hitstop_timer: float = 0.0
 var _shift_tap_window: float = 0.0
 var _dash_dir: Vector3 = Vector3.ZERO
+var _move_vel: Vector3 = Vector3.ZERO
+var _hud_sync_acc: float = 0.0
 
 # Stage-specific mechanic runtime states
 var _sakura_cycle_timer: float = 0.0
@@ -167,6 +169,8 @@ func start_new_battle() -> void:
 	_hitstop_timer = 0.0
 	_shift_tap_window = 0.0
 	_dash_dir = Vector3.ZERO
+	_move_vel = Vector3.ZERO
+	_hud_sync_acc = 0.0
 	_reset_stage_mechanics()
 	var stats := GameState.get_computed_stats()
 	GameState.battle["active"] = true
@@ -818,6 +822,7 @@ func _process(delta: float) -> void:
 	var dt := minf(0.05, delta)
 	var b := GameState.battle
 	if not b["active"] or b["paused"]:
+		_move_vel = Vector3.ZERO
 		if player != null:
 			player.update_animations(dt, false)
 		return
@@ -869,8 +874,9 @@ func _process(delta: float) -> void:
 		is_sprinting = true
 		if player != null:
 			var dvec := _dash_dir if _dash_dir.length_squared() > 0.001 else Vector3(sin(player.facing), 0.0, cos(player.facing))
-			player.position.x += dvec.x * float(stats["speed"]) * 2.85 * dt
-			player.position.z += dvec.z * float(stats["speed"]) * 2.85 * dt
+			_move_vel = dvec * float(stats["speed"]) * 2.85
+			player.position.x += _move_vel.x * dt
+			player.position.z += _move_vel.z * dt
 			player.clamp_to_arena()
 	else:
 		var has_wind: bool = _wind_buff_timer > 0.0
@@ -894,6 +900,7 @@ func _process(delta: float) -> void:
 				if bool(b["stamina_exhausted"]) and float(b["stamina"]) >= max_sta * 0.22:
 					b["stamina_exhausted"] = false
 
+		var target_vel := Vector3.ZERO
 		if is_moving and player != null:
 			var clamped := move_input / maxf(1.0, move_input.length())
 			var yaw: float = camera_rig.cam_yaw if camera_rig != null else 0.0
@@ -903,10 +910,18 @@ func _process(delta: float) -> void:
 			var world_dz := -clamped.x * sin_y + clamped.y * cos_y
 
 			var speed_mult: float = (1.58 if is_sprinting else 1.0) * (1.40 if has_wind else 1.0)
-			player.position.x += world_dx * float(stats["speed"]) * speed_mult * dt
-			player.position.z += world_dz * float(stats["speed"]) * speed_mult * dt
-			player.clamp_to_arena()
+			target_vel = Vector3(world_dx, 0.0, world_dz) * float(stats["speed"]) * speed_mult
 			player.facing = atan2(world_dx, world_dz)
+
+		if player != null:
+			var accel_rate: float = 18.0 if is_moving else 22.0
+			_move_vel = _move_vel.lerp(target_vel, 1.0 - exp(-accel_rate * dt))
+			if _move_vel.length_squared() > 0.01:
+				player.position.x += _move_vel.x * dt
+				player.position.z += _move_vel.z * dt
+				player.clamp_to_arena()
+			else:
+				_move_vel = Vector3.ZERO
 
 	if player != null:
 		if arena != null:
@@ -916,7 +931,7 @@ func _process(delta: float) -> void:
 		if landed:
 			AudioManager.play_sfx("land")
 			spawn_ring_vfx(Vector3(player.position.x, player_gy, player.position.z), Color.html("#e2e8f0"), 1.6, 0.20)
-		player.update_animations(dt, is_moving or is_dashing, is_sprinting)
+		player.update_animations(dt, is_moving or is_dashing or _move_vel.length_squared() > 0.35, is_sprinting)
 
 	# Update Stage-Specific Map Mechanics (Sakura Sanctuary / Maple Wind / Lava Geysers / Sky Jump Pads & Thunder)
 	_update_stage_mechanics(dt, stats)
@@ -1039,12 +1054,19 @@ func _process(delta: float) -> void:
 			GameState.save_game_data()
 			b["active"] = false
 			b["paused"] = true
+			hud_updated.emit()
 			battle_ended.emit(true, int(b["wave"]))
 		else:
 			b["paused"] = true
+			hud_updated.emit()
 			wave_cleared.emit()
+		return
 
-	hud_updated.emit()
+	# Throttle routine HUD sync to ~12 Hz to avoid per-frame CJK text shaping stutter on WebGL
+	_hud_sync_acc += dt
+	if _hud_sync_acc >= 0.08:
+		_hud_sync_acc = 0.0
+		hud_updated.emit()
 
 
 # ==============================================================================

@@ -124,27 +124,53 @@ func update_stats(
 	p_exp_ratio: float,
 	p_lv: int, p_icon: String, p_name: String, p_accent_hex: String
 ) -> void:
-	hp_ratio = clampf(p_hp / maxf(1.0, p_max_hp), 0.0, 1.0)
-	hp_text = "HP %d/%d" % [int(round(p_hp)), int(round(p_max_hp))]
-	sp_ratio = clampf(p_sp / maxf(1.0, p_max_sp), 0.0, 1.0)
-	sp_text = "SP %d/%d" % [int(floor(p_sp)), int(round(p_max_sp))]
-	sta_ratio = clampf(p_sta / maxf(1.0, p_max_sta), 0.0, 1.0)
-	sta_text = "體力\n%d" % int(floor(p_sta))
+	var new_hp_r := clampf(p_hp / maxf(1.0, p_max_hp), 0.0, 1.0)
+	var new_hp_t := "HP %d/%d" % [int(round(p_hp)), int(round(p_max_hp))]
+	var new_sp_r := clampf(p_sp / maxf(1.0, p_max_sp), 0.0, 1.0)
+	var new_sp_t := "SP %d/%d" % [int(floor(p_sp)), int(round(p_max_sp))]
+	var new_sta_r := clampf(p_sta / maxf(1.0, p_max_sta), 0.0, 1.0)
+	var new_sta_t := "體力\n%d" % int(floor(p_sta))
+	var new_exp_r := clampf(p_exp_ratio, 0.0, 1.0)
+	var new_accent := Color.html(p_accent_hex)
+
+	var need_draw := (
+		absf(hp_ratio - new_hp_r) > 0.002
+		or absf(sp_ratio - new_sp_r) > 0.002
+		or absf(sta_ratio - new_sta_r) > 0.002
+		or absf(exp_ratio - new_exp_r) > 0.002
+		or sta_low != p_sta_low
+		or hero_accent != new_accent
+	)
+
+	hp_ratio = new_hp_r
+	hp_text = new_hp_t
+	sp_ratio = new_sp_r
+	sp_text = new_sp_t
+	sta_ratio = new_sta_r
+	sta_text = new_sta_t
 	sta_low = p_sta_low
-	exp_ratio = clampf(p_exp_ratio, 0.0, 1.0)
+	exp_ratio = new_exp_r
 	level_num = p_lv
 	hero_icon = p_icon
 	hero_name = p_name
-	hero_accent = Color.html(p_accent_hex)
+	hero_accent = new_accent
 
-	_icon_lbl.text = hero_icon
-	_lv_lbl.text = "Lv.%d" % level_num
-	_sta_lbl.text = sta_text
+	if _icon_lbl.text != hero_icon:
+		_icon_lbl.text = hero_icon
+	var lv_txt := "Lv.%d" % level_num
+	if _lv_lbl.text != lv_txt:
+		_lv_lbl.text = lv_txt
+	if _sta_lbl.text != sta_text:
+		_sta_lbl.text = sta_text
 	_sta_lbl.add_theme_color_override("font_color", Color.html("#fda4af") if sta_low else Color.html("#fde68a"))
-	_name_lbl.text = hero_name
-	_hp_num_lbl.text = hp_text
-	_sp_num_lbl.text = sp_text
-	queue_redraw()
+	if _name_lbl.text != hero_name:
+		_name_lbl.text = hero_name
+	if _hp_num_lbl.text != hp_text:
+		_hp_num_lbl.text = hp_text
+	if _sp_num_lbl.text != sp_text:
+		_sp_num_lbl.text = sp_text
+	if need_draw:
+		queue_redraw()
 
 
 func _main_center() -> Vector2:
