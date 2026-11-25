@@ -7,6 +7,7 @@ extends Node3D
 const FLOOR_SHADER: Shader = preload("res://assets/shaders/arena_floor.gdshader")
 const PROP_SURFACE_SHADER: Shader = preload("res://assets/shaders/arena_prop_surface.gdshader")
 const WATER_SHADER: Shader = preload("res://assets/shaders/arena_water.gdshader")
+const SKY_SHADER: Shader = preload("res://assets/shaders/arena_sky.gdshader")
 
 @export var world_environment: WorldEnvironment
 @export var center_light: OmniLight3D
@@ -31,6 +32,7 @@ var _particles: CPUParticles3D
 var _sakura_zone_node: Node3D
 var _lava_plane_mat: Material
 var _water_plane_mat: Material
+var _sky_anim_nodes: Array[Dictionary] = []
 var _elapsed: float = 0.0
 var _sakura_spots: Array[Vector2] = [
 	Vector2(0.0, -17.5),
@@ -354,6 +356,7 @@ func build_stage(stage_id: String) -> void:
 	obstacles.clear()
 	wind_zones.clear()
 	jump_pads.clear()
+	_sky_anim_nodes.clear()
 	_sakura_zone_node = null
 	_lava_plane_mat = null
 	_water_plane_mat = null
@@ -371,7 +374,13 @@ func build_stage(stage_id: String) -> void:
 		if env == null:
 			env = Environment.new()
 			world_environment.environment = env
-		env.background_mode = Environment.BG_COLOR
+		var sky_mat := ShaderMaterial.new()
+		sky_mat.shader = SKY_SHADER
+		sky_mat.set_shader_parameter("stage_id", _stage_shader_index())
+		var sky_res := Sky.new()
+		sky_res.sky_material = sky_mat
+		env.background_mode = Environment.BG_SKY
+		env.sky = sky_res
 		env.background_color = sky_col
 		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 		env.ambient_light_color = ambient_col
@@ -379,7 +388,8 @@ func build_stage(stage_id: String) -> void:
 		env.fog_enabled = true
 		env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
 		env.fog_light_color = fog_col
-		env.fog_density = 0.010
+		env.fog_density = 0.0065
+		env.fog_sky_affect = 0.08
 
 	if center_light != null:
 		center_light.light_color = ring_col
@@ -403,7 +413,10 @@ func build_stage(stage_id: String) -> void:
 		"sky_tenshu":
 			_build_sky_tenshu_props(ring_col)
 
-	# 4. Ambient Falling Petals / Leaves / Embers / Starlight
+	# 4. 3D Distant Sky Landmarks (Sky Lanterns, Sunset Clouds/Cranes, Volcanic Peaks, Celestial Rings)
+	_build_sky_landmarks()
+
+	# 5. Ambient Falling Petals / Leaves / Embers / Starlight
 	_build_ambient_particles(particle_col)
 
 
@@ -1183,6 +1196,152 @@ func _make_flat_ring(inner_r: float, outer_r: float, mat: Material, y_pos: float
 	return inst
 
 
+func _build_sky_landmarks() -> void:
+	match current_stage_id:
+		"sakura_shrine":
+			# 14 Glowing Wafuu Sky Lanterns (天燈) softly drifting in the starry night sky
+			var lantern_mesh := CylinderMesh.new()
+			lantern_mesh.top_radius = 0.55; lantern_mesh.bottom_radius = 0.34; lantern_mesh.height = 1.25; lantern_mesh.radial_segments = 8
+			var warm_mat := StandardMaterial3D.new()
+			warm_mat.albedo_color = Color.html("#fde68a")
+			warm_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			var pink_mat := StandardMaterial3D.new()
+			pink_mat.albedo_color = Color.html("#f9a8d4")
+			pink_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+
+			for i in range(14):
+				var ang := (float(i) / 14.0) * TAU + 0.25
+				var dist := 35.0 + float(i % 3) * 7.5
+				var y_base := 10.5 + float(i % 4) * 4.2
+				var pos := Vector3(cos(ang) * dist, y_base, sin(ang) * dist)
+				var lan := MeshInstance3D.new()
+				lan.mesh = lantern_mesh
+				lan.material_override = warm_mat if i % 2 == 0 else pink_mat
+				lan.position = pos
+				_arena_content.add_child(lan)
+				_sky_anim_nodes.append({"node": lan, "kind": "bob", "base_pos": pos, "speed": 0.65 + float(i % 3) * 0.22, "phase": float(i) * 1.3, "amp": 1.45})
+
+			# 6 Drifting Moonlit Sakura Cloud Puffs
+			_add_sky_cloud_ring(6, 48.0, 20.0, Color(0.95, 0.72, 0.86, 0.34), 0.03)
+
+		"maple_temple":
+			# 8 Golden-Rimmed Sunset Cloud Ribbons
+			_add_sky_cloud_ring(8, 49.0, 17.5, Color(1.0, 0.74, 0.44, 0.44), 0.045)
+
+			# 8 Stylized Circling Autumn Sky Cranes (紙鶴・飛鳥) overhead
+			var bird_mat := StandardMaterial3D.new()
+			bird_mat.albedo_color = Color.html("#fef3c7")
+			bird_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			var wing_mesh := BoxMesh.new()
+			wing_mesh.size = Vector3(1.55, 0.08, 0.42)
+			for i in range(8):
+				var b_root := Node3D.new()
+				var left_w := MeshInstance3D.new(); left_w.mesh = wing_mesh; left_w.material_override = bird_mat
+				left_w.position = Vector3(-0.68, 0.0, 0.0); left_w.rotation.z = 0.24
+				var right_w := MeshInstance3D.new(); right_w.mesh = wing_mesh; right_w.material_override = bird_mat
+				right_w.position = Vector3(0.68, 0.0, 0.0); right_w.rotation.z = -0.24
+				b_root.add_child(left_w)
+				b_root.add_child(right_w)
+				var rad := 30.0 + float(i % 3) * 5.0
+				var y_h := 18.0 + float(i % 4) * 2.2
+				_arena_content.add_child(b_root)
+				_sky_anim_nodes.append({"node": b_root, "kind": "orbit", "base_pos": Vector3(0.0, y_h, 0.0), "radius": rad, "speed": 0.16 + float(i % 2) * 0.04, "phase": float(i) * 0.78})
+
+		"onigashima_lava":
+			# 6 Towering Distant Volcanic Caldera Peaks glowing at their base
+			var peak_mat := StandardMaterial3D.new()
+			peak_mat.albedo_color = Color.html("#1c1012"); peak_mat.roughness = 0.90
+			var peak_mesh := CylinderMesh.new()
+			peak_mesh.top_radius = 1.4; peak_mesh.bottom_radius = 11.5; peak_mesh.height = 24.0; peak_mesh.radial_segments = 7
+			for i in range(6):
+				var ang := (float(i) / 6.0) * TAU + 0.52
+				var dist := 52.0 + float(i % 2) * 8.0
+				var pk := MeshInstance3D.new()
+				pk.mesh = peak_mesh; pk.material_override = peak_mat
+				pk.position = Vector3(cos(ang) * dist, 5.5 + float(i % 2) * 3.0, sin(ang) * dist)
+				_arena_content.add_child(pk)
+
+			# High-Altitude Swirling Ember Storm Vortex Rings overhead
+			var storm_mat := StandardMaterial3D.new()
+			storm_mat.albedo_color = Color(0.95, 0.32, 0.08, 0.34)
+			storm_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			storm_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			for ri in range(2):
+				var ring := _make_flat_ring(16.0 + float(ri) * 11.0, 21.0 + float(ri) * 12.0, storm_mat, 24.0 + float(ri) * 4.5)
+				_arena_content.add_child(ring)
+				_sky_anim_nodes.append({"node": ring, "kind": "spin", "speed": 0.25 if ri == 0 else -0.18})
+
+		"sky_tenshu":
+			# Dual Counter-Rotating Celestial Astrolabe Halo Rings orbiting the Giant Full Moon!
+			var halo_mat := StandardMaterial3D.new()
+			halo_mat.albedo_color = Color(1.0, 0.90, 0.45, 0.78)
+			halo_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			halo_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			for hi in range(2):
+				var torus := TorusMesh.new()
+				torus.inner_radius = 9.4 + float(hi) * 2.4
+				torus.outer_radius = 9.8 + float(hi) * 2.4
+				torus.rings = 48; torus.ring_segments = 8
+				var h_inst := MeshInstance3D.new()
+				h_inst.mesh = torus; h_inst.material_override = halo_mat
+				h_inst.position = Vector3(0.0, 20.5, -45.0)
+				h_inst.rotation = Vector3(PI * 0.42 if hi == 0 else PI * 0.58, 0.0, 0.25 if hi == 0 else -0.35)
+				_arena_content.add_child(h_inst)
+				_sky_anim_nodes.append({"node": h_inst, "kind": "tumble", "speed": 0.32 if hi == 0 else -0.24})
+
+			# 4 Distant Floating Sky-Shrine Islands with Silhouetted Pagodas in the Sea of Clouds
+			var isl_mat := StandardMaterial3D.new()
+			isl_mat.albedo_color = Color.html("#1e3a5f"); isl_mat.roughness = 0.65
+			var gold_mat := StandardMaterial3D.new()
+			gold_mat.albedo_color = Color.html("#fde047"); gold_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			for i in range(4):
+				var ang := (float(i) / 4.0) * TAU + PI * 0.25
+				var dist := 52.0
+				var pos := Vector3(cos(ang) * dist, 5.5 + float(i % 2) * 3.5, sin(ang) * dist)
+				var isl := Node3D.new()
+				isl.position = pos
+				var rock := MeshInstance3D.new()
+				var rm := CylinderMesh.new(); rm.top_radius = 4.6; rm.bottom_radius = 0.6; rm.height = 5.5; rm.radial_segments = 8
+				rock.mesh = rm; rock.material_override = isl_mat
+				isl.add_child(rock)
+				var spire := MeshInstance3D.new()
+				var sm := CylinderMesh.new(); sm.top_radius = 0.2; sm.bottom_radius = 2.6; sm.height = 4.2; sm.radial_segments = 4
+				spire.mesh = sm; spire.material_override = isl_mat; spire.position = Vector3(0.0, 4.6, 0.0)
+				isl.add_child(spire)
+				var beacon := MeshInstance3D.new()
+				var bm := SphereMesh.new(); bm.radius = 0.55; bm.height = 1.1
+				beacon.mesh = bm; beacon.material_override = gold_mat; beacon.position = Vector3(0.0, 7.2, 0.0)
+				isl.add_child(beacon)
+				_arena_content.add_child(isl)
+				_sky_anim_nodes.append({"node": isl, "kind": "bob", "base_pos": pos, "speed": 0.55, "phase": float(i) * 1.5, "amp": 0.9})
+
+			# Upper Moonlit Cloud Ring
+			_add_sky_cloud_ring(7, 46.0, 16.5, Color(0.84, 0.92, 1.0, 0.34), 0.035)
+
+
+func _add_sky_cloud_ring(count: int, ring_radius: float, y_base: float, tint: Color, orbit_speed: float) -> void:
+	var cloud_mat := StandardMaterial3D.new()
+	cloud_mat.albedo_color = tint
+	cloud_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	cloud_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var puff_a := SphereMesh.new(); puff_a.radius = 5.2; puff_a.height = 2.6; puff_a.radial_segments = 12; puff_a.rings = 6
+	var puff_b := SphereMesh.new(); puff_b.radius = 3.6; puff_b.height = 2.0; puff_b.radial_segments = 10; puff_b.rings = 5
+
+	var ring_root := Node3D.new()
+	_arena_content.add_child(ring_root)
+	for i in range(count):
+		var ang := (float(i) / float(count)) * TAU
+		var c_grp := Node3D.new()
+		c_grp.position = Vector3(cos(ang) * ring_radius, y_base + sin(float(i) * 2.1) * 2.8, sin(ang) * ring_radius)
+		c_grp.rotation.y = -ang
+		var m1 := MeshInstance3D.new(); m1.mesh = puff_a; m1.material_override = cloud_mat
+		var m2 := MeshInstance3D.new(); m2.mesh = puff_b; m2.material_override = cloud_mat; m2.position = Vector3(0.0, -0.4, 3.8)
+		var m3 := MeshInstance3D.new(); m3.mesh = puff_b; m3.material_override = cloud_mat; m3.position = Vector3(0.0, -0.3, -3.6)
+		c_grp.add_child(m1); c_grp.add_child(m2); c_grp.add_child(m3)
+		ring_root.add_child(c_grp)
+	_sky_anim_nodes.append({"node": ring_root, "kind": "spin", "speed": orbit_speed})
+
+
 func _process(delta: float) -> void:
 	_elapsed += delta
 	if _sakura_zone_node != null and is_instance_valid(_sakura_zone_node):
@@ -1196,5 +1355,28 @@ func _process(delta: float) -> void:
 		if is_instance_valid(n):
 			n.rotation.y = _elapsed * 2.4
 			n.position.y = float(jp["pos"].y) + sin(_elapsed * 4.5) * 0.08
+	for sk in _sky_anim_nodes:
+		var sn: Node3D = sk["node"]
+		if not is_instance_valid(sn):
+			continue
+		var kind: String = sk["kind"]
+		if kind == "bob":
+			var bp: Vector3 = sk["base_pos"]
+			var spd: float = float(sk["speed"])
+			var ph: float = float(sk["phase"])
+			var amp: float = float(sk["amp"])
+			sn.position.y = bp.y + sin(_elapsed * spd + ph) * amp
+			sn.rotation.y = _elapsed * 0.25 + ph
+		elif kind == "orbit":
+			var bp: Vector3 = sk["base_pos"]
+			var r: float = float(sk["radius"])
+			var ang: float = _elapsed * float(sk["speed"]) + float(sk["phase"])
+			sn.position = Vector3(cos(ang) * r, bp.y + sin(ang * 2.0) * 1.2, sin(ang) * r)
+			sn.rotation.y = -ang
+		elif kind == "spin":
+			sn.rotation.y = _elapsed * float(sk["speed"])
+		elif kind == "tumble":
+			sn.rotation.y = _elapsed * float(sk["speed"])
+			sn.rotation.z = sin(_elapsed * 0.5) * 0.32
 	if _lava_plane_mat is StandardMaterial3D:
 		(_lava_plane_mat as StandardMaterial3D).emission_energy_multiplier = 1.45 + sin(_elapsed * 3.2) * 0.30
