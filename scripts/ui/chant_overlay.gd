@@ -1,10 +1,12 @@
 class_name ChantOverlay
 extends Control
-## Bullet-time Japanese vocabulary chant overlay with dramatic shrine-seal open animation,
-## word-colored elemental card border, full-width VFX effect pill, and landscape-optimized mobile 2-column layout.
+## Bullet-time Japanese vocabulary chant overlay with 4 tactile hiragana choice tiles
+## (no text input box; supports mouse/touch tap and desktop 1-4 hotkeys, with 1.5x speed-crit bonus!).
 
 signal chant_completed(is_success: bool, is_typed_perfect: bool)
 signal chant_cancelled
+
+const SPEED_PERFECT_WINDOW: float = 2.2
 
 var _backdrop: ColorRect
 var _panel: PanelContainer
@@ -16,13 +18,14 @@ var _timer_bar: ProgressBar
 var _kanji_label: Label
 var _meaning_label: Label
 var _vfx_label: Label
-var _input_edit: LineEdit
 var _choices_grid: GridContainer
 
 var _active: bool = false
 var _word: Dictionary = {}
+var _options: Array[String] = []
 var _remaining: float = 0.0
 var _max_time: float = 8.5
+var _elapsed_open: float = 0.0
 
 
 func _ready() -> void:
@@ -54,12 +57,12 @@ func _build_ui() -> void:
 	outer_margin.add_child(center)
 
 	_panel = PanelContainer.new()
-	_panel.custom_minimum_size = Vector2(960 if is_mob else 600, 0)
+	_panel.custom_minimum_size = Vector2(920 if is_mob else 580, 0)
 	_panel.add_theme_stylebox_override("panel", UiStyle.make_shrine_modal("#080d1c", "#e8c474", 22, 24 if is_mob else 28, 18 if is_mob else 22))
 	center.add_child(_panel)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 10 if is_mob else 11)
+	vbox.add_theme_constant_override("separation", 12 if is_mob else 11)
 	_panel.add_child(vbox)
 
 	# Top row: skill badge + countdown
@@ -94,16 +97,16 @@ func _build_ui() -> void:
 	UiStyle.apply_bar(_timer_bar, "#f59e0b", "#0d152b", 5, "#fde68a", 0.40)
 	vbox.add_child(_timer_bar)
 
-	# Body container: 2-Column Landscape layout on Mobile (fits easily in 720p!), stacked on Desktop
+	# Body container: 2-Column Landscape on Mobile, Clean Stacked on Desktop
 	var body_container: BoxContainer = HBoxContainer.new() if is_mob else VBoxContainer.new()
-	body_container.add_theme_constant_override("separation", 18 if is_mob else 11)
+	body_container.add_theme_constant_override("separation", 18 if is_mob else 12)
 	vbox.add_child(body_container)
 
 	# === WORD SHOWCASE CARD ===
 	_word_card = PanelContainer.new()
 	_word_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if is_mob:
-		_word_card.size_flags_stretch_ratio = 0.92
+		_word_card.size_flags_stretch_ratio = 0.95
 		_word_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_word_card.add_theme_stylebox_override("panel", UiStyle.make_accent_card("#0c1429", "#e8c474", true, 18, 18, 14))
 	body_container.add_child(_word_card)
@@ -115,7 +118,7 @@ func _build_ui() -> void:
 	_word_card.add_child(word_box)
 
 	var prompt := Label.new()
-	prompt.text = "◆ 完成日文言靈詠唱・解放 3D 特效 ◆"
+	prompt.text = "◆ 選擇正確日文言靈・解放 3D 特效 ◆"
 	prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	prompt.add_theme_font_size_override("font_size", 14 if is_mob else 12)
 	prompt.add_theme_color_override("font_color", Color.html("#94a3b8"))
@@ -123,7 +126,7 @@ func _build_ui() -> void:
 
 	_kanji_label = Label.new()
 	_kanji_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_kanji_label.add_theme_font_size_override("font_size", 52 if is_mob else 44)
+	_kanji_label.add_theme_font_size_override("font_size", 54 if is_mob else 46)
 	_kanji_label.add_theme_color_override("font_color", Color.html("#fef3c7"))
 	UiStyle.style_label_shadow(_kanji_label, 0.85, 3)
 	word_box.add_child(_kanji_label)
@@ -134,7 +137,7 @@ func _build_ui() -> void:
 	_meaning_label.add_theme_color_override("font_color", Color.html("#7dd3fc"))
 	word_box.add_child(_meaning_label)
 
-	# Full-width VFX Effect Pill (NEVER inside a CenterContainer so autowrap stays horizontal!)
+	# Full-width VFX Effect Pill (horizontal wrapping)
 	_vfx_pill = PanelContainer.new()
 	_vfx_pill.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_vfx_pill.add_theme_stylebox_override("panel", UiStyle.make_panel("#091022", 0.92, "#fde68a", 0.55, 14, 1, 14, 8, 4))
@@ -147,67 +150,29 @@ func _build_ui() -> void:
 	_vfx_pill.add_child(_vfx_label)
 	word_box.add_child(_vfx_pill)
 
-	# === ACTION COLUMN (Choices + Hiragana Input + Cancel) ===
+	# === CHOICES COLUMN (Pure 4-Choice Tactile Buttons + Cancel, ZERO Text Input!) ===
 	var action_col := VBoxContainer.new()
 	action_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if is_mob:
-		action_col.size_flags_stretch_ratio = 1.15
+		action_col.size_flags_stretch_ratio = 1.12
 	action_col.alignment = BoxContainer.ALIGNMENT_CENTER
-	action_col.add_theme_constant_override("separation", 10)
+	action_col.add_theme_constant_override("separation", 12)
 	body_container.add_child(action_col)
 
-	# 4-Choice Quick Buttons (put first on Mobile so thumb taps are instant & prominent!)
 	var choice_lbl := Label.new()
-	choice_lbl.text = "✨ 點選正確平假名讀音立即發動：" if is_mob else "或直接點選正確的平假名讀音（標準威力）："
+	choice_lbl.text = "✨ 點選正確平假名發動（2.2秒內神速答對享 1.5 倍暴擊！）" if is_mob else "✨ 點選或按 1-4 鍵選擇正確讀音（2.2秒內神速答對享 1.5 倍暴擊！）"
 	choice_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	choice_lbl.add_theme_font_size_override("font_size", 16 if is_mob else 12)
-	choice_lbl.add_theme_color_override("font_color", Color.html("#fde68a" if is_mob else "#94a3b8"))
+	choice_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	choice_lbl.add_theme_font_size_override("font_size", 15 if is_mob else 13)
+	choice_lbl.add_theme_color_override("font_color", Color.html("#fde68a"))
+	action_col.add_child(choice_lbl)
 
 	_choices_grid = GridContainer.new()
 	_choices_grid.columns = 2
 	_choices_grid.add_theme_constant_override("h_separation", 12)
 	_choices_grid.add_theme_constant_override("v_separation", 12)
+	action_col.add_child(_choices_grid)
 
-	# Hiragana Input (1.5x Perfect Crit)
-	var input_lbl := Label.new()
-	input_lbl.text = "✍️ 輸入平假名（享 1.5 倍完美暴擊）："
-	input_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	input_lbl.add_theme_font_size_override("font_size", 14 if is_mob else 13)
-	input_lbl.add_theme_color_override("font_color", Color.html("#94a3b8" if is_mob else "#fde68a"))
-
-	var input_row := HBoxContainer.new()
-	input_row.add_theme_constant_override("separation", 10)
-
-	_input_edit = LineEdit.new()
-	_input_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_input_edit.placeholder_text = "輸入平假名，例如：いし"
-	_input_edit.custom_minimum_size = Vector2(0, 48 if is_mob else 44)
-	_input_edit.add_theme_font_size_override("font_size", 19 if is_mob else 15)
-	UiStyle.apply_line_edit(_input_edit, "#e8c474")
-	_input_edit.text_submitted.connect(func(_t: String) -> void: _submit_input())
-	input_row.add_child(_input_edit)
-
-	var cast_btn := Button.new()
-	cast_btn.focus_mode = Control.FOCUS_NONE
-	cast_btn.text = "✨ 詠唱！"
-	cast_btn.custom_minimum_size = Vector2(124 if is_mob else 104, 48 if is_mob else 44)
-	cast_btn.add_theme_font_size_override("font_size", 18 if is_mob else 15)
-	UiStyle.apply_button(cast_btn, "#d97706", "#fde68a", "#ffffff", 14, 2, 1.0)
-	cast_btn.pressed.connect(_submit_input)
-	input_row.add_child(cast_btn)
-
-	if is_mob:
-		action_col.add_child(choice_lbl)
-		action_col.add_child(_choices_grid)
-		action_col.add_child(input_lbl)
-		action_col.add_child(input_row)
-	else:
-		action_col.add_child(input_lbl)
-		action_col.add_child(input_row)
-		action_col.add_child(choice_lbl)
-		action_col.add_child(_choices_grid)
-
-	# Cancel button
 	var cancel_btn := Button.new()
 	cancel_btn.focus_mode = Control.FOCUS_NONE
 	cancel_btn.text = "取消詠唱（不消耗 SP）"
@@ -222,6 +187,7 @@ func open_chant(skill_type: String, word: Dictionary, max_time: float) -> void:
 	_word = word
 	_max_time = max_time
 	_remaining = max_time
+	_elapsed_open = 0.0
 	_active = true
 
 	var is_mob := UiStyle.is_mobile_device()
@@ -244,47 +210,65 @@ func open_chant(skill_type: String, word: Dictionary, max_time: float) -> void:
 	var w_col := Color.html(accent_hex).lerp(Color.WHITE, 0.25)
 	_vfx_label.text = "%s 【%s】\n%s" % [w_icon, w_vfx, w_eff]
 	_vfx_label.add_theme_color_override("font_color", w_col)
-	_input_edit.text = ""
 	_update_timer_ui()
 
 	for child in _choices_grid.get_children():
 		child.queue_free()
 
-	var options: Array = [word["kana"]]
+	_options.clear()
+	_options.append(String(word["kana"]))
 	for d in word["distractors"]:
-		options.append(d)
-	options.shuffle()
+		_options.append(String(d))
+	_options.shuffle()
 
 	var idx_tags := ["①", "②", "③", "④"]
-	for i in range(options.size()):
-		var kana: String = String(options[i])
+	for i in range(_options.size()):
+		var kana: String = _options[i]
 		var btn := Button.new()
 		btn.focus_mode = Control.FOCUS_NONE
 		btn.text = "%s  %s" % [idx_tags[i], kana]
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.custom_minimum_size = Vector2(0, 66 if is_mob else 50)
-		btn.add_theme_font_size_override("font_size", 24 if is_mob else 18)
+		btn.custom_minimum_size = Vector2(0, 78 if is_mob else 58)
+		btn.add_theme_font_size_override("font_size", 26 if is_mob else 19)
 		UiStyle.apply_button(btn, "#121d38", accent_hex, "#fef3c7", 15, 1, 0.96)
 		var picked: String = kana
-		btn.pressed.connect(func() -> void:
-			_finish(picked == String(_word.get("kana", "")), false)
-		)
+		btn.pressed.connect(func() -> void: _pick_option(picked))
 		_choices_grid.add_child(btn)
 
 	visible = true
 	UiStyle.animate_modal_open(self, _backdrop, _panel, 0.20)
-	if not is_mob:
-		_input_edit.grab_focus()
 
 
-func _submit_input() -> void:
+func _pick_option(picked: String) -> void:
 	if not _active:
 		return
-	var val := _input_edit.text.strip_edges()
-	if val.is_empty():
+	var is_ok := (picked == String(_word.get("kana", "")))
+	var is_perfect := is_ok and (_elapsed_open <= SPEED_PERFECT_WINDOW)
+	_finish(is_ok, is_perfect)
+
+
+func _input(event: InputEvent) -> void:
+	if not _active or not visible:
 		return
-	var ok := (val == String(_word.get("kana", ""))) or (val == String(_word.get("kanji", "")))
-	_finish(ok, true)
+	if event is InputEventKey:
+		var ke := event as InputEventKey
+		if ke.pressed and not ke.echo:
+			var idx := -1
+			if ke.keycode == KEY_1 or ke.keycode == KEY_KP_1:
+				idx = 0
+			elif ke.keycode == KEY_2 or ke.keycode == KEY_KP_2:
+				idx = 1
+			elif ke.keycode == KEY_3 or ke.keycode == KEY_KP_3:
+				idx = 2
+			elif ke.keycode == KEY_4 or ke.keycode == KEY_KP_4:
+				idx = 3
+			elif ke.keycode == KEY_ESCAPE:
+				_cancel()
+				get_viewport().set_input_as_handled()
+				return
+			if idx >= 0 and idx < _options.size():
+				_pick_option(_options[idx])
+				get_viewport().set_input_as_handled()
 
 
 func _cancel() -> void:
@@ -307,7 +291,9 @@ func _update_timer_ui() -> void:
 func _process(delta: float) -> void:
 	if not _active:
 		return
-	_remaining -= minf(0.05, delta)
+	var dt := minf(0.05, delta)
+	_elapsed_open += dt
+	_remaining -= dt
 	_update_timer_ui()
 	if _remaining <= 0.0:
 		_finish(false, false)
