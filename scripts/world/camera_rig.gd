@@ -71,9 +71,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
-			_target_dist = clampf(_target_dist - 0.75, 4.2, 13.5)
+			_target_dist = clampf(_target_dist - 0.75, 4.2, 16.5)
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
-			_target_dist = clampf(_target_dist + 0.75, 4.2, 13.5)
+			_target_dist = clampf(_target_dist + 0.75, 4.2, 16.5)
 		elif not is_captured and mb.button_index == MOUSE_BUTTON_RIGHT:
 			_is_dragging = mb.pressed
 	elif event is InputEventMouseMotion:

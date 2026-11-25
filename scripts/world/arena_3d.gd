@@ -21,9 +21,11 @@ var bridges: Array[Dictionary] = []
 # Solid tactical cover obstacles (pillars, boulders, pagoda columns): {pos: Vector2, radius: float, top_y: float}
 var obstacles: Array[Dictionary] = []
 
+const S: float = GameData.ARENA_RADIUS / 28.0
+
 # Stage-specific mechanic zones queried by BattleManager
 var sakura_zone_pos: Vector3 = Vector3.ZERO
-var sakura_zone_radius: float = 4.8
+var sakura_zone_radius: float = 5.6
 var wind_zones: Array[Dictionary] = []       # {pos: Vector3, radius: float, node: Node3D}
 var jump_pads: Array[Dictionary] = []        # {pos: Vector3, radius: float, node: Node3D}
 
@@ -35,10 +37,10 @@ var _water_plane_mat: Material
 var _sky_anim_nodes: Array[Dictionary] = []
 var _elapsed: float = 0.0
 var _sakura_spots: Array[Vector2] = [
-	Vector2(0.0, -17.5),
-	Vector2(17.5, 2.0),
-	Vector2(-17.5, 2.0),
-	Vector2(0.0, 1.5),
+	Vector2(0.0, -17.5 * S),
+	Vector2(17.5 * S, 2.0 * S),
+	Vector2(-17.5 * S, 2.0 * S),
+	Vector2(0.0, 1.5 * S),
 ]
 var _sakura_spot_idx: int = 0
 
@@ -62,43 +64,43 @@ func get_base_terrain_height(x: float, z: float) -> float:
 			# -> North Grand Torii Altar (+2.75m) + Twin East/West Pavilions (+1.85m) + South Steps (+0.95m)
 			var h := 0.0
 			# Central stone courtyard mound
-			var inner_t := clampf(1.0 - maxf(0.0, r - 5.2) / 2.2, 0.0, 1.0)
+			var inner_t := clampf(1.0 - maxf(0.0, r - 5.2 * S) / (2.2 * S), 0.0, 1.0)
 			inner_t = inner_t * inner_t * (3.0 - 2.0 * inner_t)
 			h = lerpf(0.0, 0.38, inner_t)
 
-			# Sunken circular Koi Pond Moat ring around r = 8.9m (spanning r=6.5..11.3m)
-			var moat_d := absf(r - 8.9)
-			var moat_t := clampf(1.0 - moat_d / 2.4, 0.0, 1.0)
+			# Sunken circular Koi Pond Moat ring around r = 8.9 * S
+			var moat_d := absf(r - 8.9 * S)
+			var moat_t := clampf(1.0 - moat_d / (2.4 * S), 0.0, 1.0)
 			moat_t = moat_t * moat_t * (3.0 - 2.0 * moat_t)
 			h -= 0.78 * moat_t
 
 			# North Elevated Torii Altar (+2.75m) with smooth stepped stone approach
-			var north_t := clampf((-z - 10.5) / 6.2, 0.0, 1.0)
+			var north_t := clampf((-z - 10.5 * S) / (6.2 * S), 0.0, 1.0)
 			north_t = north_t * north_t * (3.0 - 2.0 * north_t)
-			var x_mask := clampf(1.0 - maxf(0.0, absf(x) - 10.5) / 6.2, 0.0, 1.0)
+			var x_mask := clampf(1.0 - maxf(0.0, absf(x) - 10.5 * S) / (6.2 * S), 0.0, 1.0)
 			var north_altar := 2.75 * north_t * x_mask
 
 			# Twin East/West Moon-Viewing Pavilion Terraces (+1.85m)
-			var wing_x := clampf((absf(x) - 12.2) / 4.8, 0.0, 1.0)
+			var wing_x := clampf((absf(x) - 12.2 * S) / (4.8 * S), 0.0, 1.0)
 			wing_x = wing_x * wing_x * (3.0 - 2.0 * wing_x)
-			var wing_z := clampf(1.0 - maxf(0.0, absf(z - 2.0) - 7.8) / 5.2, 0.0, 1.0)
+			var wing_z := clampf(1.0 - maxf(0.0, absf(z - 2.0 * S) - 7.8 * S) / (5.2 * S), 0.0, 1.0)
 			var wing_balcony := 1.85 * wing_x * wing_z
 
 			# South Stepped Approach (+0.95m)
-			var south_t := clampf((z - 13.5) / 5.8, 0.0, 1.0)
+			var south_t := clampf((z - 13.5 * S) / (5.8 * S), 0.0, 1.0)
 			var south_step := 0.95 * south_t * south_t * (3.0 - 2.0 * south_t)
 			return maxf(h, maxf(maxf(north_altar, wing_balcony), south_step))
 
 		"maple_temple":
 			# Winding Mountain Gorge (-1.15m) + Central Pagoda Sanctuary (+2.15m) + Gently Terraced Hills (+2.95m)
-			var center_mound := 2.15 * exp(-((r * r) / 42.0))
-			var gorge_curve := sin(x * 0.16) * 4.2
-			var gorge_ring := absf(r - 11.8 - sin(atan2(z, x) * 2.0) * 1.8)
-			var valley_dip := -1.18 * exp(-((gorge_ring * gorge_ring) / 9.5))
-			var stream_cut := -0.45 * exp(-(((z - gorge_curve) * (z - gorge_curve)) / 8.0)) * clampf((r - 6.0) / 5.0, 0.0, 1.0)
+			var center_mound := 2.15 * exp(-((r * r) / (42.0 * S * S)))
+			var gorge_curve := sin(x * (0.16 / S)) * (4.2 * S)
+			var gorge_ring := absf(r - 11.8 * S - sin(atan2(z, x) * 2.0) * (1.8 * S))
+			var valley_dip := -1.18 * exp(-((gorge_ring * gorge_ring) / (9.5 * S * S)))
+			var stream_cut := -0.45 * exp(-(((z - gorge_curve) * (z - gorge_curve)) / (8.0 * S * S))) * clampf((r - 6.0 * S) / (5.0 * S), 0.0, 1.0)
 
 			var ang := atan2(z, x)
-			var outer_t := clampf((r - 14.2) / 8.5, 0.0, 1.0)
+			var outer_t := clampf((r - 14.2 * S) / (8.5 * S), 0.0, 1.0)
 			outer_t = outer_t * outer_t * (3.0 - 2.0 * outer_t)
 			var raw_hills := (1.95 + 1.05 * sin(ang * 3.0 + 0.5) + 0.55 * cos(ang * 5.0 - 0.7)) * outer_t
 			# Very gentle hillside contour (avoid abrupt stair-snap steps)
@@ -109,20 +111,20 @@ func get_base_terrain_height(x: float, z: float) -> float:
 			# Cracked Volcanic Caldera: Deep Magma Chasms (-1.05m) + Central Hub (+1.05m)
 			# + 4 Basalt Fortresses (+2.45m) + 4 Safe Diagonal Stone Causeways (+0.78m) + Volcanic Rim
 			var h := -1.05
-			var center_t := clampf(1.0 - maxf(0.0, r - 4.6) / 4.2, 0.0, 1.0)
+			var center_t := clampf(1.0 - maxf(0.0, r - 4.6 * S) / (4.2 * S), 0.0, 1.0)
 			center_t = center_t * center_t * (3.0 - 2.0 * center_t)
 			h = maxf(h, lerpf(-1.05, 1.05, center_t))
 
 			# 4 Raised Obsidian Basalt Bastions in NE, NW, SE, SW quadrants (smooth climbable slope)
 			var islands := [
-				Vector2(13.5, -13.0),
-				Vector2(-13.5, -13.0),
-				Vector2(13.5, 13.0),
-				Vector2(-13.5, 13.0),
+				Vector2(18.3, -17.6),
+				Vector2(-18.3, -17.6),
+				Vector2(18.3, 17.6),
+				Vector2(-18.3, 17.6),
 			]
 			for isl: Vector2 in islands:
 				var d := Vector2(x, z).distance_to(isl)
-				var it := clampf(1.0 - maxf(0.0, d - 4.8) / 5.4, 0.0, 1.0)
+				var it := clampf(1.0 - maxf(0.0, d - 6.0) / 6.8, 0.0, 1.0)
 				it = it * it * (3.0 - 2.0 * it)
 				h = maxf(h, lerpf(-1.05, 2.45, it))
 
@@ -130,35 +132,35 @@ func get_base_terrain_height(x: float, z: float) -> float:
 			var diag_d1 := absf(x - z) * 0.7071
 			var diag_d2 := absf(x + z) * 0.7071
 			var bridge_d := minf(diag_d1, diag_d2)
-			if r > 3.2 and r < 22.5:
-				var bt := clampf(1.0 - maxf(0.0, bridge_d - 1.75) / 2.75, 0.0, 1.0)
+			if r > 3.2 * S and r < 22.5 * S:
+				var bt := clampf(1.0 - maxf(0.0, bridge_d - 2.0) / 3.0, 0.0, 1.0)
 				bt = bt * bt * (3.0 - 2.0 * bt)
 				h = maxf(h, lerpf(-1.05, 0.78, bt))
 
 			# Outer jagged volcanic caldera ridge
 			var ang := atan2(z, x)
-			var rim_t := clampf((r - (radius - 4.8)) / 4.2, 0.0, 1.0)
+			var rim_t := clampf((r - (radius - 6.0)) / 5.2, 0.0, 1.0)
 			var rim_h := 1.45 + 0.55 * sin(ang * 8.0)
 			h = maxf(h, lerpf(-1.05, rim_h, rim_t * rim_t))
 			return h
 
 		"sky_tenshu":
 			# Tiered Golden Sky-Castle Courtyard + 4 Ceremonial Spirit-Ramps (N/S/E/W)
-			# Ramps climb smoothly from r=4.2m -> 10.8m, arriving flush at the 10.8m deck rim (0 overlap!)
+			# Ramps climb smoothly from r=6.0m -> 15.2m, arriving flush at the 15.2m bastion rim (22.0 - 6.8)
 			var h := 0.0
-			var inner_rim := clampf((r - 11.5) / 4.5, 0.0, 1.0)
+			var inner_rim := clampf((r - 15.6) / 6.0, 0.0, 1.0)
 			h = 0.55 * inner_rim * inner_rim * (3.0 - 2.0 * inner_rim)
-			var outer_rim := clampf((r - 20.5) / 4.5, 0.0, 1.0)
+			var outer_rim := clampf((r - 27.8) / 6.0, 0.0, 1.0)
 			h += 0.85 * outer_rim * outer_rim * (3.0 - 2.0 * outer_rim)
 
-			# North/South sloped ceremonial spirit-ramps climbing smoothly up to +2.55m bastion rim (|z|=10.8)
-			if absf(x) < 3.4 and absf(z) > 4.2 and absf(z) < 11.6:
-				var ramp_t := clampf((absf(z) - 4.2) / 6.6, 0.0, 1.0)
+			# North/South sloped ceremonial spirit-ramps climbing smoothly up to +2.55m bastion rim (|z|=15.2)
+			if absf(x) < 3.4 and absf(z) > 6.0 and absf(z) < 16.0:
+				var ramp_t := clampf((absf(z) - 6.0) / 9.2, 0.0, 1.0)
 				var x_fade := clampf(1.0 - maxf(0.0, absf(x) - 2.1) / 1.3, 0.0, 1.0)
 				h = maxf(h, 2.55 * ramp_t * x_fade)
-			# East/West sloped ceremonial spirit-ramps climbing smoothly up to +2.65m bastion rim (|x|=10.8)
-			if absf(z) < 3.4 and absf(x) > 4.2 and absf(x) < 11.6:
-				var ramp_tx := clampf((absf(x) - 4.2) / 6.6, 0.0, 1.0)
+			# East/West sloped ceremonial spirit-ramps climbing smoothly up to +2.65m bastion rim (|x|=15.2)
+			if absf(z) < 3.4 and absf(x) > 6.0 and absf(x) < 16.0:
+				var ramp_tx := clampf((absf(x) - 6.0) / 9.2, 0.0, 1.0)
 				var z_fade := clampf(1.0 - maxf(0.0, absf(z) - 2.1) / 1.3, 0.0, 1.0)
 				h = maxf(h, 2.65 * ramp_tx * z_fade)
 			return h
@@ -346,6 +348,7 @@ func cycle_sakura_zone() -> Vector3:
 func build_stage(stage_id: String) -> void:
 	current_stage_id = stage_id
 	var st: Dictionary = GameData.get_stage(stage_id)
+	var is_mob := UiStyle.is_mobile_device()
 
 	for child in _arena_content.get_children():
 		_arena_content.remove_child(child)
@@ -377,24 +380,28 @@ func build_stage(stage_id: String) -> void:
 		var sky_mat := ShaderMaterial.new()
 		sky_mat.shader = SKY_SHADER
 		sky_mat.set_shader_parameter("stage_id", _stage_shader_index())
+		sky_mat.set_shader_parameter("mobile_mode", is_mob)
 		var sky_res := Sky.new()
 		sky_res.sky_material = sky_mat
+		sky_res.radiance_size = Sky.RADIANCE_SIZE_32
 		env.background_mode = Environment.BG_SKY
 		env.sky = sky_res
+		# Critical WebGL2 mobile optimization: prevent per-frame 6-face radiance cubemap updates!
+		env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 		env.background_color = sky_col
 		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 		env.ambient_light_color = ambient_col
-		env.ambient_light_energy = 0.85
+		env.ambient_light_energy = 1.05 if is_mob else 0.85
 		env.fog_enabled = true
 		env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
 		env.fog_light_color = fog_col
-		env.fog_density = 0.0065
+		env.fog_density = 0.0046
 		env.fog_sky_affect = 0.08
 
 	if center_light != null:
 		center_light.light_color = ring_col
 		center_light.light_energy = 1.9
-		center_light.omni_range = 72.0
+		center_light.omni_range = GameData.ARENA_RADIUS * 2.6
 
 	# 1. Higher-Resolution Sculpted Heightfield Terrain Mesh
 	_build_heightfield_terrain(floor_col, ring_col)
@@ -431,6 +438,7 @@ func _stage_shader_index() -> int:
 
 func _terrain_material_weights(x: float, z: float, h: float) -> Color:
 	var r := sqrt(x * x + z * z)
+	var radius := GameData.ARENA_RADIUS
 	var w_a := 0.0
 	var w_b := 0.0
 	var w_c := 0.0
@@ -443,11 +451,11 @@ func _terrain_material_weights(x: float, z: float, h: float) -> Color:
 			# C: Polished Dark Slate Pavilion Tiles (East/West wings + North Altar crown)
 			# D: Wet Koi Pond River Cobblestones (sunken moat & banks)
 			var moat_w := clampf((-0.02 - h) / 0.36, 0.0, 1.0)
-			var wing_w := clampf((absf(x) - 12.0) / 3.2, 0.0, 1.0) * clampf(1.0 - maxf(0.0, absf(z - 2.0) - 8.5) / 3.5, 0.0, 1.0)
+			var wing_w := clampf((absf(x) - 12.0 * S) / (3.2 * S), 0.0, 1.0) * clampf(1.0 - maxf(0.0, absf(z - 2.0 * S) - 8.5 * S) / (3.5 * S), 0.0, 1.0)
 			var altar_slate := clampf((h - 2.15) / 0.55, 0.0, 1.0)
-			var center_flag := clampf(1.0 - maxf(0.0, r - 4.8) / 2.2, 0.0, 1.0)
-			var north_path := clampf((-z - 11.0) / 3.0, 0.0, 1.0) * clampf(1.0 - maxf(0.0, absf(x) - 4.5) / 3.5, 0.0, 1.0)
-			var south_path := clampf((z - 12.0) / 3.0, 0.0, 1.0) * clampf(1.0 - maxf(0.0, absf(x) - 4.0) / 3.5, 0.0, 1.0)
+			var center_flag := clampf(1.0 - maxf(0.0, r - 4.8 * S) / (2.2 * S), 0.0, 1.0)
+			var north_path := clampf((-z - 11.0 * S) / (3.0 * S), 0.0, 1.0) * clampf(1.0 - maxf(0.0, absf(x) - 4.5 * S) / (3.5 * S), 0.0, 1.0)
+			var south_path := clampf((z - 12.0 * S) / (3.0 * S), 0.0, 1.0) * clampf(1.0 - maxf(0.0, absf(x) - 4.0 * S) / (3.5 * S), 0.0, 1.0)
 			w_d = moat_w
 			w_c = maxf(wing_w, altar_slate) * (1.0 - moat_w)
 			w_a = clampf(maxf(center_flag, maxf(north_path, south_path)), 0.0, 1.0) * (1.0 - moat_w) * (1.0 - w_c * 0.65)
@@ -459,8 +467,8 @@ func _terrain_material_weights(x: float, z: float, h: float) -> Color:
 			# C: Autumn Fallen Maple Leaf Carpet (outer hills & terraces)
 			# D: Wet Dark Gorge Riverbed Slate (deep stream bed)
 			var river_w := clampf((-0.25 - h) / 0.45, 0.0, 1.0)
-			var center_stone := clampf(1.0 - maxf(0.0, r - 5.2) / 3.0, 0.0, 1.0)
-			var maple_ridge := clampf((h - 0.85) / 1.05, 0.0, 1.0) * clampf((r - 11.0) / 5.5, 0.0, 1.0)
+			var center_stone := clampf(1.0 - maxf(0.0, r - 5.2 * S) / (3.0 * S), 0.0, 1.0)
+			var maple_ridge := clampf((h - 0.85) / 1.05, 0.0, 1.0) * clampf((r - 11.0 * S) / (5.5 * S), 0.0, 1.0)
 			w_d = river_w
 			w_a = center_stone * (1.0 - river_w)
 			w_c = maple_ridge * (1.0 - river_w) * (1.0 - w_a)
@@ -473,9 +481,9 @@ func _terrain_material_weights(x: float, z: float, h: float) -> Color:
 			# D: Flowing Molten Magma Crust (deep chasms)
 			var magma_w := clampf((-0.38 - h) / 0.40, 0.0, 1.0)
 			var diag_d := minf(absf(x - z) * 0.7071, absf(x + z) * 0.7071)
-			var causeway_w := clampf(1.0 - maxf(0.0, diag_d - 1.65) / 1.55, 0.0, 1.0) * clampf((r - 4.2) / 2.2, 0.0, 1.0) * clampf((22.5 - r) / 2.5, 0.0, 1.0)
-			var plateau_w := clampf((h - 0.85) / 0.65, 0.0, 1.0) * clampf((23.5 - r) / 3.0, 0.0, 1.0)
-			var center_hub := clampf(1.0 - maxf(0.0, r - 4.8) / 2.4, 0.0, 1.0)
+			var causeway_w := clampf(1.0 - maxf(0.0, diag_d - 1.9) / 1.7, 0.0, 1.0) * clampf((r - 4.2 * S) / (2.2 * S), 0.0, 1.0) * clampf((22.5 * S - r) / (2.8 * S), 0.0, 1.0)
+			var plateau_w := clampf((h - 0.85) / 0.65, 0.0, 1.0) * clampf((radius - 4.5 - r) / 3.5, 0.0, 1.0)
+			var center_hub := clampf(1.0 - maxf(0.0, r - 4.8 * S) / (2.4 * S), 0.0, 1.0)
 			w_d = magma_w
 			w_b = causeway_w * (1.0 - magma_w) * (1.0 - plateau_w * 0.7)
 			w_a = clampf(maxf(plateau_w, center_hub), 0.0, 1.0) * (1.0 - magma_w) * (1.0 - w_b * 0.5)
@@ -486,11 +494,11 @@ func _terrain_material_weights(x: float, z: float, h: float) -> Color:
 			# B: Imperial Geometric Stone Paving (mid courtyard)
 			# C: Gilded Gold-Inlaid Spirit Ramps (4 ceremonial N/S/E/W ramps)
 			# D: Weathered Castle Ishigaki Masonry (outer raised terrace rim)
-			var ns_ramp: float = 1.0 if (absf(x) < 3.5 and absf(z) > 4.0 and absf(z) < 11.6) else 0.0
-			var ew_ramp: float = 1.0 if (absf(z) < 3.5 and absf(x) > 4.0 and absf(x) < 11.6) else 0.0
+			var ns_ramp: float = 1.0 if (absf(x) < 3.5 and absf(z) > 5.8 and absf(z) < 16.0) else 0.0
+			var ew_ramp: float = 1.0 if (absf(z) < 3.5 and absf(x) > 5.8 and absf(x) < 16.0) else 0.0
 			var ramp_w := maxf(ns_ramp, ew_ramp) * clampf((h - 0.12) / 0.45, 0.0, 1.0)
-			var center_marble := clampf(1.0 - maxf(0.0, r - 6.8) / 3.2, 0.0, 1.0)
-			var outer_wall := clampf((r - 19.2) / 3.8, 0.0, 1.0)
+			var center_marble := clampf(1.0 - maxf(0.0, r - 9.2) / 4.2, 0.0, 1.0)
+			var outer_wall := clampf((r - 26.0) / 5.0, 0.0, 1.0)
 			w_c = ramp_w
 			w_a = center_marble * (1.0 - w_c)
 			w_d = outer_wall * (1.0 - w_c)
@@ -505,8 +513,9 @@ func _terrain_material_weights(x: float, z: float, h: float) -> Color:
 
 func _build_heightfield_terrain(_floor_col: Color, _ring_col: Color) -> void:
 	var radius := GameData.ARENA_RADIUS
-	var rings := 40
-	var segs := 80
+	var is_mob := UiStyle.is_mobile_device()
+	var rings := 32 if is_mob else 48
+	var segs := 64 if is_mob else 92
 
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -570,17 +579,19 @@ func _build_heightfield_terrain(_floor_col: Color, _ring_col: Color) -> void:
 	var mat := ShaderMaterial.new()
 	mat.shader = FLOOR_SHADER
 	mat.set_shader_parameter("stage_id", _stage_shader_index())
+	mat.set_shader_parameter("mobile_mode", is_mob)
 
 	var terrain_inst := MeshInstance3D.new()
 	terrain_inst.name = "TerrainMesh"
 	terrain_inst.mesh = mesh
 	terrain_inst.material_override = mat
+	terrain_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_arena_content.add_child(terrain_inst)
 
 
 func _build_boundary_ring(ring_col: Color) -> void:
 	var radius := GameData.ARENA_RADIUS - 0.35
-	var segs := 72
+	var segs := 64 if UiStyle.is_mobile_device() else 84
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for si in range(segs):
@@ -603,6 +614,7 @@ func _build_boundary_ring(ring_col: Color) -> void:
 	var inst := MeshInstance3D.new()
 	inst.mesh = st.commit()
 	inst.material_override = mat
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_arena_content.add_child(inst)
 
 
@@ -611,44 +623,49 @@ func _build_boundary_ring(ring_col: Color) -> void:
 # ==============================================================================
 func _build_sakura_shrine_props(_ring_col: Color) -> void:
 	# Shimmering Moonlit Koi Pond Water Ring peeking in the sunken moat (y = -0.34)
-	_add_water_plane(-0.34, 13.0, "#1d4ed8", "#38bdf8", 0.62)
+	_add_water_plane(-0.34, 13.0 * S, "#1d4ed8", "#38bdf8", 0.62)
 
 	# Double Ceremonial Vermilion Torii Gates (Inner & Grand North Altar)
-	_add_torii_gate(Vector3(0.0, get_base_terrain_height(0.0, -23.5), -23.5), "#dc2626", 1.32)
-	_add_torii_gate(Vector3(0.0, get_base_terrain_height(0.0, 21.5), 21.5), "#b91c1c", 1.05)
+	_add_torii_gate(Vector3(0.0, get_base_terrain_height(0.0, -23.5 * S), -23.5 * S), "#dc2626", 1.36)
+	_add_torii_gate(Vector3(0.0, get_base_terrain_height(0.0, 21.5 * S), 21.5 * S), "#b91c1c", 1.08)
 
 	# 4 Flush-Anchored Arched Vermilion Taiko Bridges spanning the sunken Koi Moat!
-	_add_walkable_bridge(_bridge_pt(0.0, -5.2), _bridge_pt(0.0, -13.0), 4.6, 0.78, "#991b1b", "#450a0a", "#ef4444", 0)
-	_add_walkable_bridge(_bridge_pt(5.2, 1.0), _bridge_pt(13.8, 1.5), 4.2, 0.70, "#991b1b", "#450a0a", "#ef4444", 0)
-	_add_walkable_bridge(_bridge_pt(-5.2, 1.0), _bridge_pt(-13.8, 1.5), 4.2, 0.70, "#991b1b", "#450a0a", "#ef4444", 0)
-	_add_walkable_bridge(_bridge_pt(0.0, 5.4), _bridge_pt(0.0, 13.4), 4.4, 0.65, "#991b1b", "#450a0a", "#ef4444", 0)
+	_add_walkable_bridge(_bridge_pt(0.0, -5.2 * S), _bridge_pt(0.0, -13.0 * S), 4.8, 0.85, "#991b1b", "#450a0a", "#ef4444", 0)
+	_add_walkable_bridge(_bridge_pt(5.2 * S, 1.0 * S), _bridge_pt(13.8 * S, 1.5 * S), 4.4, 0.78, "#991b1b", "#450a0a", "#ef4444", 0)
+	_add_walkable_bridge(_bridge_pt(-5.2 * S, 1.0 * S), _bridge_pt(-13.8 * S, 1.5 * S), 4.4, 0.78, "#991b1b", "#450a0a", "#ef4444", 0)
+	_add_walkable_bridge(_bridge_pt(0.0, 5.4 * S), _bridge_pt(0.0, 13.4 * S), 4.6, 0.72, "#991b1b", "#450a0a", "#ef4444", 0)
 
 	# 2 Elevated Carved-Stone Moon-Viewing Decks flanking the North Altar (with rim-flush approach stairs!)
-	_add_walkable_deck(Vector3(-11.8, 2.25, -14.8), 3.9, "#4c3b63", "#2b1f3a", "#f472b6", 1, true)
-	_add_walkable_deck(Vector3(11.8, 2.25, -14.8), 3.9, "#4c3b63", "#2b1f3a", "#f472b6", 1, true)
-	_add_walkable_bridge(_bridge_pt(-5.2, -15.0), Vector3(-8.05, 2.25, -14.8), 2.8, 0.06, "#523f66", "#2f223d", "#f472b6", 0)
-	_add_walkable_bridge(_bridge_pt(5.2, -15.0), Vector3(8.05, 2.25, -14.8), 2.8, 0.06, "#523f66", "#2f223d", "#f472b6", 0)
+	_add_walkable_deck(Vector3(-16.0, 2.25, -20.1), 4.8, "#4c3b63", "#2b1f3a", "#f472b6", 1, true)
+	_add_walkable_deck(Vector3(16.0, 2.25, -20.1), 4.8, "#4c3b63", "#2b1f3a", "#f472b6", 1, true)
+	_add_walkable_bridge(_bridge_pt(-7.4, -20.4), Vector3(-11.35, 2.25, -20.1), 3.0, 0.06, "#523f66", "#2f223d", "#f472b6", 0)
+	_add_walkable_bridge(_bridge_pt(7.4, -20.4), Vector3(11.35, 2.25, -20.1), 3.0, 0.06, "#523f66", "#2f223d", "#f472b6", 0)
 
 	# Twin East/West Open Shrine Pavilion Roofs (ornate corners, walkable under!)
-	_add_shrine_pavilion(Vector3(19.5, get_base_terrain_height(19.5, 2.0), 2.0), "#991b1b", "#1e1b2e", 1.0)
-	_add_shrine_pavilion(Vector3(-19.5, get_base_terrain_height(-19.5, 2.0), 2.0), "#991b1b", "#1e1b2e", 1.0)
+	_add_shrine_pavilion(Vector3(26.5, get_base_terrain_height(26.5, 2.7), 2.7), "#991b1b", "#1e1b2e", 1.08)
+	_add_shrine_pavilion(Vector3(-26.5, get_base_terrain_height(-26.5, 2.7), 2.7), "#991b1b", "#1e1b2e", 1.08)
 
 	# 4 Solid Tactical Shrine Stone Columns around outer moat corners
-	for cp: Vector2 in [Vector2(-7.8, -7.8), Vector2(7.8, -7.8), Vector2(-7.8, 9.5), Vector2(7.8, 9.5)]:
+	for cp: Vector2 in [
+		Vector2(-7.8 * S, -7.8 * S), Vector2(7.8 * S, -7.8 * S),
+		Vector2(-7.8 * S, 9.5 * S), Vector2(7.8 * S, 9.5 * S),
+	]:
 		var cy := get_base_terrain_height(cp.x, cp.y)
-		_add_tactical_pillar(Vector3(cp.x, cy, cp.y), 0.78, 4.4, "#4c3b5e", "#f472b6")
+		_add_tactical_pillar(Vector3(cp.x, cy, cp.y), 0.85, 4.5, "#4c3b5e", "#f472b6")
 
 	# 8 Lush Night Sakura Trees framing the terraced shrine
 	for tp: Vector2 in [
-		Vector2(-20.5, -13.0), Vector2(20.5, -13.0), Vector2(-21.0, 13.0), Vector2(21.0, 13.0),
-		Vector2(-12.5, -21.5), Vector2(12.5, -21.5), Vector2(-13.5, 19.5), Vector2(13.5, 19.5)
+		Vector2(-20.5 * S, -13.0 * S), Vector2(20.5 * S, -13.0 * S),
+		Vector2(-21.0 * S, 13.0 * S), Vector2(21.0 * S, 13.0 * S),
+		Vector2(-12.5 * S, -21.5 * S), Vector2(12.5 * S, -21.5 * S),
+		Vector2(-13.5 * S, 19.5 * S), Vector2(13.5 * S, 19.5 * S),
 	]:
-		_add_stylized_tree(Vector3(tp.x, get_base_terrain_height(tp.x, tp.y), tp.y), "#3b231e", "#f472b6", 1.28)
+		_add_stylized_tree(Vector3(tp.x, get_base_terrain_height(tp.x, tp.y), tp.y), "#3b231e", "#f472b6", 1.38)
 
 	# 8 Glowing Stone Lanterns along terraces
 	for ang in [0.35, 1.15, 1.95, 2.75, -0.45, -1.15, -2.0, -2.7]:
-		var lx := cos(ang) * (GameData.ARENA_RADIUS - 2.2)
-		var lz := sin(ang) * (GameData.ARENA_RADIUS - 2.2)
+		var lx := cos(ang) * (GameData.ARENA_RADIUS - 2.4)
+		var lz := sin(ang) * (GameData.ARENA_RADIUS - 2.4)
 		_add_stone_lantern(Vector3(lx, get_base_terrain_height(lx, lz), lz), "#fde047")
 
 	# Stage Mechanic: Rotating Sakura Spirit Blessing Circle
@@ -661,7 +678,7 @@ func _build_sakura_shrine_props(_ring_col: Color) -> void:
 	ring_m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	ring_m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_sakura_zone_node.add_child(_make_flat_ring(sakura_zone_radius - 0.45, sakura_zone_radius, ring_m, 0.05))
-	_sakura_zone_node.add_child(_make_flat_ring(1.8, 2.15, ring_m, 0.06))
+	_sakura_zone_node.add_child(_make_flat_ring(2.1, 2.45, ring_m, 0.06))
 	_arena_content.add_child(_sakura_zone_node)
 
 
@@ -670,64 +687,70 @@ func _build_sakura_shrine_props(_ring_col: Color) -> void:
 # ==============================================================================
 func _build_maple_temple_props(_ring_col: Color) -> void:
 	# Shimmering Mountain Gorge Stream in the deep ravine (y = -0.62)
-	_add_water_plane(-0.62, 23.0, "#0e7490", "#22d3ee", 0.58)
+	_add_water_plane(-0.62, 23.0 * S, "#0e7490", "#22d3ee", 0.58)
 
-	_add_torii_gate(Vector3(0.0, get_base_terrain_height(0.0, -23.5), -23.5), "#ea580c", 1.2)
+	_add_torii_gate(Vector3(0.0, get_base_terrain_height(0.0, -23.5 * S), -23.5 * S), "#ea580c", 1.25)
 
 	# 4 Flush-Anchored Weathered Cedar Suspension Bridges spanning the autumn ravine!
-	_add_walkable_bridge(_bridge_pt(0.0, -5.0), _bridge_pt(0.0, -17.0), 4.0, 0.68, "#7c4722", "#43220d", "#f59e0b", 0)
-	_add_walkable_bridge(_bridge_pt(0.0, 5.0), _bridge_pt(0.0, 17.0), 4.0, 0.68, "#7c4722", "#43220d", "#f59e0b", 0)
-	_add_walkable_bridge(_bridge_pt(5.0, 0.0), _bridge_pt(17.0, 0.0), 4.0, 0.68, "#7c4722", "#43220d", "#f59e0b", 0)
-	_add_walkable_bridge(_bridge_pt(-5.0, 0.0), _bridge_pt(-17.0, 0.0), 4.0, 0.68, "#7c4722", "#43220d", "#f59e0b", 0)
+	_add_walkable_bridge(_bridge_pt(0.0, -5.0 * S), _bridge_pt(0.0, -17.0 * S), 4.2, 0.78, "#7c4722", "#43220d", "#f59e0b", 0)
+	_add_walkable_bridge(_bridge_pt(0.0, 5.0 * S), _bridge_pt(0.0, 17.0 * S), 4.2, 0.78, "#7c4722", "#43220d", "#f59e0b", 0)
+	_add_walkable_bridge(_bridge_pt(5.0 * S, 0.0), _bridge_pt(17.0 * S, 0.0), 4.2, 0.78, "#7c4722", "#43220d", "#f59e0b", 0)
+	_add_walkable_bridge(_bridge_pt(-5.0 * S, 0.0), _bridge_pt(-17.0 * S, 0.0), 4.2, 0.78, "#7c4722", "#43220d", "#f59e0b", 0)
 
 	# 3 Walkable Elevated Wooden Tea-House Canopy Decks perched on outer autumn hills (rim-flush timber stairs!)
-	var nw_y := maxf(2.45, get_base_terrain_height(-15.5, -12.5) + 0.95)
-	var ne_y := maxf(2.45, get_base_terrain_height(15.5, -12.5) + 0.95)
-	var s_y := maxf(2.25, get_base_terrain_height(0.0, 19.2) + 0.95)
-	_add_walkable_deck(Vector3(-15.5, nw_y, -12.5), 4.2, "#713819", "#421d0b", "#fb923c", 1, true)
-	_add_walkable_deck(Vector3(15.5, ne_y, -12.5), 4.2, "#713819", "#421d0b", "#fb923c", 1, true)
-	_add_walkable_deck(Vector3(0.0, s_y, 19.2), 4.4, "#713819", "#421d0b", "#fb923c", 1, true)
+	var nw_y := maxf(2.45, get_base_terrain_height(-21.0, -17.0) + 0.95)
+	var ne_y := maxf(2.45, get_base_terrain_height(21.0, -17.0) + 0.95)
+	var s_y := maxf(2.25, get_base_terrain_height(0.0, 26.0) + 0.95)
+	_add_walkable_deck(Vector3(-21.0, nw_y, -17.0), 5.0, "#713819", "#421d0b", "#fb923c", 1, true)
+	_add_walkable_deck(Vector3(21.0, ne_y, -17.0), 5.0, "#713819", "#421d0b", "#fb923c", 1, true)
+	_add_walkable_deck(Vector3(0.0, s_y, 26.0), 5.2, "#713819", "#421d0b", "#fb923c", 1, true)
 	# Smooth timber stairs climbing up from surrounding hillside right onto each canopy deck rim
-	_add_walkable_bridge(_bridge_pt(-20.4, -18.5), Vector3(-18.1, nw_y, -15.65), 2.8, 0.05, "#7c4722", "#43220d", "#fb923c", 0)
-	_add_walkable_bridge(_bridge_pt(20.4, -18.5), Vector3(18.1, ne_y, -15.65), 2.8, 0.05, "#7c4722", "#43220d", "#fb923c", 0)
-	_add_walkable_bridge(_bridge_pt(6.6, 23.2), Vector3(3.65, s_y, 21.45), 2.8, 0.05, "#7c4722", "#43220d", "#fb923c", 0)
+	_add_walkable_bridge(_bridge_pt(-27.2, -24.5), Vector3(-24.2, nw_y, -20.8), 3.0, 0.05, "#7c4722", "#43220d", "#fb923c", 0)
+	_add_walkable_bridge(_bridge_pt(27.2, -24.5), Vector3(24.2, ne_y, -20.8), 3.0, 0.05, "#7c4722", "#43220d", "#fb923c", 0)
+	_add_walkable_bridge(_bridge_pt(8.8, 31.0), Vector3(4.45, s_y, 28.55), 3.0, 0.05, "#7c4722", "#43220d", "#fb923c", 0)
 
 	# Central Pagoda Sanctuary Spire (tall landmark perched at dead center, solid core!)
 	_add_temple_pagoda(Vector3(0.0, get_base_terrain_height(0.0, 0.0), 0.0))
 
 	# 4 Tactical Mossy Temple Boulders providing flank cover in the ravine & ridges
-	for bp: Vector2 in [Vector2(-9.5, -9.2), Vector2(9.5, -9.2), Vector2(-9.5, 9.2), Vector2(9.5, 9.2)]:
-		_add_mossy_boulder(Vector3(bp.x, get_base_terrain_height(bp.x, bp.y), bp.y), 1.35)
+	for bp: Vector2 in [
+		Vector2(-9.5 * S, -9.2 * S), Vector2(9.5 * S, -9.2 * S),
+		Vector2(-9.5 * S, 9.2 * S), Vector2(9.5 * S, 9.2 * S),
+	]:
+		_add_mossy_boulder(Vector3(bp.x, get_base_terrain_height(bp.x, bp.y), bp.y), 1.55)
 
-	# Perimeter Tall Bamboo Groves
+	# Perimeter Tall Bamboo Groves (batched into 1 MultiMeshInstance3D = 1 draw call!)
 	var bamboo_mat := StandardMaterial3D.new()
 	bamboo_mat.albedo_color = Color.html("#15803d")
 	bamboo_mat.roughness = 0.45
 	var stalk_mesh := CylinderMesh.new()
-	stalk_mesh.top_radius = 0.16; stalk_mesh.bottom_radius = 0.22; stalk_mesh.height = 10.5; stalk_mesh.radial_segments = 10
-	for i in range(20):
-		var ang := (float(i) / 20.0) * TAU + 0.12
+	stalk_mesh.top_radius = 0.16; stalk_mesh.bottom_radius = 0.22; stalk_mesh.height = 10.5
+	stalk_mesh.radial_segments = 7; stalk_mesh.rings = 1
+	stalk_mesh.material = bamboo_mat
+	var bamboo_xforms: Array[Transform3D] = []
+	for i in range(22):
+		var ang := (float(i) / 22.0) * TAU + 0.12
 		if absf(ang - (-PI * 0.5)) < 0.35 or absf(ang - (PI * 1.5)) < 0.35:
 			continue
-		var dist := GameData.ARENA_RADIUS - 2.1 - (0.9 if i % 2 == 0 else 0.0)
+		var dist := GameData.ARENA_RADIUS - 2.3 - (1.0 if i % 2 == 0 else 0.0)
 		var bx := cos(ang) * dist; var bz := sin(ang) * dist
 		var by := get_base_terrain_height(bx, bz)
-		for offset: Vector2 in [Vector2(0.0, 0.0), Vector2(0.7, 0.5), Vector2(-0.6, 0.7)]:
-			var stalk := MeshInstance3D.new()
-			stalk.mesh = stalk_mesh; stalk.material_override = bamboo_mat
-			stalk.position = Vector3(bx + offset.x, by + 5.0, bz + offset.y)
-			stalk.rotation.z = sin(float(i) + offset.x) * 0.06
-			_arena_content.add_child(stalk)
+		for offset: Vector2 in [Vector2(0.0, 0.0), Vector2(0.75, 0.55), Vector2(-0.65, 0.75)]:
+			var basis := Basis.from_euler(Vector3(0.0, 0.0, sin(float(i) + offset.x) * 0.06))
+			bamboo_xforms.append(Transform3D(basis, Vector3(bx + offset.x, by + 5.0, bz + offset.y)))
+	_add_batched_multimesh(stalk_mesh, bamboo_xforms, false)
 
 	# 7 Crimson & Golden Maple Trees atop outer hills
 	for mp: Vector2 in [
-		Vector2(-19.5, -8.5), Vector2(19.5, -8.5), Vector2(-18.5, 14.5), Vector2(18.5, 14.5),
-		Vector2(-11.0, -21.0), Vector2(11.0, -21.0), Vector2(12.5, 20.0)
+		Vector2(-19.5 * S, -8.5 * S), Vector2(19.5 * S, -8.5 * S),
+		Vector2(-18.5 * S, 14.5 * S), Vector2(18.5 * S, 14.5 * S),
+		Vector2(-11.0 * S, -21.0 * S), Vector2(11.0 * S, -21.0 * S),
+		Vector2(12.5 * S, 20.0 * S),
 	]:
-		_add_stylized_tree(Vector3(mp.x, get_base_terrain_height(mp.x, mp.y), mp.y), "#451a03", "#ea580c", 1.32)
+		_add_stylized_tree(Vector3(mp.x, get_base_terrain_height(mp.x, mp.y), mp.y), "#451a03", "#ea580c", 1.42)
 
 	# Stage Mechanic: 3 Swirling Emerald-Gold Wind Draft Pillars (疾風氣流)
-	var wind_coords := [Vector2(-12.5, 4.0), Vector2(12.5, 4.0), Vector2(0.0, -12.5)]
+	var wind_coords := [Vector2(-12.5 * S, 4.0 * S), Vector2(12.5 * S, 4.0 * S), Vector2(0.0, -12.5 * S)]
 	var wind_mat := StandardMaterial3D.new()
 	wind_mat.albedo_color = Color(0.28, 0.94, 0.72, 0.78)
 	wind_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -737,23 +760,24 @@ func _build_maple_temple_props(_ring_col: Color) -> void:
 		var wn := Node3D.new()
 		wn.position = Vector3(wc.x, wy, wc.y)
 		for ri in range(3):
-			wn.add_child(_make_flat_ring(1.6 + float(ri) * 0.65, 1.9 + float(ri) * 0.65, wind_mat, 0.35 + float(ri) * 1.15))
+			wn.add_child(_make_flat_ring(1.8 + float(ri) * 0.72, 2.1 + float(ri) * 0.72, wind_mat, 0.35 + float(ri) * 1.15))
 		_arena_content.add_child(wn)
-		wind_zones.append({"pos": Vector3(wc.x, wy, wc.y), "radius": 3.8, "node": wn})
+		wind_zones.append({"pos": Vector3(wc.x, wy, wc.y), "radius": 4.5, "node": wn})
 
 
 # ==============================================================================
 #  STAGE 3: ONIGASHIMA LAVA (Flowing Magma + Forged Bridges + Obsidian Fortresses)
 # ==============================================================================
 func _build_onigashima_lava_props(_ring_col: Color) -> void:
-	_add_torii_gate(Vector3(0.0, get_base_terrain_height(0.0, -24.0), -24.0), "#991b1b", 1.35)
+	_add_torii_gate(Vector3(0.0, get_base_terrain_height(0.0, -24.0 * S), -24.0 * S), "#991b1b", 1.40)
 
 	# Animated Flowing Molten Lava Surface Plane peeking through all sunken chasms (y = -0.58)
 	var lava_mesh := CylinderMesh.new()
 	lava_mesh.top_radius = GameData.ARENA_RADIUS - 0.4
 	lava_mesh.bottom_radius = GameData.ARENA_RADIUS - 0.4
 	lava_mesh.height = 0.1
-	lava_mesh.radial_segments = 56
+	lava_mesh.radial_segments = 36 if UiStyle.is_mobile_device() else 56
+	lava_mesh.rings = 1
 	var lava_shader_mat := ShaderMaterial.new()
 	lava_shader_mat.shader = PROP_SURFACE_SHADER
 	lava_shader_mat.set_shader_parameter("surface_type", 4)
@@ -763,42 +787,46 @@ func _build_onigashima_lava_props(_ring_col: Color) -> void:
 	_lava_plane_mat = lava_shader_mat
 	var lava_inst := MeshInstance3D.new()
 	lava_inst.mesh = lava_mesh; lava_inst.material_override = _lava_plane_mat
+	lava_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	lava_inst.position = Vector3(0.0, -0.58, 0.0)
 	_arena_content.add_child(lava_inst)
 
 	# 2 High-Altitude Walkable Chain-Plank Fortress Bridges spanning between Obsidian Plateaus!
-	_add_walkable_bridge(Vector3(-12.5, 2.45, -13.0), Vector3(12.5, 2.45, -13.0), 3.8, 0.65, "#362f2d", "#1c1917", "#f97316", 0)
-	_add_walkable_bridge(Vector3(-12.5, 2.45, 13.0), Vector3(12.5, 2.45, 13.0), 3.8, 0.65, "#362f2d", "#1c1917", "#f97316", 0)
+	_add_walkable_bridge(Vector3(-17.0, 2.45, -17.6), Vector3(17.0, 2.45, -17.6), 4.0, 0.85, "#362f2d", "#1c1917", "#f97316", 0)
+	_add_walkable_bridge(Vector3(-17.0, 2.45, 17.6), Vector3(17.0, 2.45, 17.6), 4.0, 0.85, "#362f2d", "#1c1917", "#f97316", 0)
 
 	# 2 Ultra-High Demon Watch-Decks (+3.25m) perched above East & West rim!
-	_add_walkable_deck(Vector3(19.5, 3.25, 0.0), 4.0, "#292224", "#120e10", "#f97316", 2, true)
-	_add_walkable_deck(Vector3(-19.5, 3.25, 0.0), 4.0, "#292224", "#120e10", "#f97316", 2, true)
+	_add_walkable_deck(Vector3(26.5, 3.25, 0.0), 4.8, "#292224", "#120e10", "#f97316", 2, true)
+	_add_walkable_deck(Vector3(-26.5, 3.25, 0.0), 4.8, "#292224", "#120e10", "#f97316", 2, true)
 	# Walkable rim-flush ramps connecting NE/NW plateaus right to the East/West Demon Watch-Deck rims
-	_add_walkable_bridge(Vector3(14.5, 2.45, -11.5), Vector3(18.15, 3.25, -3.65), 3.2, 0.16, "#362f2d", "#1c1917", "#dc2626", 0)
-	_add_walkable_bridge(Vector3(-14.5, 2.45, -11.5), Vector3(-18.15, 3.25, -3.65), 3.2, 0.16, "#362f2d", "#1c1917", "#dc2626", 0)
+	_add_walkable_bridge(Vector3(19.6, 2.45, -15.6), Vector3(24.8, 3.25, -4.4), 3.4, 0.18, "#362f2d", "#1c1917", "#dc2626", 0)
+	_add_walkable_bridge(Vector3(-19.6, 2.45, -15.6), Vector3(-24.8, 3.25, -4.4), 3.4, 0.18, "#362f2d", "#1c1917", "#dc2626", 0)
 
 	# 4 Tactical Obsidian Monolith Pillars around the central battle hub
-	for op: Vector2 in [Vector2(0.0, -5.8), Vector2(0.0, 5.8), Vector2(5.8, 0.0), Vector2(-5.8, 0.0)]:
-		_add_tactical_pillar(Vector3(op.x, get_base_terrain_height(op.x, op.y), op.y), 0.72, 3.6, "#1c1917", "#f97316")
+	for op: Vector2 in [Vector2(0.0, -7.8), Vector2(0.0, 7.8), Vector2(7.8, 0.0), Vector2(-7.8, 0.0)]:
+		_add_tactical_pillar(Vector3(op.x, get_base_terrain_height(op.x, op.y), op.y), 0.78, 3.8, "#1c1917", "#f97316")
 
-	# Jagged Obsidian Crystal Spires crowning the outer volcanic rim
+	# Jagged Obsidian Crystal Spires crowning the outer volcanic rim (batched into 1 MultiMesh!)
 	var obs_mat := StandardMaterial3D.new()
 	obs_mat.albedo_color = Color.html("#1c1917"); obs_mat.roughness = 0.32; obs_mat.metallic = 0.50
 	var spire_mesh := CylinderMesh.new()
-	spire_mesh.top_radius = 0.06; spire_mesh.bottom_radius = 1.25; spire_mesh.height = 6.8; spire_mesh.radial_segments = 5
+	spire_mesh.top_radius = 0.06; spire_mesh.bottom_radius = 1.45; spire_mesh.height = 7.4
+	spire_mesh.radial_segments = 5; spire_mesh.rings = 1
+	spire_mesh.material = obs_mat
+	var spire_xforms: Array[Transform3D] = []
 	for sp: Vector2 in [
-		Vector2(20.0, -18.0), Vector2(-20.0, -18.0), Vector2(20.0, 18.0), Vector2(-20.0, 18.0),
-		Vector2(24.5, -6.0), Vector2(-24.5, -6.0), Vector2(24.5, 6.0), Vector2(-24.5, 6.0)
+		Vector2(20.0 * S, -18.0 * S), Vector2(-20.0 * S, -18.0 * S),
+		Vector2(20.0 * S, 18.0 * S), Vector2(-20.0 * S, 18.0 * S),
+		Vector2(24.5 * S, -6.0 * S), Vector2(-24.5 * S, -6.0 * S),
+		Vector2(24.5 * S, 6.0 * S), Vector2(-24.5 * S, 6.0 * S),
 	]:
 		var sy := get_base_terrain_height(sp.x, sp.y)
-		var spire := MeshInstance3D.new()
-		spire.mesh = spire_mesh; spire.material_override = obs_mat
-		spire.position = Vector3(sp.x, sy + 3.0, sp.y)
-		spire.rotation.z = -signf(sp.x) * 0.20
-		_arena_content.add_child(spire)
+		var basis := Basis.from_euler(Vector3(0.0, 0.0, -signf(sp.x) * 0.20))
+		spire_xforms.append(Transform3D(basis, Vector3(sp.x, sy + 3.2, sp.y)))
+	_add_batched_multimesh(spire_mesh, spire_xforms, false)
 
 	# 4 Flaming Oni Braziers on the 4 Obsidian Plateaus
-	for bp: Vector2 in [Vector2(13.5, -13.0), Vector2(-13.5, -13.0), Vector2(13.5, 13.0), Vector2(-13.5, 13.0)]:
+	for bp: Vector2 in [Vector2(18.3, -17.6), Vector2(-18.3, -17.6), Vector2(18.3, 17.6), Vector2(-18.3, 17.6)]:
 		_add_stone_lantern(Vector3(bp.x, get_base_terrain_height(bp.x, bp.y), bp.y), "#f97316")
 
 
@@ -806,45 +834,45 @@ func _build_onigashima_lava_props(_ring_col: Color) -> void:
 #  STAGE 4: SKY TENSHU (4 Solid Marble Bastions + 2 High Floating Decks + 4 Sky-Bridges)
 # ==============================================================================
 func _build_sky_tenshu_props(_ring_col: Color) -> void:
-	_add_torii_gate(Vector3(0.0, get_base_terrain_height(0.0, -24.5), -24.5), "#f59e0b", 1.35)
+	_add_torii_gate(Vector3(0.0, get_base_terrain_height(0.0, -24.5 * S), -24.5 * S), "#f59e0b", 1.42)
 
-	# 4 Mid-Tier Solid Celestial-Marble Bastion Platforms (+2.55m ~ +2.65m, uniform 5.4m radius -> inner rim at 10.8m!)
-	_add_walkable_deck(Vector3(0.0, 2.55, -16.2), 5.4, "#274775", "#142442", "#facc15", 3, true)
-	_add_walkable_deck(Vector3(0.0, 2.55, 16.2), 5.4, "#274775", "#142442", "#facc15", 3, true)
-	_add_walkable_deck(Vector3(16.2, 2.65, 0.0), 5.4, "#274775", "#142442", "#facc15", 3, true)
-	_add_walkable_deck(Vector3(-16.2, 2.65, 0.0), 5.4, "#274775", "#142442", "#facc15", 3, true)
+	# 4 Mid-Tier Solid Celestial-Marble Bastion Platforms (+2.55m ~ +2.65m, 6.8m radius -> inner rim at 15.2m!)
+	_add_walkable_deck(Vector3(0.0, 2.55, -22.0), 6.8, "#274775", "#142442", "#facc15", 3, true)
+	_add_walkable_deck(Vector3(0.0, 2.55, 22.0), 6.8, "#274775", "#142442", "#facc15", 3, true)
+	_add_walkable_deck(Vector3(22.0, 2.65, 0.0), 6.8, "#274775", "#142442", "#facc15", 3, true)
+	_add_walkable_deck(Vector3(-22.0, 2.65, 0.0), 6.8, "#274775", "#142442", "#facc15", 3, true)
 
 	# 2 Sovereign Upper-Tier Floating Moon-Decks (+4.25m high, sleek 0.48m slab -> >3.2m headroom underneath!)
-	_add_walkable_deck(Vector3(-13.8, 4.25, -13.8), 4.4, "#1e3a6e", "#0f1e3d", "#fef08a", 3, false)
-	_add_walkable_deck(Vector3(13.8, 4.25, -13.8), 4.4, "#1e3a6e", "#0f1e3d", "#fef08a", 3, false)
+	_add_walkable_deck(Vector3(-17.5, 4.25, -17.5), 5.4, "#1e3a6e", "#0f1e3d", "#fef08a", 3, false)
+	_add_walkable_deck(Vector3(17.5, 4.25, -17.5), 5.4, "#1e3a6e", "#0f1e3d", "#fef08a", 3, false)
 
 	# 4 Walkable Glowing Golden Sky-Bridges linking the bastion rims into an aerial ring!
-	_add_walkable_bridge(Vector3(4.5, 2.55, -14.8), Vector3(14.8, 2.65, -4.5), 3.4, 0.65, "#244370", "#132240", "#facc15", 2)
-	_add_walkable_bridge(Vector3(-4.5, 2.55, -14.8), Vector3(-14.8, 2.65, -4.5), 3.4, 0.65, "#244370", "#132240", "#facc15", 2)
-	_add_walkable_bridge(Vector3(4.5, 2.55, 14.8), Vector3(14.8, 2.65, 4.5), 3.4, 0.65, "#244370", "#132240", "#facc15", 2)
-	_add_walkable_bridge(Vector3(-4.5, 2.55, 14.8), Vector3(-14.8, 2.65, 4.5), 3.4, 0.65, "#244370", "#132240", "#facc15", 2)
+	_add_walkable_bridge(Vector3(5.8, 2.55, -20.4), Vector3(20.4, 2.65, -5.8), 3.6, 0.78, "#244370", "#132240", "#facc15", 2)
+	_add_walkable_bridge(Vector3(-5.8, 2.55, -20.4), Vector3(-20.4, 2.65, -5.8), 3.6, 0.78, "#244370", "#132240", "#facc15", 2)
+	_add_walkable_bridge(Vector3(5.8, 2.55, 20.4), Vector3(20.4, 2.65, 5.8), 3.6, 0.78, "#244370", "#132240", "#facc15", 2)
+	_add_walkable_bridge(Vector3(-5.8, 2.55, 20.4), Vector3(-20.4, 2.65, 5.8), 3.6, 0.78, "#244370", "#132240", "#facc15", 2)
 
-	# Visual Golden Curb Posts along the 4 Ceremonial Spirit-Ramps (4.2m -> 10.8m)
+	# Visual Golden Curb Posts along the 4 Ceremonial Spirit-Ramps (6.0m -> 15.2m, batched into 1 MultiMesh!)
 	var curb_mat := StandardMaterial3D.new()
 	curb_mat.albedo_color = Color.html("#facc15")
 	curb_mat.metallic = 0.65
 	curb_mat.roughness = 0.25
 	var curb_mesh := BoxMesh.new()
 	curb_mesh.size = Vector3(0.26, 0.65, 0.26)
-	for dist in [5.0, 7.6, 10.1]:
+	curb_mesh.material = curb_mat
+	var curb_xforms: Array[Transform3D] = []
+	for dist in [6.8, 9.6, 12.4, 14.8]:
 		for side in [-2.35, 2.35]:
 			for pt: Vector2 in [
 				Vector2(side, -dist), Vector2(side, dist),
-				Vector2(dist, side), Vector2(-dist, side)
+				Vector2(dist, side), Vector2(-dist, side),
 			]:
-				var post := MeshInstance3D.new()
-				post.mesh = curb_mesh; post.material_override = curb_mat
-				post.position = Vector3(pt.x, get_base_terrain_height(pt.x, pt.y) + 0.30, pt.y)
-				_arena_content.add_child(post)
+				curb_xforms.append(Transform3D(Basis.IDENTITY, Vector3(pt.x, get_base_terrain_height(pt.x, pt.y) + 0.30, pt.y)))
+	_add_batched_multimesh(curb_mesh, curb_xforms, false)
 
 	# 4 Ornate Golden Castle Columns guarding the central Tenshu courtyard
-	for cp: Vector2 in [Vector2(-6.5, -6.5), Vector2(6.5, -6.5), Vector2(-6.5, 6.5), Vector2(6.5, 6.5)]:
-		_add_tactical_pillar(Vector3(cp.x, get_base_terrain_height(cp.x, cp.y), cp.y), 0.72, 4.8, "#1e293b", "#facc15")
+	for cp: Vector2 in [Vector2(-8.8, -8.8), Vector2(8.8, -8.8), Vector2(-8.8, 8.8), Vector2(8.8, 8.8)]:
+		_add_tactical_pillar(Vector3(cp.x, get_base_terrain_height(cp.x, cp.y), cp.y), 0.78, 5.0, "#1e293b", "#facc15")
 
 	# 6 Glowing Cloud Jump Pads (4 Courtyard + 2 Mid-Tier launching up to Sovereign +4.25m Moon-Decks!)
 	var pad_mat := StandardMaterial3D.new()
@@ -856,9 +884,9 @@ func _build_sky_tenshu_props(_ring_col: Color) -> void:
 	gold_rim_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
 	var pad_coords := [
-		Vector3(9.2, 0.0, -9.2), Vector3(-9.2, 0.0, -9.2),
-		Vector3(9.2, 0.0, 9.2), Vector3(-9.2, 0.0, 9.2),
-		Vector3(16.2, 2.65, -3.0), Vector3(-16.2, 2.65, -3.0),
+		Vector3(12.5, 0.0, -12.5), Vector3(-12.5, 0.0, -12.5),
+		Vector3(12.5, 0.0, 12.5), Vector3(-12.5, 0.0, 12.5),
+		Vector3(21.2, 2.65, -5.2), Vector3(-21.2, 2.65, -5.2),
 	]
 	for jp: Vector3 in pad_coords:
 		var jy: float = jp.y if jp.y > 0.5 else get_base_terrain_height(jp.x, jp.z)
@@ -867,38 +895,58 @@ func _build_sky_tenshu_props(_ring_col: Color) -> void:
 		jn.add_child(_make_flat_ring(1.3, 2.25, pad_mat, 0.14))
 		jn.add_child(_make_flat_ring(0.5, 0.95, gold_rim_mat, 0.24))
 		_arena_content.add_child(jn)
-		jump_pads.append({"pos": Vector3(jp.x, jy, jp.z), "radius": 2.6, "node": jn})
+		jump_pads.append({"pos": Vector3(jp.x, jy, jp.z), "radius": 2.7, "node": jn})
 
 	# Soft Floating Cloud Banks beneath the castle horizon
 	var cloud_mat := StandardMaterial3D.new()
 	cloud_mat.albedo_color = Color(0.75, 0.88, 1.0, 0.28)
 	cloud_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	cloud_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var cm := SphereMesh.new()
+	cm.radius = 6.5; cm.height = 3.0; cm.radial_segments = 10; cm.rings = 5
+	cm.material = cloud_mat
+	var cloud_xforms: Array[Transform3D] = []
+	var cloud_r := GameData.ARENA_RADIUS + 9.0
 	for ci in range(8):
 		var a := (float(ci) / 8.0) * TAU
-		var cm := SphereMesh.new()
-		cm.radius = 5.5; cm.height = 2.6; cm.radial_segments = 14; cm.rings = 6
-		var c_inst := MeshInstance3D.new()
-		c_inst.mesh = cm; c_inst.material_override = cloud_mat
-		c_inst.position = Vector3(cos(a) * 34.0, -1.5 + sin(float(ci)) * 1.5, sin(a) * 34.0)
-		_arena_content.add_child(c_inst)
+		cloud_xforms.append(Transform3D(Basis.IDENTITY, Vector3(cos(a) * cloud_r, -1.5 + sin(float(ci)) * 1.5, sin(a) * cloud_r)))
+	_add_batched_multimesh(cm, cloud_xforms, false)
 
-	# Giant Luminous Full Moon perched high beyond the North Torii
+	# Giant Luminous Full Moon perched high beyond the North Torii (low-poly sphere, no shadows!)
 	var moon := MeshInstance3D.new()
-	var ms := SphereMesh.new(); ms.radius = 7.2; ms.height = 14.4
+	var ms := SphereMesh.new(); ms.radius = 8.4; ms.height = 16.8; ms.radial_segments = 16; ms.rings = 10
 	var mm := StandardMaterial3D.new()
 	mm.albedo_color = Color.html("#fef9c3"); mm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	moon.mesh = ms; moon.material_override = mm
-	moon.position = Vector3(0.0, 20.5, -45.0)
+	moon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	moon.position = Vector3(0.0, 24.5, -64.0)
 	_arena_content.add_child(moon)
 
 
 # ==============================================================================
 #  SHARED ARCHITECTURAL PROP, BRIDGE, DECK & OBSTACLE HELPERS
 # ==============================================================================
+func _add_batched_multimesh(mesh: Mesh, transforms: Array[Transform3D], cast_shadows: bool = false) -> void:
+	if transforms.is_empty():
+		return
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = transforms.size()
+	for i in range(transforms.size()):
+		mm.set_instance_transform(i, transforms[i])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	if not cast_shadows:
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_arena_content.add_child(mmi)
+
+
 func _add_water_plane(y_level: float, rad: float, deep_hex: String, shallow_hex: String, alpha: float) -> void:
 	var wm := CylinderMesh.new()
-	wm.top_radius = rad; wm.bottom_radius = rad; wm.height = 0.08; wm.radial_segments = 48
+	wm.top_radius = rad; wm.bottom_radius = rad; wm.height = 0.08
+	wm.radial_segments = 32 if UiStyle.is_mobile_device() else 48
+	wm.rings = 1
 	var wmat := ShaderMaterial.new()
 	wmat.shader = WATER_SHADER
 	var dc := Color.html(deep_hex)
@@ -909,6 +957,7 @@ func _add_water_plane(y_level: float, rad: float, deep_hex: String, shallow_hex:
 	_water_plane_mat = wmat
 	var wi := MeshInstance3D.new()
 	wi.mesh = wm; wi.material_override = _water_plane_mat
+	wi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	wi.position = Vector3(0.0, y_level, 0.0)
 	_arena_content.add_child(wi)
 
@@ -935,9 +984,11 @@ func _add_walkable_deck(top_pos: Vector3, rad: float, deck_hex: String, deck_dar
 	cyl.top_radius = rad
 	cyl.bottom_radius = rad * (0.96 if grounded else 0.82)
 	cyl.height = deck_h
-	cyl.radial_segments = 28
+	cyl.radial_segments = 20 if UiStyle.is_mobile_device() else 28
+	cyl.rings = 1
 	var deck := MeshInstance3D.new()
 	deck.mesh = cyl; deck.material_override = deck_mat
+	deck.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	deck.position = Vector3(top_pos.x, top_pos.y - deck_h * 0.5, top_pos.z)
 	_arena_content.add_child(deck)
 
@@ -964,42 +1015,59 @@ func _add_walkable_bridge(start_p: Vector3, end_p: Vector3, width: float, arch: 
 	rail_mat.albedo_color = Color.html(rail_hex); rail_mat.roughness = 0.40; rail_mat.metallic = 0.20
 
 	var dir3 := end_p - start_p
-	var flat_dir := Vector2(dir3.x, dir3.z)
-	var total_len := flat_dir.length()
+	var total_len := Vector2(dir3.x, dir3.z).length()
+	var dy_total := end_p.y - start_p.y
 	var yaw := atan2(dir3.x, dir3.z)
-	var right_v := Vector3(cos(yaw), 0.0, -sin(yaw))
 
+	# Merge all bridge planks into 1 ArrayMesh and rails+posts into 1 ArrayMesh (2 draw calls total!)
+	# Built in bridge-local space (+Z along bridge, X across width) so PROP_SURFACE_SHADER planks align cleanly.
 	var segs := 8
 	var seg_len := (total_len / float(segs)) * 1.08
+	var plank_box := BoxMesh.new(); plank_box.size = Vector3(width, 0.24, seg_len)
+	var rail_box := BoxMesh.new(); rail_box.size = Vector3(0.16, 0.18, seg_len)
+	var post_box := BoxMesh.new(); post_box.size = Vector3(0.22, 0.92, 0.22)
+
+	var st_planks := SurfaceTool.new()
+	st_planks.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var st_rails := SurfaceTool.new()
+	st_rails.begin(Mesh.PRIMITIVE_TRIANGLES)
+
 	for i in range(segs):
 		var t0 := float(i) / float(segs)
 		var t1 := float(i + 1) / float(segs)
-		var p0 := start_p.lerp(end_p, t0) + Vector3(0.0, sin(t0 * PI) * arch, 0.0)
-		var p1 := start_p.lerp(end_p, t1) + Vector3(0.0, sin(t1 * PI) * arch, 0.0)
-		var pm := (p0 + p1) * 0.5
-		var pitch := -atan2(p1.y - p0.y, Vector2(p1.x - p0.x, p1.z - p0.z).length())
+		var z0 := t0 * total_len
+		var z1 := t1 * total_len
+		var y0 := dy_total * t0 + sin(t0 * PI) * arch
+		var y1 := dy_total * t1 + sin(t1 * PI) * arch
+		var zm := (z0 + z1) * 0.5
+		var ym := (y0 + y1) * 0.5
+		var pitch := -atan2(y1 - y0, maxf(0.001, z1 - z0))
+		var tilt_basis := Basis(Vector3.RIGHT, pitch)
 
-		var plank := MeshInstance3D.new()
-		var bm := BoxMesh.new(); bm.size = Vector3(width, 0.24, seg_len)
-		plank.mesh = bm; plank.material_override = deck_mat
-		plank.position = pm - Vector3(0.0, 0.12, 0.0)
-		plank.rotation = Vector3(pitch, yaw, 0.0)
-		_arena_content.add_child(plank)
-
-		# Side railings + posts every 2 segments
-		for side in [-1.0, 1.0]:
-			var rail := MeshInstance3D.new()
-			var rm := BoxMesh.new(); rm.size = Vector3(0.16, 0.18, seg_len)
-			rail.mesh = rm; rail.material_override = rail_mat
-			rail.position = pm + right_v * (side * (width * 0.48)) + Vector3(0.0, 0.72, 0.0)
-			rail.rotation = Vector3(pitch, yaw, 0.0)
-			_arena_content.add_child(rail)
+		st_planks.append_from(plank_box, 0, Transform3D(tilt_basis, Vector3(0.0, ym - 0.12, zm)))
+		for side: float in [-1.0, 1.0]:
+			var sx: float = side * (width * 0.48)
+			st_rails.append_from(rail_box, 0, Transform3D(tilt_basis, Vector3(sx, ym + 0.72, zm)))
 			if i % 2 == 0:
-				var post := MeshInstance3D.new()
-				var pmsh := BoxMesh.new(); pmsh.size = Vector3(0.22, 0.92, 0.22)
-				post.mesh = pmsh; post.material_override = rail_mat
-				post.position = pm + right_v * (side * (width * 0.48)) + Vector3(0.0, 0.42, 0.0)
-				_arena_content.add_child(post)
+				st_rails.append_from(post_box, 0, Transform3D(Basis.IDENTITY, Vector3(sx, ym + 0.42, zm)))
+
+	var bridge_root := Node3D.new()
+	bridge_root.position = start_p
+	bridge_root.rotation.y = yaw
+
+	var planks_inst := MeshInstance3D.new()
+	planks_inst.mesh = st_planks.commit()
+	planks_inst.material_override = deck_mat
+	planks_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	bridge_root.add_child(planks_inst)
+
+	var rails_inst := MeshInstance3D.new()
+	rails_inst.mesh = st_rails.commit()
+	rails_inst.material_override = rail_mat
+	rails_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	bridge_root.add_child(rails_inst)
+
+	_arena_content.add_child(bridge_root)
 
 
 func _add_tactical_pillar(base_pos: Vector3, rad: float, height: float, stone_hex: String, trim_hex: String) -> void:
@@ -1011,7 +1079,7 @@ func _add_tactical_pillar(base_pos: Vector3, rad: float, height: float, stone_he
 	tmat.albedo_color = Color.html(trim_hex); tmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
 	var col := MeshInstance3D.new()
-	var cm := CylinderMesh.new(); cm.top_radius = rad * 0.85; cm.bottom_radius = rad; cm.height = height; cm.radial_segments = 8
+	var cm := CylinderMesh.new(); cm.top_radius = rad * 0.85; cm.bottom_radius = rad; cm.height = height; cm.radial_segments = 8; cm.rings = 1
 	col.mesh = cm; col.material_override = smat
 	col.position = base_pos + Vector3(0.0, height * 0.5, 0.0)
 	_arena_content.add_child(col)
@@ -1026,7 +1094,7 @@ func _add_mossy_boulder(base_pos: Vector3, rad: float) -> void:
 	var rmat := StandardMaterial3D.new()
 	rmat.albedo_color = Color.html("#4b5548"); rmat.roughness = 0.88
 	var b := MeshInstance3D.new()
-	var sm := SphereMesh.new(); sm.radius = rad; sm.height = rad * 1.65; sm.radial_segments = 10; sm.rings = 6
+	var sm := SphereMesh.new(); sm.radius = rad; sm.height = rad * 1.65; sm.radial_segments = 8; sm.rings = 5
 	b.mesh = sm; b.material_override = rmat
 	b.position = base_pos + Vector3(0.0, rad * 0.55, 0.0)
 	_arena_content.add_child(b)
@@ -1039,7 +1107,7 @@ func _add_shrine_pavilion(base_pos: Vector3, pillar_hex: String, roof_hex: Strin
 	var pmat := StandardMaterial3D.new(); pmat.albedo_color = Color.html(pillar_hex); pmat.roughness = 0.45
 	var rmat := StandardMaterial3D.new(); rmat.albedo_color = Color.html(roof_hex); rmat.roughness = 0.55
 
-	var pm := CylinderMesh.new(); pm.top_radius = 0.22; pm.bottom_radius = 0.25; pm.height = 4.6
+	var pm := CylinderMesh.new(); pm.top_radius = 0.22; pm.bottom_radius = 0.25; pm.height = 4.6; pm.radial_segments = 8; pm.rings = 1
 	for ox in [-2.6, 2.6]:
 		for oz in [-2.6, 2.6]:
 			var p := MeshInstance3D.new()
@@ -1049,8 +1117,9 @@ func _add_shrine_pavilion(base_pos: Vector3, pillar_hex: String, roof_hex: Strin
 			obstacles.append({"pos": Vector2(base_pos.x + ox * sc, base_pos.z + oz * sc), "radius": 0.40 * sc, "top_y": base_pos.y + 4.6 * sc})
 
 	var roof := MeshInstance3D.new()
-	var rm := CylinderMesh.new(); rm.top_radius = 0.2; rm.bottom_radius = 4.9; rm.height = 2.1; rm.radial_segments = 4
+	var rm := CylinderMesh.new(); rm.top_radius = 0.2; rm.bottom_radius = 4.9; rm.height = 2.1; rm.radial_segments = 4; rm.rings = 1
 	roof.mesh = rm; roof.material_override = rmat
+	roof.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	roof.position = Vector3(0.0, 5.4, 0.0); roof.rotation.y = PI * 0.25
 	pav.add_child(roof)
 	_arena_content.add_child(pav)
@@ -1073,13 +1142,14 @@ func _add_temple_pagoda(base_pos: Vector3) -> void:
 		pag.add_child(b)
 
 		var r := MeshInstance3D.new()
-		var rm := CylinderMesh.new(); rm.top_radius = 0.4 * sc; rm.bottom_radius = 3.2 * sc; rm.height = 1.1; rm.radial_segments = 4
+		var rm := CylinderMesh.new(); rm.top_radius = 0.4 * sc; rm.bottom_radius = 3.2 * sc; rm.height = 1.1; rm.radial_segments = 4; rm.rings = 1
 		r.mesh = rm; r.material_override = roof_m; r.position = Vector3(0.0, ty + 2.25, 0.0); r.rotation.y = PI * 0.25
 		pag.add_child(r)
 
 	var spire := MeshInstance3D.new()
-	var sm := CylinderMesh.new(); sm.top_radius = 0.05; sm.bottom_radius = 0.16; sm.height = 2.6
-	spire.mesh = sm; spire.material_override = gold_m; spire.position = Vector3(0.0, 8.3, 0.0)
+	var sm := CylinderMesh.new(); sm.top_radius = 0.05; sm.bottom_radius = 0.16; sm.height = 2.6; sm.radial_segments = 6; sm.rings = 1
+	spire.mesh = sm; spire.material_override = gold_m; spire.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	spire.position = Vector3(0.0, 8.3, 0.0)
 	pag.add_child(spire)
 	_arena_content.add_child(pag)
 
@@ -1095,7 +1165,7 @@ func _add_torii_gate(base_pos: Vector3, pillar_hex: String, sc: float = 1.0) -> 
 	cap_mat.albedo_color = Color.html("#0f172a"); cap_mat.roughness = 0.50
 
 	var pillar_mesh := CylinderMesh.new()
-	pillar_mesh.top_radius = 0.35; pillar_mesh.bottom_radius = 0.42; pillar_mesh.height = 7.2; pillar_mesh.radial_segments = 16
+	pillar_mesh.top_radius = 0.35; pillar_mesh.bottom_radius = 0.42; pillar_mesh.height = 7.2; pillar_mesh.radial_segments = 10; pillar_mesh.rings = 1
 	for px in [-3.2, 3.2]:
 		var p := MeshInstance3D.new()
 		p.mesh = pillar_mesh; p.material_override = pillar_mat; p.position = Vector3(px, 3.6, 0.0)
@@ -1123,17 +1193,20 @@ func _add_stone_lantern(base_pos: Vector3, glow_hex: String) -> void:
 
 	var b := MeshInstance3D.new()
 	var bm := BoxMesh.new(); bm.size = Vector3(1.1, 2.2, 1.1)
-	b.mesh = bm; b.material_override = stone_mat; b.position = Vector3(0.0, 1.1, 0.0)
+	b.mesh = bm; b.material_override = stone_mat; b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	b.position = Vector3(0.0, 1.1, 0.0)
 	lg.add_child(b)
 
 	var g := MeshInstance3D.new()
 	var gm := BoxMesh.new(); gm.size = Vector3(0.75, 0.75, 0.75)
-	g.mesh = gm; g.material_override = glow_mat; g.position = Vector3(0.0, 2.55, 0.0)
+	g.mesh = gm; g.material_override = glow_mat; g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	g.position = Vector3(0.0, 2.55, 0.0)
 	lg.add_child(g)
 
 	var r := MeshInstance3D.new()
-	var rm := CylinderMesh.new(); rm.top_radius = 0.0; rm.bottom_radius = 1.15; rm.height = 0.9; rm.radial_segments = 4
-	r.mesh = rm; r.material_override = roof_mat; r.position = Vector3(0.0, 3.35, 0.0); r.rotation.y = PI * 0.25
+	var rm := CylinderMesh.new(); rm.top_radius = 0.0; rm.bottom_radius = 1.15; rm.height = 0.9; rm.radial_segments = 4; rm.rings = 1
+	r.mesh = rm; r.material_override = roof_mat; r.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	r.position = Vector3(0.0, 3.35, 0.0); r.rotation.y = PI * 0.25
 	lg.add_child(r)
 	_arena_content.add_child(lg)
 
@@ -1147,28 +1220,36 @@ func _add_stylized_tree(base_pos: Vector3, trunk_hex: String, leaf_hex: String, 
 	var leaf_m := StandardMaterial3D.new(); leaf_m.albedo_color = Color.html(leaf_hex); leaf_m.roughness = 0.55
 
 	var trunk := MeshInstance3D.new()
-	var tc := CylinderMesh.new(); tc.top_radius = 0.24; tc.bottom_radius = 0.42; tc.height = 4.2; tc.radial_segments = 10
-	trunk.mesh = tc; trunk.material_override = trunk_m; trunk.position = Vector3(0.0, 2.0, 0.0)
+	var tc := CylinderMesh.new(); tc.top_radius = 0.24; tc.bottom_radius = 0.42; tc.height = 4.2; tc.radial_segments = 7; tc.rings = 1
+	trunk.mesh = tc; trunk.material_override = trunk_m; trunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	trunk.position = Vector3(0.0, 2.0, 0.0)
 	tree.add_child(trunk)
 
+	var st_leaves := SurfaceTool.new()
+	st_leaves.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for cp: Array in [[Vector3(0.0, 4.6, 0.0), 2.1], [Vector3(1.2, 4.1, 0.7), 1.45], [Vector3(-1.1, 4.2, -0.6), 1.55]]:
-		var fol := MeshInstance3D.new()
 		var sp := SphereMesh.new()
 		var r: float = float(cp[1])
-		sp.radius = r; sp.height = r * 1.45; sp.radial_segments = 14; sp.rings = 8
-		fol.mesh = sp; fol.material_override = leaf_m; fol.position = cp[0]
-		tree.add_child(fol)
+		sp.radius = r; sp.height = r * 1.45; sp.radial_segments = 10; sp.rings = 6
+		st_leaves.append_from(sp, 0, Transform3D(Basis.IDENTITY, cp[0]))
+	var fol := MeshInstance3D.new()
+	fol.mesh = st_leaves.commit()
+	fol.material_override = leaf_m
+	fol.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	tree.add_child(fol)
 
 	_arena_content.add_child(tree)
 
 
 func _build_ambient_particles(particle_col: Color) -> void:
+	var is_mob := UiStyle.is_mobile_device()
 	_particles = CPUParticles3D.new()
-	_particles.amount = 140
+	_particles.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_particles.amount = 45 if is_mob else 110
 	_particles.lifetime = 8.0
 	_particles.preprocess = 4.0
 	_particles.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	_particles.emission_box_extents = Vector3(30.0, 1.0, 30.0)
+	_particles.emission_box_extents = Vector3(GameData.ARENA_RADIUS + 2.0, 1.0, GameData.ARENA_RADIUS + 2.0)
 	_particles.position = Vector3(0.0, 16.0, 0.0)
 	_particles.direction = Vector3(0.15, -1.0, 0.1)
 	_particles.spread = 20.0
@@ -1190,9 +1271,12 @@ func _build_ambient_particles(particle_col: Color) -> void:
 
 func _make_flat_ring(inner_r: float, outer_r: float, mat: Material, y_pos: float) -> MeshInstance3D:
 	var torus := TorusMesh.new()
-	torus.inner_radius = inner_r; torus.outer_radius = outer_r; torus.rings = 40; torus.ring_segments = 8
+	torus.inner_radius = inner_r; torus.outer_radius = outer_r
+	torus.rings = 24 if UiStyle.is_mobile_device() else 36
+	torus.ring_segments = 6
 	var inst := MeshInstance3D.new()
 	inst.mesh = torus; inst.material_override = mat
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	inst.position = Vector3(0.0, y_pos, 0.0)
 	inst.scale = Vector3(1.0, 0.08, 1.0)
 	return inst
@@ -1201,9 +1285,9 @@ func _make_flat_ring(inner_r: float, outer_r: float, mat: Material, y_pos: float
 func _build_sky_landmarks() -> void:
 	match current_stage_id:
 		"sakura_shrine":
-			# 14 Glowing Wafuu Sky Lanterns (天燈) softly drifting in the starry night sky
+			# 14 Glowing Wafuu Sky Lanterns (天燈) softly drifting outside the 38m arena rim
 			var lantern_mesh := CylinderMesh.new()
-			lantern_mesh.top_radius = 0.55; lantern_mesh.bottom_radius = 0.34; lantern_mesh.height = 1.25; lantern_mesh.radial_segments = 8
+			lantern_mesh.top_radius = 0.62; lantern_mesh.bottom_radius = 0.38; lantern_mesh.height = 1.40; lantern_mesh.radial_segments = 6; lantern_mesh.rings = 1
 			var warm_mat := StandardMaterial3D.new()
 			warm_mat.albedo_color = Color.html("#fde68a")
 			warm_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -1213,55 +1297,58 @@ func _build_sky_landmarks() -> void:
 
 			for i in range(14):
 				var ang := (float(i) / 14.0) * TAU + 0.25
-				var dist := 35.0 + float(i % 3) * 7.5
-				var y_base := 10.5 + float(i % 4) * 4.2
+				var dist := GameData.ARENA_RADIUS + 8.0 + float(i % 3) * 8.0
+				var y_base := 11.5 + float(i % 4) * 4.5
 				var pos := Vector3(cos(ang) * dist, y_base, sin(ang) * dist)
 				var lan := MeshInstance3D.new()
 				lan.mesh = lantern_mesh
 				lan.material_override = warm_mat if i % 2 == 0 else pink_mat
+				lan.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 				lan.position = pos
 				_arena_content.add_child(lan)
 				_sky_anim_nodes.append({"node": lan, "kind": "bob", "base_pos": pos, "speed": 0.65 + float(i % 3) * 0.22, "phase": float(i) * 1.3, "amp": 1.45})
 
 			# 6 Drifting Moonlit Sakura Cloud Puffs
-			_add_sky_cloud_ring(6, 48.0, 20.0, Color(0.95, 0.72, 0.86, 0.34), 0.03)
+			_add_sky_cloud_ring(6, 64.0, 22.0, Color(0.95, 0.72, 0.86, 0.34), 0.03)
 
 		"maple_temple":
 			# 8 Golden-Rimmed Sunset Cloud Ribbons
-			_add_sky_cloud_ring(8, 49.0, 17.5, Color(1.0, 0.74, 0.44, 0.44), 0.045)
+			_add_sky_cloud_ring(8, 65.0, 19.5, Color(1.0, 0.74, 0.44, 0.44), 0.045)
 
 			# 8 Stylized Circling Autumn Sky Cranes (紙鶴・飛鳥) overhead
 			var bird_mat := StandardMaterial3D.new()
 			bird_mat.albedo_color = Color.html("#fef3c7")
 			bird_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			var st_bird := SurfaceTool.new()
+			st_bird.begin(Mesh.PRIMITIVE_TRIANGLES)
 			var wing_mesh := BoxMesh.new()
-			wing_mesh.size = Vector3(1.55, 0.08, 0.42)
+			wing_mesh.size = Vector3(1.65, 0.08, 0.44)
+			st_bird.append_from(wing_mesh, 0, Transform3D(Basis.from_euler(Vector3(0.0, 0.0, 0.24)), Vector3(-0.72, 0.0, 0.0)))
+			st_bird.append_from(wing_mesh, 0, Transform3D(Basis.from_euler(Vector3(0.0, 0.0, -0.24)), Vector3(0.72, 0.0, 0.0)))
+			var bird_mesh := st_bird.commit()
 			for i in range(8):
-				var b_root := Node3D.new()
-				var left_w := MeshInstance3D.new(); left_w.mesh = wing_mesh; left_w.material_override = bird_mat
-				left_w.position = Vector3(-0.68, 0.0, 0.0); left_w.rotation.z = 0.24
-				var right_w := MeshInstance3D.new(); right_w.mesh = wing_mesh; right_w.material_override = bird_mat
-				right_w.position = Vector3(0.68, 0.0, 0.0); right_w.rotation.z = -0.24
-				b_root.add_child(left_w)
-				b_root.add_child(right_w)
-				var rad := 30.0 + float(i % 3) * 5.0
-				var y_h := 18.0 + float(i % 4) * 2.2
-				_arena_content.add_child(b_root)
-				_sky_anim_nodes.append({"node": b_root, "kind": "orbit", "base_pos": Vector3(0.0, y_h, 0.0), "radius": rad, "speed": 0.16 + float(i % 2) * 0.04, "phase": float(i) * 0.78})
+				var b_inst := MeshInstance3D.new()
+				b_inst.mesh = bird_mesh
+				b_inst.material_override = bird_mat
+				b_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				var rad := 41.0 + float(i % 3) * 6.5
+				var y_h := 19.5 + float(i % 4) * 2.4
+				_arena_content.add_child(b_inst)
+				_sky_anim_nodes.append({"node": b_inst, "kind": "orbit", "base_pos": Vector3(0.0, y_h, 0.0), "radius": rad, "speed": 0.16 + float(i % 2) * 0.04, "phase": float(i) * 0.78})
 
 		"onigashima_lava":
-			# 6 Towering Distant Volcanic Caldera Peaks glowing at their base
+			# 6 Towering Distant Volcanic Caldera Peaks glowing at their base (batched into 1 MultiMesh!)
 			var peak_mat := StandardMaterial3D.new()
 			peak_mat.albedo_color = Color.html("#1c1012"); peak_mat.roughness = 0.90
 			var peak_mesh := CylinderMesh.new()
-			peak_mesh.top_radius = 1.4; peak_mesh.bottom_radius = 11.5; peak_mesh.height = 24.0; peak_mesh.radial_segments = 7
+			peak_mesh.top_radius = 1.6; peak_mesh.bottom_radius = 14.0; peak_mesh.height = 28.0; peak_mesh.radial_segments = 7; peak_mesh.rings = 1
+			peak_mesh.material = peak_mat
+			var peak_xforms: Array[Transform3D] = []
 			for i in range(6):
 				var ang := (float(i) / 6.0) * TAU + 0.52
-				var dist := 52.0 + float(i % 2) * 8.0
-				var pk := MeshInstance3D.new()
-				pk.mesh = peak_mesh; pk.material_override = peak_mat
-				pk.position = Vector3(cos(ang) * dist, 5.5 + float(i % 2) * 3.0, sin(ang) * dist)
-				_arena_content.add_child(pk)
+				var dist := 68.0 + float(i % 2) * 10.0
+				peak_xforms.append(Transform3D(Basis.IDENTITY, Vector3(cos(ang) * dist, 6.5 + float(i % 2) * 3.5, sin(ang) * dist)))
+			_add_batched_multimesh(peak_mesh, peak_xforms, false)
 
 			# High-Altitude Swirling Ember Storm Vortex Rings overhead
 			var storm_mat := StandardMaterial3D.new()
@@ -1269,24 +1356,26 @@ func _build_sky_landmarks() -> void:
 			storm_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			storm_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			for ri in range(2):
-				var ring := _make_flat_ring(16.0 + float(ri) * 11.0, 21.0 + float(ri) * 12.0, storm_mat, 24.0 + float(ri) * 4.5)
+				var ring := _make_flat_ring(22.0 + float(ri) * 14.0, 29.0 + float(ri) * 15.0, storm_mat, 26.0 + float(ri) * 5.0)
 				_arena_content.add_child(ring)
 				_sky_anim_nodes.append({"node": ring, "kind": "spin", "speed": 0.25 if ri == 0 else -0.18})
 
 		"sky_tenshu":
-			# Dual Counter-Rotating Celestial Astrolabe Halo Rings orbiting the Giant Full Moon!
+			# Dual Counter-Rotating Celestial Astrolabe Halo Rings orbiting the Giant Full Moon (lockstep at z=-64)!
 			var halo_mat := StandardMaterial3D.new()
 			halo_mat.albedo_color = Color(1.0, 0.90, 0.45, 0.78)
 			halo_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			halo_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			for hi in range(2):
 				var torus := TorusMesh.new()
-				torus.inner_radius = 9.4 + float(hi) * 2.4
-				torus.outer_radius = 9.8 + float(hi) * 2.4
-				torus.rings = 48; torus.ring_segments = 8
+				torus.inner_radius = 10.8 + float(hi) * 2.8
+				torus.outer_radius = 11.3 + float(hi) * 2.8
+				torus.rings = 28 if UiStyle.is_mobile_device() else 40
+				torus.ring_segments = 6
 				var h_inst := MeshInstance3D.new()
 				h_inst.mesh = torus; h_inst.material_override = halo_mat
-				h_inst.position = Vector3(0.0, 20.5, -45.0)
+				h_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				h_inst.position = Vector3(0.0, 24.5, -64.0)
 				h_inst.rotation = Vector3(PI * 0.42 if hi == 0 else PI * 0.58, 0.0, 0.25 if hi == 0 else -0.35)
 				_arena_content.add_child(h_inst)
 				_sky_anim_nodes.append({"node": h_inst, "kind": "tumble", "speed": 0.32 if hi == 0 else -0.24})
@@ -1296,29 +1385,32 @@ func _build_sky_landmarks() -> void:
 			isl_mat.albedo_color = Color.html("#1e3a5f"); isl_mat.roughness = 0.65
 			var gold_mat := StandardMaterial3D.new()
 			gold_mat.albedo_color = Color.html("#fde047"); gold_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			var st_isl := SurfaceTool.new()
+			st_isl.begin(Mesh.PRIMITIVE_TRIANGLES)
+			var rm := CylinderMesh.new(); rm.top_radius = 5.4; rm.bottom_radius = 0.7; rm.height = 6.2; rm.radial_segments = 7; rm.rings = 1
+			var sm := CylinderMesh.new(); sm.top_radius = 0.22; sm.bottom_radius = 3.0; sm.height = 4.8; sm.radial_segments = 4; sm.rings = 1
+			st_isl.append_from(rm, 0, Transform3D.IDENTITY)
+			st_isl.append_from(sm, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 5.2, 0.0)))
+			var isl_mesh := st_isl.commit()
+			var bm := SphereMesh.new(); bm.radius = 0.65; bm.height = 1.3; bm.radial_segments = 8; bm.rings = 5
 			for i in range(4):
 				var ang := (float(i) / 4.0) * TAU + PI * 0.25
-				var dist := 52.0
-				var pos := Vector3(cos(ang) * dist, 5.5 + float(i % 2) * 3.5, sin(ang) * dist)
+				var dist := 70.0
+				var pos := Vector3(cos(ang) * dist, 6.5 + float(i % 2) * 3.8, sin(ang) * dist)
 				var isl := Node3D.new()
 				isl.position = pos
-				var rock := MeshInstance3D.new()
-				var rm := CylinderMesh.new(); rm.top_radius = 4.6; rm.bottom_radius = 0.6; rm.height = 5.5; rm.radial_segments = 8
-				rock.mesh = rm; rock.material_override = isl_mat
-				isl.add_child(rock)
-				var spire := MeshInstance3D.new()
-				var sm := CylinderMesh.new(); sm.top_radius = 0.2; sm.bottom_radius = 2.6; sm.height = 4.2; sm.radial_segments = 4
-				spire.mesh = sm; spire.material_override = isl_mat; spire.position = Vector3(0.0, 4.6, 0.0)
-				isl.add_child(spire)
+				var body := MeshInstance3D.new()
+				body.mesh = isl_mesh; body.material_override = isl_mat; body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				isl.add_child(body)
 				var beacon := MeshInstance3D.new()
-				var bm := SphereMesh.new(); bm.radius = 0.55; bm.height = 1.1
-				beacon.mesh = bm; beacon.material_override = gold_mat; beacon.position = Vector3(0.0, 7.2, 0.0)
+				beacon.mesh = bm; beacon.material_override = gold_mat; beacon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				beacon.position = Vector3(0.0, 8.2, 0.0)
 				isl.add_child(beacon)
 				_arena_content.add_child(isl)
 				_sky_anim_nodes.append({"node": isl, "kind": "bob", "base_pos": pos, "speed": 0.55, "phase": float(i) * 1.5, "amp": 0.9})
 
 			# Upper Moonlit Cloud Ring
-			_add_sky_cloud_ring(7, 46.0, 16.5, Color(0.84, 0.92, 1.0, 0.34), 0.035)
+			_add_sky_cloud_ring(7, 64.0, 19.0, Color(0.84, 0.92, 1.0, 0.34), 0.035)
 
 
 func _add_sky_cloud_ring(count: int, ring_radius: float, y_base: float, tint: Color, orbit_speed: float) -> void:
@@ -1326,22 +1418,25 @@ func _add_sky_cloud_ring(count: int, ring_radius: float, y_base: float, tint: Co
 	cloud_mat.albedo_color = tint
 	cloud_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	cloud_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	var puff_a := SphereMesh.new(); puff_a.radius = 5.2; puff_a.height = 2.6; puff_a.radial_segments = 12; puff_a.rings = 6
-	var puff_b := SphereMesh.new(); puff_b.radius = 3.6; puff_b.height = 2.0; puff_b.radial_segments = 10; puff_b.rings = 5
+	var puff_a := SphereMesh.new(); puff_a.radius = 6.2; puff_a.height = 3.0; puff_a.radial_segments = 10; puff_a.rings = 5
+	var puff_b := SphereMesh.new(); puff_b.radius = 4.2; puff_b.height = 2.3; puff_b.radial_segments = 8; puff_b.rings = 4
 
-	var ring_root := Node3D.new()
-	_arena_content.add_child(ring_root)
+	# Merge entire cloud ring into 1 single MeshInstance3D = 1 draw call!
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in range(count):
 		var ang := (float(i) / float(count)) * TAU
-		var c_grp := Node3D.new()
-		c_grp.position = Vector3(cos(ang) * ring_radius, y_base + sin(float(i) * 2.1) * 2.8, sin(ang) * ring_radius)
-		c_grp.rotation.y = -ang
-		var m1 := MeshInstance3D.new(); m1.mesh = puff_a; m1.material_override = cloud_mat
-		var m2 := MeshInstance3D.new(); m2.mesh = puff_b; m2.material_override = cloud_mat; m2.position = Vector3(0.0, -0.4, 3.8)
-		var m3 := MeshInstance3D.new(); m3.mesh = puff_b; m3.material_override = cloud_mat; m3.position = Vector3(0.0, -0.3, -3.6)
-		c_grp.add_child(m1); c_grp.add_child(m2); c_grp.add_child(m3)
-		ring_root.add_child(c_grp)
-	_sky_anim_nodes.append({"node": ring_root, "kind": "spin", "speed": orbit_speed})
+		var grp_xform := Transform3D(Basis.from_euler(Vector3(0.0, -ang, 0.0)), Vector3(cos(ang) * ring_radius, y_base + sin(float(i) * 2.1) * 3.0, sin(ang) * ring_radius))
+		st.append_from(puff_a, 0, grp_xform)
+		st.append_from(puff_b, 0, grp_xform * Transform3D(Basis.IDENTITY, Vector3(0.0, -0.4, 4.4)))
+		st.append_from(puff_b, 0, grp_xform * Transform3D(Basis.IDENTITY, Vector3(0.0, -0.3, -4.2)))
+
+	var ring_inst := MeshInstance3D.new()
+	ring_inst.mesh = st.commit()
+	ring_inst.material_override = cloud_mat
+	ring_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_arena_content.add_child(ring_inst)
+	_sky_anim_nodes.append({"node": ring_inst, "kind": "spin", "speed": orbit_speed})
 
 
 func _process(delta: float) -> void:

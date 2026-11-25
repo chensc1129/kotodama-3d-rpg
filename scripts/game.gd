@@ -22,6 +22,7 @@ var _was_mouse_captured: bool = false
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	get_tree().paused = false
+	_apply_mobile_graphics_profile()
 
 	settings_modal = SettingsModal.new()
 	settings_modal.name = "SettingsModal"
@@ -143,6 +144,23 @@ func _ready() -> void:
 
 	# Immediately start the 3D battle with the Main Menu selections!
 	call_deferred("_begin_battle")
+
+
+func _apply_mobile_graphics_profile() -> void:
+	if not UiStyle.is_mobile_device():
+		return
+	# Cut 3D HiDPI pixel fill-rate by ~2.6x while keeping 2D UI razor-sharp!
+	get_viewport().scaling_3d_scale = 0.62
+	var dir_light := get_node_or_null("World3D/DirectionalLight3D") as DirectionalLight3D
+	if dir_light != null:
+		dir_light.shadow_enabled = false
+		dir_light.light_energy = 1.28
+	var fill_light := get_node_or_null("World3D/FillLight3D") as DirectionalLight3D
+	if fill_light != null:
+		fill_light.visible = false
+	var center_light := get_node_or_null("World3D/CenterLight") as OmniLight3D
+	if center_light != null:
+		center_light.visible = false
 
 
 func _exit_tree() -> void:

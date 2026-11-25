@@ -31,11 +31,14 @@ func setup_hit_spark(world_pos: Vector3, color: Color, is_crit: bool = false, in
 		_add_flash_sphere(0.32 * intensity, color.lerp(Color.WHITE, 0.6))
 
 	# 2. Directional radial impact spark particles (CPUParticles3D for WebGL2 safety)
+	var is_mob := UiStyle.is_mobile_device()
 	var particles := CPUParticles3D.new()
+	particles.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	particles.emitting = false
 	particles.one_shot = true
 	particles.explosiveness = 0.95
-	particles.amount = 22 if is_crit else 12
+	var base_amt := 22 if is_crit else 12
+	particles.amount = maxi(4, int(round(float(base_amt) * (0.45 if is_mob else 1.0))))
 	particles.lifetime = 0.34 if is_crit else 0.24
 	particles.direction = Vector3(0.0, 0.4, 0.0)
 	particles.spread = 180.0
@@ -69,11 +72,14 @@ func setup_death_burst(world_pos: Vector3, color: Color, is_boss: bool = false) 
 	_add_flash_blade(Vector3(3.4 * sc, 0.24 * sc, 0.24 * sc), Vector3(0.0, 0.0, 0.35), Color.WHITE)
 	_add_flash_blade(Vector3(3.0 * sc, 0.22 * sc, 0.22 * sc), Vector3(0.0, PI * 0.5, -0.35), color.lerp(Color.html("#fde047"), 0.5))
 
+	var is_mob := UiStyle.is_mobile_device()
 	var particles := CPUParticles3D.new()
+	particles.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	particles.emitting = false
 	particles.one_shot = true
 	particles.explosiveness = 0.94
-	particles.amount = 42 if is_boss else 24
+	var base_amt := 42 if is_boss else 24
+	particles.amount = maxi(8, int(round(float(base_amt) * (0.45 if is_mob else 1.0))))
 	particles.lifetime = 0.72 if is_boss else 0.46
 	particles.direction = Vector3(0.0, 1.0, 0.0)
 	particles.spread = 155.0
@@ -108,6 +114,7 @@ func _add_flash_blade(size_vec: Vector3, rot_vec: Vector3, col: Color) -> void:
 	var inst := MeshInstance3D.new()
 	inst.mesh = mesh
 	inst.material_override = mat
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	inst.rotation = rot_vec
 	inst.scale = Vector3(0.35, 1.0, 1.0)
 	add_child(inst)
@@ -121,8 +128,8 @@ func _add_flash_sphere(radius: float, col: Color) -> void:
 	var mesh := SphereMesh.new()
 	mesh.radius = radius
 	mesh.height = radius * 2.0
-	mesh.radial_segments = 14
-	mesh.rings = 8
+	mesh.radial_segments = 10
+	mesh.rings = 6
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(col.r, col.g, col.b, 0.88)
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -131,6 +138,7 @@ func _add_flash_sphere(radius: float, col: Color) -> void:
 	var inst := MeshInstance3D.new()
 	inst.mesh = mesh
 	inst.material_override = mat
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(inst)
 
 	_flash_nodes.append(inst)

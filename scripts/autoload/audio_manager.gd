@@ -1,250 +1,377 @@
 extends Node
-## Procedural polyphonic SFX synthesizer (replacing Tone.js) and Japanese TTS helper.
+## Low-latency, zero-crackle WebAudio-safe SFX synthesizer & Japanese TTS voice controller.
+## Pre-bakes procedural 44.1kHz 16-bit PCM AudioStreamWAV clips once at startup with soft
+## tanh limiting & smooth zero-crossing envelopes, played via a pooled AudioStreamPlayer bank
+## with per-SFX debounce and a Master bus AudioEffectLimiter (eliminates mobile Chrome audio
+## worklet underruns, hard-clipping bursts, and 200ms generator ring-buffer lag).
 
 signal audio_toggled(enabled: bool)
 
-const SAMPLE_RATE: float = 22050.0
+const SAMPLE_RATE: int = 44100
+const POOL_SIZE: int = 10
 
 var audio_enabled: bool = true
-var _player: AudioStreamPlayer
-var _playback: AudioStreamGeneratorPlayback
-var _voices: Array = [] # Each voice: {freq, phase, time, duration, delay, amp, wave}
 
-const NOTE_FREQ: Dictionary = {
-	"F2": 87.31,
-	"C3": 130.81,
-	"A4": 440.00,
-	"C5": 523.25,
-	"E5": 659.25,
-	"G5": 783.99,
-	"A5": 880.00,
-	"B5": 987.77,
-	"C6": 1046.50,
-	"C#6": 1108.73,
-	"D6": 1174.66,
-	"E6": 1318.51,
+var _players: Array[AudioStreamPlayer] = []
+var _pool_cursor: int = 0
+var _sfx_bank: Dictionary = {} # sfx_name -> AudioStreamWAV
+var _last_play_ms: Dictionary = {} # sfx_name -> int (Time.get_ticks_msec)
+var _ja_voice_id: String = ""
+var _tts_checked: bool = false
+
+# Minimum ms between retriggers of the same SFX (prevents AoE multi-kill stacking & clipping)
+const SFX_COOLDOWN_MS: Dictionary = {
+	"enemy_die": 70,
+	"boss_die": 120,
+	"impact_light": 45,
+	"impact_heavy": 55,
+	"impact_crit": 65,
+	"hit": 80,
+	"dash": 70,
+	"jump": 80,
+	"land": 90,
+	"levelup": 140,
 }
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	_player = AudioStreamPlayer.new()
-	var stream := AudioStreamGenerator.new()
-	stream.mix_rate = SAMPLE_RATE
-	stream.buffer_length = 0.12
-	_player.stream = stream
-	_player.volume_db = -8.0
-	add_child(_player)
-	_player.play()
-	_playback = _player.get_stream_playback() as AudioStreamGeneratorPlayback
+	_setup_master_limiter()
+
+	for i in range(POOL_SIZE):
+		var p := AudioStreamPlayer.new()
+		p.name = "SfxPlayer_%d" % i
+		p.bus = "Master"
+		p.volume_db = -3.0
+		add_child(p)
+		_players.append(p)
+
+	_bake_all_sfx()
+	call_deferred("_cache_tts_voice")
+
+
+func _setup_master_limiter() -> void:
+	var master_idx := AudioServer.get_bus_index("Master")
+	if master_idx < 0:
+		return
+	var has_limiter := false
+	for i in range(AudioServer.get_bus_effect_count(master_idx)):
+		if AudioServer.get_bus_effect(master_idx, i) is AudioEffectLimiter:
+			has_limiter = true
+			break
+	if not has_limiter:
+		var lim := AudioEffectLimiter.new()
+		lim.ceiling_db = -1.5
+		lim.threshold_db = -3.5
+		lim.soft_clip_db = 2.0
+		lim.soft_clip_ratio = 8.0
+		AudioServer.add_bus_effect(master_idx, lim)
+
+
+func _cache_tts_voice() -> void:
+	if _tts_checked:
+		return
+	_tts_checked = true
+	var voices := DisplayServer.tts_get_voices_for_language("ja")
+	if not voices.is_empty():
+		_ja_voice_id = String(voices[0])
 
 
 func toggle_audio() -> bool:
 	audio_enabled = not audio_enabled
+	if not audio_enabled:
+		for p in _players:
+			if p.playing:
+				p.stop()
+		if DisplayServer.tts_is_speaking():
+			DisplayServer.tts_stop()
 	audio_toggled.emit(audio_enabled)
-	GameState.toast_requested.emit("🔊 戰鬥音效已開啟" if audio_enabled else "🔇 戰鬥音效已靜音")
 	return audio_enabled
 
 
-func play_sfx(sfx_type: String) -> void:
+func play_sfx(sfx_name: String) -> void:
 	if not audio_enabled:
 		return
-	match sfx_type:
-		"slash1":
-			_trigger_chord(["E5", "B5"], 0.085, 0.0, "tri", 0.22)
-			_trigger_noise(0.065, 0.0, 0.14, 12.0)
-		"slash2":
-			_trigger_chord(["G5", "D6"], 0.085, 0.0, "tri", 0.24)
-			_trigger_noise(0.070, 0.0, 0.16, 11.0)
-		"slash3":
-			_trigger_chord(["C5", "G5", "E6"], 0.16, 0.0, "tri", 0.28)
-			_trigger_noise(0.11, 0.0, 0.20, 8.5)
-		# === 5 Heroes Exclusive Attack SFX ===
-		"atk_sakura_1":
-			_trigger_chord(["A5", "E6"], 0.095, 0.0, "sine", 0.20)
-			_trigger_noise(0.06, 0.0, 0.10, 14.0)
-		"atk_sakura_2":
-			_trigger_chord(["B5", "E6"], 0.10, 0.0, "sine", 0.22)
-			_trigger_noise(0.07, 0.0, 0.12, 13.0)
-		"atk_sakura_3":
-			_trigger_chord(["E5", "A5", "B5", "E6"], 0.22, 0.0, "sine", 0.28)
-			_trigger_noise(0.12, 0.0, 0.15, 9.5)
-		"atk_kick_1":
-			_trigger_punch(220.0, 58.0, 0.11, 0.0, 0.34, "sine")
-			_trigger_noise(0.09, 0.0, 0.22, 10.5)
-		"atk_kick_2":
-			_trigger_punch(250.0, 52.0, 0.13, 0.0, 0.38, "sine")
-			_trigger_noise(0.10, 0.0, 0.25, 9.5)
-		"atk_kick_3":
-			_trigger_punch(310.0, 42.0, 0.20, 0.0, 0.48, "sine")
-			_trigger_punch(180.0, 65.0, 0.12, 0.02, 0.22, "square")
-			_trigger_noise(0.16, 0.0, 0.32, 7.5)
-		"atk_sword_1":
-			_trigger_punch(640.0, 220.0, 0.09, 0.0, 0.22, "tri")
-			_trigger_noise(0.085, 0.0, 0.20, 11.0)
-		"atk_sword_2":
-			_trigger_punch(740.0, 260.0, 0.10, 0.0, 0.24, "tri")
-			_trigger_noise(0.095, 0.0, 0.22, 10.0)
-		"atk_sword_3":
-			_trigger_punch(920.0, 180.0, 0.16, 0.0, 0.30, "tri")
-			_trigger_punch(190.0, 48.0, 0.18, 0.01, 0.34, "sine")
-			_trigger_noise(0.15, 0.0, 0.28, 7.5)
-		"atk_raijin_1":
-			_trigger_punch(1180.0, 460.0, 0.055, 0.0, 0.20, "square")
-			_trigger_noise(0.045, 0.0, 0.18, 18.0)
-		"atk_raijin_2":
-			_trigger_punch(1380.0, 540.0, 0.060, 0.0, 0.22, "square")
-			_trigger_noise(0.050, 0.0, 0.20, 17.0)
-		"atk_raijin_3":
-			_trigger_punch(1650.0, 340.0, 0.12, 0.0, 0.26, "square")
-			_trigger_chord(["G5", "D6", "E6"], 0.14, 0.01, "tri", 0.24)
-			_trigger_noise(0.095, 0.0, 0.26, 12.0)
-		"atk_yuki_1":
-			_trigger_chord(["C6", "E6"], 0.11, 0.0, "sine", 0.22)
-			_trigger_punch(1450.0, 880.0, 0.08, 0.0, 0.14, "sine")
-		"atk_yuki_2":
-			_trigger_chord(["D6", "E6"], 0.12, 0.0, "sine", 0.24)
-			_trigger_punch(1620.0, 960.0, 0.09, 0.0, 0.16, "sine")
-		"atk_yuki_3":
-			_trigger_chord(["G5", "C6", "D6", "E6"], 0.24, 0.0, "sine", 0.30)
-			_trigger_noise(0.11, 0.02, 0.18, 12.0)
-		"impact_light":
-			_trigger_punch(135.0, 52.0, 0.095, 0.0, 0.34, "sine")
-			_trigger_noise(0.060, 0.0, 0.24, 15.0)
-		"impact_heavy":
-			_trigger_punch(155.0, 42.0, 0.15, 0.0, 0.44, "sine")
-			_trigger_punch(320.0, 95.0, 0.09, 0.0, 0.22, "square")
-			_trigger_noise(0.10, 0.0, 0.32, 11.0)
-		"impact_crit":
-			_trigger_punch(175.0, 38.0, 0.22, 0.0, 0.50, "sine")
-			_trigger_punch(420.0, 110.0, 0.12, 0.0, 0.26, "square")
-			_trigger_noise(0.14, 0.0, 0.36, 9.0)
-			_trigger_chord(["G5", "D6", "E6"], 0.24, 0.015, "tri", 0.24)
-		"enemy_die":
-			_trigger_punch(210.0, 65.0, 0.16, 0.0, 0.30, "sine")
-			_trigger_noise(0.12, 0.0, 0.22, 9.5)
-			_trigger_chord(["C6", "E6"], 0.16, 0.02, "sine", 0.16)
-		"boss_die":
-			_trigger_punch(140.0, 32.0, 0.42, 0.0, 0.52, "sine")
-			_trigger_noise(0.30, 0.0, 0.32, 5.5)
-			_trigger_chord(["C5", "G5", "C6", "E6"], 0.45, 0.06, "tri", 0.30)
-		"skill":
-			_trigger_chord(["A4", "E5", "A5", "C#6"], 0.30, 0.0, "sine", 0.26)
-			_trigger_punch(160.0, 48.0, 0.18, 0.0, 0.32, "sine")
-		"dash":
-			_trigger_chord(["C6"], 0.09, 0.0, "sine", 0.22)
-			_trigger_punch(240.0, 95.0, 0.11, 0.0, 0.20, "sine")
-			_trigger_noise(0.11, 0.0, 0.18, 9.0)
-		"jump":
-			_trigger_punch(220.0, 520.0, 0.11, 0.0, 0.22, "sine")
-			_trigger_noise(0.06, 0.0, 0.10, 14.0)
-		"land":
-			_trigger_punch(95.0, 42.0, 0.075, 0.0, 0.18, "sine")
-			_trigger_noise(0.045, 0.0, 0.09, 16.0)
-		"hit":
-			_trigger_punch(120.0, 44.0, 0.18, 0.0, 0.42, "square")
-			_trigger_noise(0.10, 0.0, 0.26, 12.0)
-		"levelup":
-			_trigger_chord(["C5", "E5", "G5"], 0.14, 0.0, "tri", 0.26)
-			_trigger_chord(["G5", "B5", "D6"], 0.28, 0.14, "tri", 0.28)
+	var stream: AudioStreamWAV = _sfx_bank.get(sfx_name, null)
+	if stream == null:
+		return
+
+	var now_ms := Time.get_ticks_msec()
+	var cd_ms: int = int(SFX_COOLDOWN_MS.get(sfx_name, 30))
+	var prev_ms: int = int(_last_play_ms.get(sfx_name, -9999))
+	if now_ms - prev_ms < cd_ms:
+		return
+	_last_play_ms[sfx_name] = now_ms
+
+	# Pick first idle player, otherwise round-robin steal the oldest slot
+	var chosen: AudioStreamPlayer = null
+	for p in _players:
+		if not p.playing:
+			chosen = p
+			break
+	if chosen == null:
+		chosen = _players[_pool_cursor]
+		_pool_cursor = (_pool_cursor + 1) % POOL_SIZE
+
+	chosen.stream = stream
+	chosen.pitch_scale = randf_range(0.97, 1.03) if sfx_name.begins_with("atk_") or sfx_name.begins_with("impact_") else 1.0
+	chosen.play()
 
 
 func speak_japanese(text: String) -> void:
 	if not audio_enabled or text.is_empty():
 		return
-	if not DisplayServer.has_feature(DisplayServer.FEATURE_TEXT_TO_SPEECH):
+	if not _tts_checked:
+		_cache_tts_voice()
+	if _ja_voice_id.is_empty():
 		return
-	var voices := DisplayServer.tts_get_voices_for_language("ja")
-	if voices.is_empty():
-		return
-	DisplayServer.tts_stop()
-	DisplayServer.tts_speak(text, voices[0], 60, 1.0, 1.05)
+	# Defer slightly on Web so Android Chrome AudioFocus transition doesn't pop skill impact transients
+	if OS.has_feature("web"):
+		var tw := create_tween()
+		tw.tween_interval(0.06)
+		tw.tween_callback(func() -> void:
+			if not audio_enabled:
+				return
+			if DisplayServer.tts_is_speaking():
+				DisplayServer.tts_stop()
+			DisplayServer.tts_speak(text, _ja_voice_id, 68, 1.04, 1.08)
+		)
+	else:
+		if DisplayServer.tts_is_speaking():
+			DisplayServer.tts_stop()
+		DisplayServer.tts_speak(text, _ja_voice_id, 72, 1.05, 1.08)
 
 
-func _trigger_chord(notes: Array, duration: float, delay: float, wave: String, total_amp: float = 0.24) -> void:
-	var amp := total_amp / maxf(1.0, float(notes.size()))
-	for note in notes:
-		var freq: float = float(NOTE_FREQ.get(note, 440.0))
-		_voices.append({
-			"freq": freq,
-			"freq_end": freq,
-			"phase": 0.0,
-			"time": -delay,
-			"duration": duration,
-			"amp": amp,
-			"wave": wave,
-			"decay": 4.2,
-		})
+# ==============================================================================
+#  OFFLINE PRE-BAKING OF CLEAN 44.1kHz 16-BIT PCM WAV CLIPS (ZERO RUNTIME CPU!)
+# ==============================================================================
+func _bake_all_sfx() -> void:
+	_sfx_bank["slash1"] = _bake_voices([
+		_v("tri", 520.0, 210.0, 0.13, 0.28),
+		_v("noise", 1200.0, 420.0, 0.08, 0.11),
+	])
+	_sfx_bank["slash2"] = _bake_voices([
+		_v("tri", 620.0, 250.0, 0.14, 0.30),
+		_v("noise", 1600.0, 500.0, 0.09, 0.12),
+	])
+	_sfx_bank["slash3"] = _bake_voices([
+		_v("tri", 760.0, 180.0, 0.22, 0.34),
+		_v("sine", 240.0, 75.0, 0.20, 0.30),
+		_v("noise", 2200.0, 400.0, 0.14, 0.15),
+	])
+
+	# === Per-Hero Exclusive Attack Sound Signatures ===
+	_sfx_bank["atk_sakura_1"] = _bake_voices([
+		_v("sine", 780.0, 420.0, 0.12, 0.24),
+		_v("tri", 1320.0, 960.0, 0.10, 0.15),
+		_v("noise", 2400.0, 1200.0, 0.07, 0.08),
+	])
+	_sfx_bank["atk_sakura_2"] = _bake_voices([
+		_v("sine", 920.0, 480.0, 0.13, 0.26),
+		_v("tri", 1560.0, 1080.0, 0.11, 0.16),
+		_v("noise", 2600.0, 1100.0, 0.08, 0.09),
+	])
+	_sfx_bank["atk_sakura_3"] = _bake_voices([
+		_v("sine", 1180.0, 580.0, 0.22, 0.28),
+		_v("tri", 1760.0, 1180.0, 0.20, 0.20),
+		_v("sine", 340.0, 150.0, 0.18, 0.22),
+		_v("noise", 3000.0, 900.0, 0.14, 0.11),
+	])
+
+	_sfx_bank["atk_kick_1"] = _bake_voices([
+		_v("sine", 210.0, 62.0, 0.15, 0.38),
+		_v("noise", 720.0, 180.0, 0.11, 0.18),
+	])
+	_sfx_bank["atk_kick_2"] = _bake_voices([
+		_v("sine", 245.0, 55.0, 0.17, 0.40),
+		_v("tri", 360.0, 110.0, 0.13, 0.16),
+		_v("noise", 900.0, 200.0, 0.12, 0.19),
+	])
+	_sfx_bank["atk_kick_3"] = _bake_voices([
+		_v("sine", 280.0, 46.0, 0.26, 0.42),
+		_v("tri", 175.0, 52.0, 0.20, 0.20),
+		_v("noise", 1400.0, 160.0, 0.20, 0.22),
+	])
+
+	_sfx_bank["atk_sword_1"] = _bake_voices([
+		_v("tri", 980.0, 320.0, 0.15, 0.26),
+		_v("sine", 1680.0, 820.0, 0.12, 0.16),
+		_v("noise", 1100.0, 320.0, 0.12, 0.14),
+	])
+	_sfx_bank["atk_sword_2"] = _bake_voices([
+		_v("tri", 1120.0, 290.0, 0.16, 0.28),
+		_v("sine", 1840.0, 740.0, 0.13, 0.18),
+		_v("noise", 1400.0, 360.0, 0.14, 0.16),
+	])
+	_sfx_bank["atk_sword_3"] = _bake_voices([
+		_v("tri", 1360.0, 220.0, 0.26, 0.30),
+		_v("sine", 280.0, 72.0, 0.24, 0.30),
+		_v("noise", 2200.0, 260.0, 0.22, 0.20),
+	])
+
+	_sfx_bank["atk_raijin_1"] = _bake_voices([
+		_v("tri", 1040.0, 560.0, 0.08, 0.22),
+		_v("sine", 1720.0, 920.0, 0.07, 0.16),
+		_v("noise", 3200.0, 1500.0, 0.06, 0.10),
+	])
+	_sfx_bank["atk_raijin_2"] = _bake_voices([
+		_v("tri", 1220.0, 620.0, 0.085, 0.24),
+		_v("sine", 1920.0, 1020.0, 0.075, 0.16),
+		_v("noise", 3400.0, 1600.0, 0.065, 0.11),
+	])
+	_sfx_bank["atk_raijin_3"] = _bake_voices([
+		_v("tri", 1480.0, 320.0, 0.19, 0.24),
+		_v("sine", 420.0, 92.0, 0.18, 0.30),
+		_v("noise", 3800.0, 720.0, 0.15, 0.16),
+	])
+
+	_sfx_bank["atk_yuki_1"] = _bake_voices([
+		_v("sine", 1380.0, 1860.0, 0.14, 0.22),
+		_v("tri", 1940.0, 1540.0, 0.11, 0.14),
+		_v("noise", 3000.0, 2100.0, 0.08, 0.07),
+	])
+	_sfx_bank["atk_yuki_2"] = _bake_voices([
+		_v("sine", 1560.0, 2080.0, 0.15, 0.24),
+		_v("tri", 2180.0, 1680.0, 0.12, 0.15),
+		_v("noise", 3200.0, 2200.0, 0.09, 0.08),
+	])
+	_sfx_bank["atk_yuki_3"] = _bake_voices([
+		_v("sine", 1740.0, 2420.0, 0.24, 0.24),
+		_v("sine", 1140.0, 820.0, 0.22, 0.20),
+		_v("tri", 620.0, 240.0, 0.20, 0.16),
+		_v("noise", 3600.0, 1200.0, 0.15, 0.10),
+	])
+
+	# === Crisp Impact, Death, Movement & UI SFX ===
+	_sfx_bank["impact_light"] = _bake_voices([
+		_v("sine", 260.0, 88.0, 0.09, 0.34),
+		_v("noise", 1700.0, 560.0, 0.055, 0.16),
+	])
+	_sfx_bank["impact_heavy"] = _bake_voices([
+		_v("sine", 210.0, 54.0, 0.15, 0.40),
+		_v("tri", 420.0, 120.0, 0.11, 0.20),
+		_v("noise", 2000.0, 340.0, 0.09, 0.20),
+	])
+	_sfx_bank["impact_crit"] = _bake_voices([
+		_v("sine", 240.0, 48.0, 0.22, 0.40),
+		_v("tri", 940.0, 460.0, 0.16, 0.20),
+		_v("sine", 1380.0, 920.0, 0.24, 0.22),
+		_v("noise", 2600.0, 440.0, 0.13, 0.16),
+	])
+	_sfx_bank["enemy_die"] = _bake_voices([
+		_v("sine", 340.0, 95.0, 0.17, 0.32),
+		_v("tri", 620.0, 180.0, 0.13, 0.18),
+		_v("noise", 1600.0, 320.0, 0.11, 0.14),
+	])
+	_sfx_bank["boss_die"] = _bake_voices([
+		_v("sine", 180.0, 38.0, 0.46, 0.42),
+		_v("tri", 420.0, 85.0, 0.34, 0.24),
+		_v("noise", 1200.0, 160.0, 0.30, 0.20),
+	])
+	_sfx_bank["skill"] = _bake_voices([
+		_v("sine", 380.0, 860.0, 0.30, 0.28),
+		_v("tri", 580.0, 1140.0, 0.26, 0.20),
+	])
+	_sfx_bank["hit"] = _bake_voices([
+		_v("tri", 165.0, 58.0, 0.14, 0.34),
+		_v("noise", 800.0, 200.0, 0.09, 0.16),
+	])
+	_sfx_bank["dash"] = _bake_voices([
+		_v("sine", 340.0, 740.0, 0.12, 0.24),
+		_v("noise", 1800.0, 620.0, 0.09, 0.11),
+	])
+	_sfx_bank["jump"] = _bake_voices([
+		_v("sine", 240.0, 560.0, 0.13, 0.26),
+		_v("tri", 380.0, 780.0, 0.10, 0.13),
+	])
+	_sfx_bank["land"] = _bake_voices([
+		_v("sine", 140.0, 52.0, 0.09, 0.26),
+		_v("noise", 500.0, 180.0, 0.055, 0.10),
+	])
+	_sfx_bank["levelup"] = _bake_voices([
+		_v("sine", 523.25, 523.25, 0.20, 0.24, 0.0),
+		_v("sine", 659.25, 659.25, 0.20, 0.24, 0.09),
+		_v("sine", 783.99, 783.99, 0.22, 0.24, 0.18),
+		_v("sine", 1046.50, 1046.50, 0.36, 0.26, 0.27),
+	])
 
 
-func _trigger_punch(freq_start: float, freq_end: float, duration: float, delay: float, amp: float, wave: String) -> void:
-	_voices.append({
-		"freq": freq_start,
-		"freq_end": freq_end,
-		"phase": 0.0,
-		"time": -delay,
-		"duration": duration,
-		"amp": amp,
+func _v(wave: String, f0: float, f1: float, dur: float, amp: float, delay: float = 0.0) -> Dictionary:
+	return {
 		"wave": wave,
-		"decay": 5.8,
-	})
-
-
-func _trigger_noise(duration: float, delay: float, amp: float, decay: float = 10.0) -> void:
-	_voices.append({
-		"freq": 0.0,
-		"freq_end": 0.0,
-		"phase": 0.0,
-		"time": -delay,
-		"duration": duration,
+		"f0": f0,
+		"f1": f1,
+		"dur": dur,
 		"amp": amp,
-		"wave": "noise",
-		"decay": decay,
-	})
+		"delay": delay,
+	}
 
 
-func _process(_delta: float) -> void:
-	if _playback == null:
-		if _player != null and _player.playing:
-			_playback = _player.get_stream_playback() as AudioStreamGeneratorPlayback
-		return
+func _bake_voices(voices: Array) -> AudioStreamWAV:
+	var max_end := 0.05
+	for v in voices:
+		max_end = maxf(max_end, float(v["delay"]) + float(v["dur"]))
+	max_end += 0.015 # Clean silence tail for zero-crossing safety
 
-	var frames_available := _playback.get_frames_available()
-	if frames_available <= 0:
-		return
+	var total_frames := int(ceil(max_end * float(SAMPLE_RATE)))
+	var buf := PackedFloat32Array()
+	buf.resize(total_frames)
+	buf.fill(0.0)
 
-	var dt := 1.0 / SAMPLE_RATE
-	for _i in range(frames_available):
-		var sample := 0.0
-		if not _voices.is_empty():
-			var idx := _voices.size() - 1
-			while idx >= 0:
-				var v: Dictionary = _voices[idx]
-				v["time"] = float(v["time"]) + dt
-				var t: float = float(v["time"])
-				var dur: float = float(v["duration"])
-				if t >= dur:
-					_voices.remove_at(idx)
-				elif t >= 0.0:
-					var progress: float = t / dur
-					var decay: float = float(v.get("decay", 4.2))
-					var env: float = minf(1.0, t / 0.004) * exp(-progress * decay)
-					var osc := 0.0
-					if v["wave"] == "noise":
-						osc = randf_range(-1.0, 1.0)
-					else:
-						var cur_freq: float = lerpf(float(v["freq"]), float(v.get("freq_end", v["freq"])), progress)
-						var phase: float = float(v["phase"]) + cur_freq * dt
-						if phase >= 1.0:
-							phase -= floor(phase)
-						v["phase"] = phase
-						if v["wave"] == "tri":
-							osc = 4.0 * absf(phase - 0.5) - 1.0
-						elif v["wave"] == "square":
-							osc = 0.65 if phase < 0.5 else -0.65
-						else:
-							osc = sin(phase * TAU)
-					sample += osc * env * float(v["amp"])
-				idx -= 1
-		sample = clampf(sample, -0.92, 0.92)
-		_playback.push_frame(Vector2(sample, sample))
+	var sr_f := float(SAMPLE_RATE)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4219
+
+	for v in voices:
+		var wave: String = v["wave"]
+		var f0: float = float(v["f0"])
+		var f1: float = float(v["f1"])
+		var dur: float = maxf(0.01, float(v["dur"]))
+		var amp: float = float(v["amp"])
+		var start_idx := int(round(float(v["delay"]) * sr_f))
+		var len_frames := int(round(dur * sr_f))
+		var phase := 0.0
+		var lp_noise := 0.0
+
+		for i in range(len_frames):
+			var out_idx := start_idx + i
+			if out_idx >= total_frames:
+				break
+			var t := float(i) / sr_f
+			var p := clampf(t / dur, 0.0, 1.0)
+			var freq := lerpf(f0, f1, p)
+			# Smooth 3ms attack + exponential decay + smooth 6ms release tail -> zero clicks!
+			var atk_env := minf(1.0, t / 0.003)
+			var rel_env := minf(1.0, (dur - t) / 0.006)
+			var env := atk_env * rel_env * exp(-p * 3.8)
+
+			var osc := 0.0
+			if wave == "sine":
+				phase = fmod(phase + freq / sr_f, 1.0)
+				osc = sin(phase * TAU)
+			elif wave == "tri":
+				phase = fmod(phase + freq / sr_f, 1.0)
+				osc = 4.0 * absf(phase - 0.5) - 1.0
+			else:
+				# Gently low-pass filtered noise (warm & punchy, zero harsh aliasing)
+				var raw_n := rng.randf_range(-1.0, 1.0)
+				var cutoff := clampf(freq / (sr_f * 0.25), 0.04, 0.85)
+				lp_noise = lerpf(lp_noise, raw_n, cutoff)
+				osc = lp_noise
+
+			buf[out_idx] += osc * env * amp
+
+	# Soft tanh saturation + normalize headroom to ~0.72 peak -> warm, punchy, NEVER hard-clips!
+	var pcm := PackedByteArray()
+	pcm.resize(total_frames * 2)
+	for i in range(total_frames):
+		var s := tanh(buf[i] * 1.15) * 0.72
+		var i16 := clampi(int(round(s * 32767.0)), -32768, 32767)
+		pcm.encode_s16(i * 2, i16)
+
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = SAMPLE_RATE
+	wav.stereo = false
+	wav.data = pcm
+	return wav

@@ -2,7 +2,7 @@ extends Node
 ## Static game definitions: characters, stages, equipment, shikigami,
 ## monsters, bosses, Japanese chant words, game modes, and blessings.
 
-const ARENA_RADIUS: float = 28.0
+const ARENA_RADIUS: float = 38.0
 const MAX_LEVEL: int = 100
 const MAX_SKILL_LEVEL: int = 10
 const MAX_EQUIP_ENHANCE: int = 10

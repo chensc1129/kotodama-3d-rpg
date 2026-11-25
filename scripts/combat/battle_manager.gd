@@ -34,6 +34,8 @@ var _shift_tap_window: float = 0.0
 var _dash_dir: Vector3 = Vector3.ZERO
 var _move_vel: Vector3 = Vector3.ZERO
 var _hud_sync_acc: float = 0.0
+var _save_dirty: bool = false
+var _save_flush_timer: float = 0.0
 
 # Stage-specific mechanic runtime states
 var _sakura_cycle_timer: float = 0.0
@@ -638,6 +640,7 @@ func complete_skill_chant(is_success: bool, is_typed_perfect: bool) -> void:
 				popup_requested.emit(player.position + Vector3(0.0, 2.7, 0.0), "%s 疾風加速 5s!" % w_icon, Color.html("#5eead4"))
 
 		var ult_hit := false
+		var ult_sparks := 0
 		var dmg_tag := "%s%s!" % [w_icon, ("完美・" + w_kanji) if is_typed_perfect else w_kanji]
 		for item in enemies.duplicate():
 			if not is_instance_valid(item):
@@ -665,7 +668,9 @@ func complete_skill_chant(is_success: bool, is_typed_perfect: bool) -> void:
 						en.petrify_timer = maxf(en.petrify_timer, 4.0)
 						if String(word.get("id", "")) == "phoenix":
 							en.burn_timer = maxf(en.burn_timer, 4.5)
-				spawn_hit_spark(en.position + Vector3(0.0, 1.45 * en.scale.y, 0.0), w_col, true, 1.45)
+				if ult_sparks < 5:
+					spawn_hit_spark(en.position + Vector3(0.0, 1.45 * en.scale.y, 0.0), w_col, true, 1.45)
+					ult_sparks += 1
 				damage_enemy(en, dmg, dmg_tag, w_col.lerp(Color.WHITE, 0.35))
 		if ult_hit:
 			hit_landed.emit(true)
@@ -685,6 +690,7 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 	var sig_mult: float = 1.0 + float(sig_lv - 1) * 0.10
 	var cid: String = char_cfg["id"]
 	var any_hit: bool = false
+	var sig_sparks: int = 0
 
 	if cid == "sakura":
 		var duration: float = 4.6 + float(sig_lv - 1) * 0.25
@@ -695,7 +701,9 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 				any_hit = true
 				en.petrify_timer = duration
 				en.trigger_hit_react(en.position - player.position, true)
-				spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#f472b6"), true, 1.2)
+				if sig_sparks < 5:
+					spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#f472b6"), true, 1.2)
+					sig_sparks += 1
 				damage_enemy(en, dmg, "🪨石化封印!", Color.html("#f9a8d4"))
 		GameState.toast_requested.emit("🪨「石頭」石化魔眼！妖怪石化 %.1f 秒，快用「あ」碎石暴擊！" % duration)
 	elif cid == "kickboxer":
@@ -718,7 +726,9 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 				var push := en.position - player.position
 				push.y = 0.0
 				en.trigger_hit_react(push, true)
-				spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#38bdf8"), true, 1.3)
+				if sig_sparks < 5:
+					spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#38bdf8"), true, 1.3)
+					sig_sparks += 1
 				if push.length_squared() > 0.001:
 					var pre_ekb := en.position
 					en.position += push.normalized() * (2.2 if en.is_boss else 4.5)
@@ -736,7 +746,9 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 				any_hit = true
 				en.shock_timer = 4.6
 				en.trigger_hit_react(en.position - player.position, true)
-				spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#facc15"), true, 1.25)
+				if sig_sparks < 5:
+					spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#facc15"), true, 1.25)
+					sig_sparks += 1
 				damage_enemy(en, dmg, "⚡九天雷鳴!", Color.html("#fef08a"))
 		GameState.toast_requested.emit("⚡「雷光」九天雷鳴陣！妖怪陷入感電易傷狀態！")
 	elif cid == "yukionna":
@@ -748,7 +760,9 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 				en.freeze_timer = 4.2
 				en.frost_tick_timer = 0.6
 				en.trigger_hit_react(en.position - player.position, true)
-				spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#67e8f9"), true, 1.2)
+				if sig_sparks < 5:
+					spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#67e8f9"), true, 1.2)
+					sig_sparks += 1
 				damage_enemy(en, dmg, "❄️絶対零度!", Color.html("#67e8f9"))
 		GameState.toast_requested.emit("❄️「冰結」絶対零度氷華！凍結周圍妖怪！")
 	else:
@@ -759,7 +773,9 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 				any_hit = true
 				en.burn_timer = 4.0
 				en.trigger_hit_react(en.position - player.position, true)
-				spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#ef4444"), true, 1.3)
+				if sig_sparks < 5:
+					spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#ef4444"), true, 1.3)
+					sig_sparks += 1
 				damage_enemy(en, dmg, "🔥紅蓮烈焰!", Color.html("#fca5a5"))
 		GameState.toast_requested.emit("🔥「火炎斬」紅蓮烈焰斬爆發！")
 
@@ -807,7 +823,8 @@ func damage_enemy(en: Enemy3D, dmg: int, tag: String, color: Color = Color.WHITE
 
 		GameState.player["gold"] = int(GameState.player["gold"]) + gold_gain
 		GameState.grant_exp(exp_gain)
-		GameState.save_game_data()
+		# Debounce IndexedDB save writes to avoid mid-combat frame & WebAudio stalls
+		_save_dirty = true
 
 
 func damage_player(dmg: int) -> void:
@@ -825,6 +842,9 @@ func damage_player(dmg: int) -> void:
 	if int(b["hp"]) <= 0:
 		b["active"] = false
 		b["paused"] = true
+		if _save_dirty:
+			_save_dirty = false
+			GameState.save_game_data()
 		GameState.toast_requested.emit("💀 体力歸零！返回道場重整裝備與技能再戰！")
 		battle_ended.emit(false, int(b["wave"]))
 	hud_updated.emit()
@@ -1041,7 +1061,7 @@ func _process(delta: float) -> void:
 			if dist <= 2.3 and absf(player.position.y - en.position.y) < 1.45:
 				en.atk_timer = 1.4
 				damage_player(en.atk)
-			elif en.ranged and dist <= 18.0 and dist > 0.001:
+			elif en.ranged and dist <= 22.0 and dist > 0.001:
 				en.atk_timer = 2.4
 				var aim_3d := ((player.position + Vector3(0.0, 1.0, 0.0)) - (en.position + Vector3(0.0, 1.2, 0.0))).normalized()
 				_spawn_enemy_projectile(en.position, aim_3d, en.atk)
@@ -1107,6 +1127,10 @@ func _process(delta: float) -> void:
 
 	# Check Wave Clear
 	if enemies.is_empty() and b["active"]:
+		if _save_dirty:
+			_save_dirty = false
+			_save_flush_timer = 0.0
+			GameState.save_game_data()
 		if not GameState.is_endless_mode() and int(b["wave"]) >= 12:
 			GameState.toast_requested.emit("👑 恭喜通關全 12 幕！獲得通關大賞 500 金幣！")
 			GameState.player["gold"] = int(GameState.player["gold"]) + 500
@@ -1120,6 +1144,14 @@ func _process(delta: float) -> void:
 			hud_updated.emit()
 			wave_cleared.emit()
 		return
+
+	# Periodic debounced save flush (every 8s if kills occurred)
+	if _save_dirty:
+		_save_flush_timer += dt
+		if _save_flush_timer >= 8.0:
+			_save_dirty = false
+			_save_flush_timer = 0.0
+			GameState.save_game_data()
 
 	# Throttle routine HUD sync to ~12 Hz to avoid per-frame CJK text shaping stutter on WebGL
 	_hud_sync_acc += dt
@@ -1278,9 +1310,10 @@ func _spawn_stage_hazards(kind: String, count: int, rad: float, delay: float) ->
 		var torus := TorusMesh.new()
 		torus.inner_radius = rad - 0.35
 		torus.outer_radius = rad
-		torus.rings = 32
+		torus.rings = 22
 		torus.ring_segments = 6
 		ring.mesh = torus
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var mat := StandardMaterial3D.new()
 		mat.albedo_color = Color(col.r, col.g, col.b, 0.78)
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED

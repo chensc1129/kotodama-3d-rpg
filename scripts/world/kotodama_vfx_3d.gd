@@ -51,12 +51,26 @@ func _make_unshaded_mat(col: Color, alpha: float = 0.92) -> StandardMaterial3D:
 	return mat
 
 
+static var _cached_cjk_font: Font = null
+static var _font_checked: bool = false
+
+
+func _new_vfx_mesh(mesh: Mesh, mat: Material) -> MeshInstance3D:
+	var inst := MeshInstance3D.new()
+	inst.mesh = mesh
+	inst.material_override = mat
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return inst
+
+
 func _build_kanji_stamp(kanji: String, kana: String, is_perfect: bool) -> void:
 	if kanji.is_empty():
 		return
-	var font_res: Font = null
-	if ResourceLoader.exists("res://assets/fonts/noto_cjk_game.otf"):
-		font_res = load("res://assets/fonts/noto_cjk_game.otf")
+	if not _font_checked:
+		_font_checked = true
+		if ResourceLoader.exists("res://assets/fonts/noto_cjk_game.otf"):
+			_cached_cjk_font = load("res://assets/fonts/noto_cjk_game.otf")
+	var font_res: Font = _cached_cjk_font
 
 	_kanji_label = Label3D.new()
 	_kanji_label.text = "「%s」" % kanji
@@ -89,11 +103,13 @@ func _build_kanji_stamp(kanji: String, kana: String, is_perfect: bool) -> void:
 
 
 func _spawn_particles(amount: int, col: Color, shape_size: Vector3, dir: Vector3, spread: float, vmin: float, vmax: float, grav: Vector3, life: float, emission_rad: float = 1.2) -> void:
+	var is_mob := UiStyle.is_mobile_device()
 	var p := CPUParticles3D.new()
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	p.emitting = false
 	p.one_shot = true
 	p.explosiveness = 0.85
-	p.amount = amount
+	p.amount = maxi(10, int(round(float(amount) * (0.45 if is_mob else 1.0))))
 	p.lifetime = life
 	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
 	p.emission_sphere_radius = emission_rad
@@ -122,6 +138,23 @@ func _spawn_particles(amount: int, col: Color, shape_size: Vector3, dir: Vector3
 # 1. METEOR: Blazing fireballs/star-shards plunging diagonally from sky + shockwave craters
 func _build_meteor_shower() -> void:
 	var count := 6
+	var core_m := SphereMesh.new()
+	core_m.radius = 0.62 * _scale_mult
+	core_m.height = 1.24 * _scale_mult
+	core_m.radial_segments = 12
+	core_m.rings = 6
+	var tail_m := CylinderMesh.new()
+	tail_m.top_radius = 0.08
+	tail_m.bottom_radius = 0.52 * _scale_mult
+	tail_m.height = 4.2 * _scale_mult
+	tail_m.radial_segments = 10
+	tail_m.rings = 1
+	var ring_m := TorusMesh.new()
+	ring_m.inner_radius = 0.5
+	ring_m.outer_radius = 0.95
+	ring_m.rings = 18
+	ring_m.ring_segments = 6
+
 	for i in range(count):
 		var ang := (float(i) / float(count)) * TAU + randf_range(-0.25, 0.25)
 		var dist := randf_range(2.2, 8.8) * _scale_mult
@@ -132,23 +165,12 @@ func _build_meteor_shower() -> void:
 		root.position = start
 		add_child(root)
 
-		var core_m := SphereMesh.new()
-		core_m.radius = 0.62 * _scale_mult
-		core_m.height = 1.24 * _scale_mult
 		var core_mat := _make_unshaded_mat(_accent.lerp(Color.html("#fef08a"), 0.55), 0.96)
-		var core := MeshInstance3D.new()
-		core.mesh = core_m
-		core.material_override = core_mat
+		var core := _new_vfx_mesh(core_m, core_mat)
 		root.add_child(core)
 
-		var tail_m := CylinderMesh.new()
-		tail_m.top_radius = 0.08
-		tail_m.bottom_radius = 0.52 * _scale_mult
-		tail_m.height = 4.2 * _scale_mult
 		var tail_mat := _make_unshaded_mat(_accent, 0.78)
-		var tail := MeshInstance3D.new()
-		tail.mesh = tail_m
-		tail.material_override = tail_mat
+		var tail := _new_vfx_mesh(tail_m, tail_mat)
 		tail.position = Vector3(0.0, 2.2 * _scale_mult, 0.0)
 		root.add_child(tail)
 
@@ -157,13 +179,8 @@ func _build_meteor_shower() -> void:
 			root.basis = Basis(Vector3.UP.cross(fall_dir).normalized() if absf(fall_dir.y) < 0.98 else Vector3.RIGHT, acos(clampf(Vector3.UP.dot(fall_dir), -1.0, 1.0)))
 
 		# Ground impact ring (expands when meteor lands)
-		var ring_m := TorusMesh.new()
-		ring_m.inner_radius = 0.5
-		ring_m.outer_radius = 0.95
 		var ring_mat := _make_unshaded_mat(_accent.lerp(Color.html("#fde047"), 0.35), 0.0)
-		var ring := MeshInstance3D.new()
-		ring.mesh = ring_m
-		ring.material_override = ring_mat
+		var ring := _new_vfx_mesh(ring_m, ring_mat)
 		ring.position = Vector3(target.x, 0.16, target.z)
 		ring.scale = Vector3(0.5, 0.08, 0.5)
 		add_child(ring)
@@ -187,6 +204,13 @@ func _build_meteor_shower() -> void:
 # 2. LIGHTNING: Jagged multi-segment sky-to-ground thunderbolts + crackling aura cylinder
 func _build_lightning_storm() -> void:
 	var bolt_count := 6
+	var disc_m := CylinderMesh.new()
+	disc_m.top_radius = 1.6 * _scale_mult
+	disc_m.bottom_radius = 1.8 * _scale_mult
+	disc_m.height = 0.12
+	disc_m.radial_segments = 14
+	disc_m.rings = 1
+
 	for i in range(bolt_count):
 		var ang := (float(i) / float(bolt_count)) * TAU
 		var dist := (0.0 if i == 0 else randf_range(3.6, 9.2)) * _scale_mult
@@ -213,9 +237,9 @@ func _build_lightning_storm() -> void:
 			cyl.top_radius = 0.16 * _scale_mult
 			cyl.bottom_radius = 0.24 * _scale_mult
 			cyl.height = seg_len
-			var seg_inst := MeshInstance3D.new()
-			seg_inst.mesh = cyl
-			seg_inst.material_override = bolt_mat
+			cyl.radial_segments = 6
+			cyl.rings = 1
+			var seg_inst := _new_vfx_mesh(cyl, bolt_mat)
 			seg_inst.position = mid
 			var up_dir := seg_vec.normalized()
 			if absf(up_dir.y) < 0.99:
@@ -224,14 +248,8 @@ func _build_lightning_storm() -> void:
 			prev = nxt
 
 		# Ground flash disc
-		var disc_m := CylinderMesh.new()
-		disc_m.top_radius = 1.6 * _scale_mult
-		disc_m.bottom_radius = 1.8 * _scale_mult
-		disc_m.height = 0.12
 		var disc_mat := _make_unshaded_mat(_accent, 0.85)
-		var disc := MeshInstance3D.new()
-		disc.mesh = disc_m
-		disc.material_override = disc_mat
+		var disc := _new_vfx_mesh(disc_m, disc_mat)
 		disc.position = Vector3(0.0, 0.10, 0.0)
 		bolt_root.add_child(disc)
 
@@ -259,10 +277,9 @@ func _build_blizzard_spires() -> void:
 		cone.bottom_radius = 0.68 * _scale_mult
 		cone.height = spire_h
 		cone.radial_segments = 6
+		cone.rings = 1
 		var mat := _make_unshaded_mat(_accent.lerp(Color.WHITE, 0.35), 0.88)
-		var inst := MeshInstance3D.new()
-		inst.mesh = cone
-		inst.material_override = mat
+		var inst := _new_vfx_mesh(cone, mat)
 		inst.position = Vector3(cos(ang) * dist, -spire_h * 0.5, sin(ang) * dist)
 		inst.rotation = Vector3(sin(ang) * 0.22, ang, -cos(ang) * 0.22)
 		add_child(inst)
@@ -280,11 +297,10 @@ func _build_blizzard_spires() -> void:
 	var halo_m := TorusMesh.new()
 	halo_m.inner_radius = 5.4 * _scale_mult
 	halo_m.outer_radius = 6.1 * _scale_mult
-	halo_m.rings = 32
+	halo_m.rings = 24
+	halo_m.ring_segments = 6
 	var halo_mat := _make_unshaded_mat(_accent.lerp(Color.WHITE, 0.5), 0.80)
-	var halo := MeshInstance3D.new()
-	halo.mesh = halo_m
-	halo.material_override = halo_mat
+	var halo := _new_vfx_mesh(halo_m, halo_mat)
 	halo.position = Vector3(0.0, 1.8, 0.0)
 	halo.scale = Vector3(1.0, 0.16, 1.0)
 	add_child(halo)
@@ -295,17 +311,15 @@ func _build_blizzard_spires() -> void:
 
 # 4. SAKURA_STORM: Rising helical whirlwind of glowing petal/butterfly blades + twin rose rings
 func _build_sakura_vortex() -> void:
-	var count := 24
+	var count := 14 if UiStyle.is_mobile_device() else 24
+	var petal_m := BoxMesh.new()
+	petal_m.size = Vector3(0.62 * _scale_mult, 0.08, 0.34 * _scale_mult)
 	for i in range(count):
 		var ang := (float(i) / float(count)) * TAU * 2.0
 		var rad := (2.6 + float(i % 4) * 1.8) * _scale_mult
-		var petal_m := BoxMesh.new()
-		petal_m.size = Vector3(0.62 * _scale_mult, 0.08, 0.34 * _scale_mult)
 		var col := _accent.lerp(Color.html("#fef3c7"), float(i % 3) * 0.22)
 		var mat := _make_unshaded_mat(col, 0.92)
-		var inst := MeshInstance3D.new()
-		inst.mesh = petal_m
-		inst.material_override = mat
+		var inst := _new_vfx_mesh(petal_m, mat)
 		inst.position = Vector3(cos(ang) * rad, 0.4 + float(i) * 0.18, sin(ang) * rad)
 		add_child(inst)
 
@@ -324,10 +338,10 @@ func _build_sakura_vortex() -> void:
 		var ring_m := TorusMesh.new()
 		ring_m.inner_radius = (3.0 + float(r_i) * 3.0) * _scale_mult
 		ring_m.outer_radius = (3.4 + float(r_i) * 3.0) * _scale_mult
+		ring_m.rings = 22
+		ring_m.ring_segments = 6
 		var rmat := _make_unshaded_mat(_accent, 0.85)
-		var rinst := MeshInstance3D.new()
-		rinst.mesh = ring_m
-		rinst.material_override = rmat
+		var rinst := _new_vfx_mesh(ring_m, rmat)
 		rinst.position = Vector3(0.0, 0.4 + float(r_i) * 1.2, 0.0)
 		rinst.scale = Vector3(1.0, 0.12, 1.0)
 		add_child(rinst)
@@ -338,19 +352,18 @@ func _build_sakura_vortex() -> void:
 
 # 5. DRAGON_VORTEX: Towering spiraling wind/dragon tornado of stacked tilted rings + rising gale
 func _build_dragon_vortex() -> void:
-	var tiers := 9
+	var tiers := 6 if UiStyle.is_mobile_device() else 9
 	for i in range(tiers):
 		var t := float(i) / float(tiers - 1)
 		var rad := lerpf(1.8, 6.8, t) * _scale_mult
 		var ring_m := TorusMesh.new()
 		ring_m.inner_radius = rad * 0.84
 		ring_m.outer_radius = rad
-		ring_m.rings = 28
+		ring_m.rings = 20
+		ring_m.ring_segments = 6
 		var col := _accent.lerp(Color.WHITE, t * 0.45)
 		var mat := _make_unshaded_mat(col, 0.86)
-		var inst := MeshInstance3D.new()
-		inst.mesh = ring_m
-		inst.material_override = mat
+		var inst := _new_vfx_mesh(ring_m, mat)
 		inst.position = Vector3(0.0, 0.6 + t * 8.2, 0.0)
 		inst.rotation = Vector3(sin(float(i) * 0.8) * 0.25, float(i) * 0.7, cos(float(i) * 0.8) * 0.25)
 		inst.scale = Vector3(1.0, 0.22, 1.0)
@@ -370,10 +383,10 @@ func _build_dragon_vortex() -> void:
 	core_m.top_radius = 2.4 * _scale_mult
 	core_m.bottom_radius = 0.8 * _scale_mult
 	core_m.height = 11.0
+	core_m.radial_segments = 14
+	core_m.rings = 1
 	var core_mat := _make_unshaded_mat(_accent, 0.42)
-	var core := MeshInstance3D.new()
-	core.mesh = core_m
-	core.material_override = core_mat
+	var core := _new_vfx_mesh(core_m, core_mat)
 	core.position = Vector3(0.0, 5.5, 0.0)
 	add_child(core)
 	_animated_parts.append({"kind": "pillar", "node": core, "mat": core_mat, "max_alpha": 0.42})
@@ -384,6 +397,16 @@ func _build_dragon_vortex() -> void:
 # 6. SWORD_RAIN: 10 luminous 3D katana light-blades summoned in an overhead halo & plunging down
 func _build_sword_rain() -> void:
 	var count := 10
+	var blade_m := BoxMesh.new()
+	blade_m.size = Vector3(0.16 * _scale_mult, 3.6 * _scale_mult, 0.34 * _scale_mult)
+	var guard_m := BoxMesh.new()
+	guard_m.size = Vector3(0.95 * _scale_mult, 0.16, 0.28 * _scale_mult)
+	var ring_m := TorusMesh.new()
+	ring_m.inner_radius = 0.35
+	ring_m.outer_radius = 0.65
+	ring_m.rings = 18
+	ring_m.ring_segments = 6
+
 	for i in range(count):
 		var ang := (float(i) / float(count)) * TAU
 		var dist := (3.6 + float(i % 2) * 3.8) * _scale_mult
@@ -394,31 +417,18 @@ func _build_sword_rain() -> void:
 		sword_root.position = Vector3(tx, 12.5, tz)
 		add_child(sword_root)
 
-		var blade_m := BoxMesh.new()
-		blade_m.size = Vector3(0.16 * _scale_mult, 3.6 * _scale_mult, 0.34 * _scale_mult)
 		var blade_mat := _make_unshaded_mat(_accent.lerp(Color.WHITE, 0.55), 0.95)
-		var blade := MeshInstance3D.new()
-		blade.mesh = blade_m
-		blade.material_override = blade_mat
+		var blade := _new_vfx_mesh(blade_m, blade_mat)
 		blade.position = Vector3(0.0, 1.8 * _scale_mult, 0.0)
 		sword_root.add_child(blade)
 
-		var guard_m := BoxMesh.new()
-		guard_m.size = Vector3(0.95 * _scale_mult, 0.16, 0.28 * _scale_mult)
 		var guard_mat := _make_unshaded_mat(Color.html("#fde047"), 0.95)
-		var guard := MeshInstance3D.new()
-		guard.mesh = guard_m
-		guard.material_override = guard_mat
+		var guard := _new_vfx_mesh(guard_m, guard_mat)
 		guard.position = Vector3(0.0, 3.55 * _scale_mult, 0.0)
 		sword_root.add_child(guard)
 
-		var ring_m := TorusMesh.new()
-		ring_m.inner_radius = 0.35
-		ring_m.outer_radius = 0.65
 		var ring_mat := _make_unshaded_mat(_accent, 0.0)
-		var ring := MeshInstance3D.new()
-		ring.mesh = ring_m
-		ring.material_override = ring_mat
+		var ring := _new_vfx_mesh(ring_m, ring_mat)
 		ring.position = Vector3(tx, 0.14, tz)
 		ring.scale = Vector3(0.6, 0.08, 0.6)
 		add_child(ring)
@@ -449,9 +459,7 @@ func _build_earth_shatter() -> void:
 		var rock_m := PrismMesh.new()
 		rock_m.size = Vector3(1.45 * _scale_mult, h, 1.45 * _scale_mult)
 		var mat := _make_unshaded_mat(_accent.lerp(Color.html("#fef08a"), 0.22 if i % 2 == 0 else 0.0), 0.94)
-		var inst := MeshInstance3D.new()
-		inst.mesh = rock_m
-		inst.material_override = mat
+		var inst := _new_vfx_mesh(rock_m, mat)
 		inst.position = Vector3(cos(ang) * dist, -h * 0.6, sin(ang) * dist)
 		inst.rotation = Vector3(-sin(ang) * 0.34, ang, cos(ang) * 0.34)
 		add_child(inst)
@@ -474,10 +482,10 @@ func _build_sacred_halo() -> void:
 	beam_m.top_radius = 2.8 * _scale_mult
 	beam_m.bottom_radius = 4.2 * _scale_mult
 	beam_m.height = 20.0
+	beam_m.radial_segments = 16
+	beam_m.rings = 1
 	var beam_mat := _make_unshaded_mat(_accent.lerp(Color.WHITE, 0.35), 0.56)
-	var beam := MeshInstance3D.new()
-	beam.mesh = beam_m
-	beam.material_override = beam_mat
+	var beam := _new_vfx_mesh(beam_m, beam_mat)
 	beam.position = Vector3(0.0, 10.0, 0.0)
 	add_child(beam)
 	_animated_parts.append({"kind": "pillar", "node": beam, "mat": beam_mat, "max_alpha": 0.56})
@@ -486,11 +494,10 @@ func _build_sacred_halo() -> void:
 		var halo_m := TorusMesh.new()
 		halo_m.inner_radius = (3.6 + float(i) * 2.2) * _scale_mult
 		halo_m.outer_radius = (4.1 + float(i) * 2.2) * _scale_mult
-		halo_m.rings = 36
+		halo_m.rings = 24
+		halo_m.ring_segments = 6
 		var hmat := _make_unshaded_mat(_accent.lerp(Color.WHITE, 0.5), 0.92)
-		var hinst := MeshInstance3D.new()
-		hinst.mesh = halo_m
-		hinst.material_override = hmat
+		var hinst := _new_vfx_mesh(halo_m, hmat)
 		hinst.position = Vector3(0.0, 2.2 + float(i) * 1.4, 0.0)
 		hinst.rotation = Vector3(0.38 if i == 0 else -0.38, 0.0, 0.25 if i == 0 else -0.25)
 		hinst.scale = Vector3(1.0, 0.25, 1.0)

@@ -51,7 +51,7 @@ shadow_enabled = false
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7, 0)
 light_color = Color(0.956863, 0.247059, 0.368627, 1)
 light_energy = 1.6
-omni_range = 45.0
+omni_range = 96.0
 
 [node name="Arena3D" type="Node3D" parent="World3D" node_paths=PackedStringArray("world_environment", "center_light")]
 script = ExtResource("2_arena")
@@ -73,7 +73,7 @@ camera = NodePath("Camera3D")
 [node name="Camera3D" type="Camera3D" parent="World3D/CameraRig"]
 transform = Transform3D(1, 0, 0, 0, 0.838671, 0.544639, 0, -0.544639, 0.838671, 0, 11, 18)
 fov = 50.0
-far = 160.0
+far = 260.0
 
 [node name="EnemiesRoot" type="Node3D" parent="World3D"]
 

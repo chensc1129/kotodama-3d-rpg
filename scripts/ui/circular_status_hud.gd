@@ -181,6 +181,9 @@ func _sat_center() -> Vector2:
 	return Vector2(142.0, 84.0) if is_compact else Vector2(166.0, 98.0)
 
 
+var _pulse_redraw_accum: float = 0.0
+
+
 func _process(delta: float) -> void:
 	_pulse += delta * 4.2
 	var spd := clampf(delta * 12.0, 0.0, 1.0)
@@ -194,8 +197,14 @@ func _process(delta: float) -> void:
 	if absf(_display_sta - sta_ratio) > 0.002:
 		_display_sta = lerpf(_display_sta, sta_ratio, spd)
 		changed = true
-	if changed or sp_ratio >= 0.70 or sta_low:
+	if changed:
+		_pulse_redraw_accum = 0.0
 		queue_redraw()
+	elif sp_ratio >= 0.70 or sta_low:
+		_pulse_redraw_accum += delta
+		if _pulse_redraw_accum >= 0.065:
+			_pulse_redraw_accum = 0.0
+			queue_redraw()
 
 
 func _draw() -> void:
@@ -203,6 +212,8 @@ func _draw() -> void:
 	var sc := _sat_center()
 	var main_r := 48.0 if is_compact else 58.0
 	var sat_r := 28.0 if is_compact else 33.0
+	var seg_main := 28
+	var seg_sub := 24
 
 	# Sweeps: 270-degree horseshoe starting bottom-left (135 deg) clockwise to bottom-right (405 deg)
 	var start_ang := deg_to_rad(135.0)
@@ -211,21 +222,21 @@ func _draw() -> void:
 	# 1. Soft dark lacquer backdrop discs + outer gold astrolabe filigree
 	draw_circle(mc + Vector2(0.0, 4.0), main_r + 6.0, Color(0.01, 0.02, 0.06, 0.55))
 	draw_circle(mc, main_r + 4.0, Color(0.04, 0.06, 0.13, 0.88))
-	draw_arc(mc, main_r + 4.0, 0.0, TAU, 48, Color(0.91, 0.77, 0.45, 0.52), 1.6, true)
+	draw_arc(mc, main_r + 4.0, 0.0, TAU, seg_main, Color(0.91, 0.77, 0.45, 0.52), 1.6, true)
 
 	# Hero-colored core portrait medallion
 	var core_r := main_r - 22.0
 	draw_circle(mc, core_r, Color(hero_accent.r * 0.45, hero_accent.g * 0.45, hero_accent.b * 0.45, 0.92))
-	draw_arc(mc, core_r, 0.0, TAU, 40, Color(0.99, 0.90, 0.54, 0.45), 1.5, true)
+	draw_arc(mc, core_r, 0.0, TAU, seg_sub, Color(0.99, 0.90, 0.54, 0.45), 1.5, true)
 
 	# EXP fine gold 360-degree halo right around core portrait
 	var exp_r := core_r + 2.5
-	draw_arc(mc, exp_r, -PI * 0.5, -PI * 0.5 + TAU * maxf(0.01, exp_ratio), 40, Color.html("#fbbf24"), 2.4, true)
+	draw_arc(mc, exp_r, -PI * 0.5, -PI * 0.5 + TAU * maxf(0.01, exp_ratio), seg_sub, Color.html("#fbbf24"), 2.4, true)
 
 	# 2. HP Outer Circular Ring (Emerald -> Amber -> Crimson when low)
 	var hp_r := main_r - 5.0
 	var hp_w := 8.0 if not is_compact else 7.0
-	draw_arc(mc, hp_r, start_ang, start_ang + full_sweep, 48, Color(0.08, 0.12, 0.20, 0.90), hp_w, true)
+	draw_arc(mc, hp_r, start_ang, start_ang + full_sweep, seg_main, Color(0.08, 0.12, 0.20, 0.90), hp_w, true)
 	var hp_col := Color.html("#22c55e")
 	if _display_hp < 0.30:
 		hp_col = Color.html("#f43f5e")
@@ -233,14 +244,14 @@ func _draw() -> void:
 		hp_col = Color.html("#f59e0b")
 	if _display_hp > 0.005:
 		var hp_end := start_ang + full_sweep * _display_hp
-		draw_arc(mc, hp_r, start_ang, hp_end, 48, hp_col, hp_w, true)
+		draw_arc(mc, hp_r, start_ang, hp_end, seg_main, hp_col, hp_w, true)
 		var tip := mc + Vector2(cos(hp_end), sin(hp_end)) * hp_r
 		draw_circle(tip, hp_w * 0.52, hp_col.lerp(Color.WHITE, 0.55))
 
 	# 3. SP Middle Circular Ring (Sky-Blue -> Pulsing Gold when >= 70% Ult Ready!)
 	var sp_r := main_r - 15.0
 	var sp_w := 6.0 if not is_compact else 5.2
-	draw_arc(mc, sp_r, start_ang, start_ang + full_sweep, 44, Color(0.06, 0.11, 0.22, 0.92), sp_w, true)
+	draw_arc(mc, sp_r, start_ang, start_ang + full_sweep, seg_main, Color(0.06, 0.11, 0.22, 0.92), sp_w, true)
 	var sp_col := Color.html("#38bdf8")
 	if sp_ratio >= 0.70:
 		var glow := 0.5 + 0.5 * sin(_pulse)
@@ -249,7 +260,7 @@ func _draw() -> void:
 		sp_col = Color.html("#60a5fa")
 	if _display_sp > 0.005:
 		var sp_end := start_ang + full_sweep * _display_sp
-		draw_arc(mc, sp_r, start_ang, sp_end, 44, sp_col, sp_w, true)
+		draw_arc(mc, sp_r, start_ang, sp_end, seg_main, sp_col, sp_w, true)
 		var stip := mc + Vector2(cos(sp_end), sin(sp_end)) * sp_r
 		draw_circle(stip, sp_w * 0.52, Color.WHITE)
 
@@ -268,17 +279,17 @@ func _draw() -> void:
 	# 4. Dedicated Satellite Circular Stamina Orb (體力)
 	draw_circle(sc + Vector2(0.0, 3.0), sat_r + 3.0, Color(0.01, 0.02, 0.06, 0.52))
 	draw_circle(sc, sat_r + 1.5, Color(0.05, 0.07, 0.14, 0.88))
-	draw_arc(sc, sat_r + 1.5, 0.0, TAU, 36, Color(0.91, 0.77, 0.45, 0.42), 1.2, true)
+	draw_arc(sc, sat_r + 1.5, 0.0, TAU, seg_sub, Color(0.91, 0.77, 0.45, 0.42), 1.2, true)
 
 	var sta_ring_r := sat_r - 4.5
 	var sta_w := 5.5 if not is_compact else 4.8
-	draw_arc(sc, sta_ring_r, -PI * 0.5, -PI * 0.5 + TAU, 36, Color(0.14, 0.11, 0.06, 0.88), sta_w, true)
+	draw_arc(sc, sta_ring_r, -PI * 0.5, -PI * 0.5 + TAU, seg_sub, Color(0.14, 0.11, 0.06, 0.88), sta_w, true)
 	var sta_col := Color.html("#f59e0b")
 	if sta_low:
 		var warn := 0.5 + 0.5 * sin(_pulse * 1.8)
 		sta_col = Color.html("#f43f5e").lerp(Color.html("#fda4af"), warn * 0.45)
 	if _display_sta > 0.005:
 		var sta_end := -PI * 0.5 + TAU * _display_sta
-		draw_arc(sc, sta_ring_r, -PI * 0.5, sta_end, 36, sta_col, sta_w, true)
+		draw_arc(sc, sta_ring_r, -PI * 0.5, sta_end, seg_sub, sta_col, sta_w, true)
 		var tip_s := sc + Vector2(cos(sta_end), sin(sta_end)) * sta_ring_r
 		draw_circle(tip_s, sta_w * 0.5, Color.WHITE)

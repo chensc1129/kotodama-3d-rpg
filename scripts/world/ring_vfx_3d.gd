@@ -8,17 +8,22 @@ var _max_radius: float = 6.0
 var _mat: StandardMaterial3D
 
 
+static var _shared_torus: TorusMesh = null
+
+
 func setup(world_pos: Vector3, color: Color, max_radius: float = 6.0, duration: float = 0.45) -> void:
 	_max_radius = max_radius
 	_duration = maxf(0.05, duration)
 	position = Vector3(world_pos.x, world_pos.y + 0.14, world_pos.z)
+	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
-	var torus := TorusMesh.new()
-	torus.inner_radius = 0.45
-	torus.outer_radius = 0.75
-	torus.rings = 32
-	torus.ring_segments = 8
-	mesh = torus
+	if _shared_torus == null:
+		_shared_torus = TorusMesh.new()
+		_shared_torus.inner_radius = 0.45
+		_shared_torus.outer_radius = 0.75
+		_shared_torus.rings = 20
+		_shared_torus.ring_segments = 6
+	mesh = _shared_torus
 
 	_mat = StandardMaterial3D.new()
 	_mat.albedo_color = Color(color.r, color.g, color.b, 0.9)

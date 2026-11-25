@@ -38,12 +38,14 @@ func _make_mat(col: Color, alpha: float = 0.92) -> StandardMaterial3D:
 
 
 func _add_particles(amount: int, col: Color, box_sz: Vector3, origin: Vector3, dir: Vector3, spread: float, vmin: float, vmax: float, grav: Vector3, life: float) -> void:
+	var is_mob := UiStyle.is_mobile_device()
 	var p := CPUParticles3D.new()
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	p.position = origin
 	p.emitting = false
 	p.one_shot = true
 	p.explosiveness = 0.92
-	p.amount = amount
+	p.amount = maxi(4, int(round(float(amount) * (0.45 if is_mob else 1.0))))
 	p.lifetime = life
 	p.direction = dir
 	p.spread = spread
@@ -67,20 +69,26 @@ func _add_particles(amount: int, col: Color, box_sz: Vector3, origin: Vector3, d
 	p.emitting = true
 
 
+func _new_mesh_inst(mesh: Mesh, mat: Material) -> MeshInstance3D:
+	var inst := MeshInstance3D.new()
+	inst.mesh = mesh
+	inst.material_override = mat
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return inst
+
+
 # 1. SAKURA: Swirling pink-gold cherry blossom petal fan & blooming petal tornado
 func _build_sakura_attack(step: int, reach: float) -> void:
 	var pink := Color.html("#f472b6")
 	var gold := Color.html("#fef3c7")
-	var petal_count := 14 if step == 3 else 7
+	var petal_count := (9 if UiStyle.is_mobile_device() else 14) if step == 3 else 7
+	var petal_m := BoxMesh.new()
+	petal_m.size = Vector3(0.46, 0.05, 0.24) if step == 3 else Vector3(0.38, 0.05, 0.20)
 	for i in range(petal_count):
 		var frac := float(i) / float(maxi(1, petal_count - 1))
 		var ang := (frac * TAU) if step == 3 else lerpf(-1.05, 1.05, frac)
-		var petal_m := BoxMesh.new()
-		petal_m.size = Vector3(0.46, 0.05, 0.24) if step == 3 else Vector3(0.38, 0.05, 0.20)
 		var mat := _make_mat(pink.lerp(gold, float(i % 2) * 0.45), 0.94)
-		var inst := MeshInstance3D.new()
-		inst.mesh = petal_m
-		inst.material_override = mat
+		var inst := _new_mesh_inst(petal_m, mat)
 		var start_r := 1.2
 		inst.position = Vector3(sin(ang) * start_r, 1.25 + randf_range(-0.35, 0.45), cos(ang) * start_r)
 		add_child(inst)
@@ -100,10 +108,10 @@ func _build_sakura_attack(step: int, reach: float) -> void:
 		var ring_m := TorusMesh.new()
 		ring_m.inner_radius = 0.65
 		ring_m.outer_radius = 1.0
+		ring_m.rings = 20
+		ring_m.ring_segments = 6
 		var rmat := _make_mat(pink.lerp(gold, 0.3), 0.88)
-		var rinst := MeshInstance3D.new()
-		rinst.mesh = ring_m
-		rinst.material_override = rmat
+		var rinst := _new_mesh_inst(ring_m, rmat)
 		rinst.position = Vector3(0.0, 1.15, 0.0)
 		rinst.scale = Vector3(1.0, 0.14, 1.0)
 		add_child(rinst)
@@ -123,37 +131,37 @@ func _build_kickboxer_attack(step: int, reach: float) -> void:
 		cone_m.top_radius = 0.25
 		cone_m.bottom_radius = 1.55
 		cone_m.height = 2.4
+		cone_m.radial_segments = 14
+		cone_m.rings = 1
 		var cmat := _make_mat(cyan, 0.62)
-		var cone := MeshInstance3D.new()
-		cone.mesh = cone_m
-		cone.material_override = cmat
+		var cone := _new_mesh_inst(cone_m, cmat)
 		cone.position = Vector3(0.0, 1.15, 1.4)
 		cone.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
 		add_child(cone)
 		_parts.append({"kind": "surge_forward", "node": cone, "mat": cmat, "z0": 1.1, "z1": reach * 0.82, "s0": 0.65, "s1": 1.45, "max_a": 0.62})
 
+		var tm := TorusMesh.new()
+		tm.inner_radius = 0.55
+		tm.outer_radius = 0.80
+		tm.rings = 18
+		tm.ring_segments = 6
 		for r_i in range(2):
-			var tm := TorusMesh.new()
-			tm.inner_radius = 0.55
-			tm.outer_radius = 0.80
 			var tmat := _make_mat(white if r_i == 0 else cyan, 0.92)
-			var ti := MeshInstance3D.new()
-			ti.mesh = tm
-			ti.material_override = tmat
+			var ti := _new_mesh_inst(tm, tmat)
 			ti.position = Vector3(0.0, 1.15, 1.2 + float(r_i) * 0.7)
 			ti.rotation = Vector3(PI * 0.5, 0.0, 0.0)
 			add_child(ti)
 			_parts.append({"kind": "surge_forward", "node": ti, "mat": tmat, "z0": 1.0 + float(r_i) * 0.6, "z1": reach * (0.88 + float(r_i) * 0.14), "s0": 0.85, "s1": 2.35, "max_a": 0.92})
 	else:
 		# 360-degree spinning hurricane kick double sonic shockwaves!
+		var tm := TorusMesh.new()
+		tm.inner_radius = 0.65
+		tm.outer_radius = 1.05
+		tm.rings = 20
+		tm.ring_segments = 6
 		for r_i in range(2):
-			var tm := TorusMesh.new()
-			tm.inner_radius = 0.65
-			tm.outer_radius = 1.05
 			var tmat := _make_mat(cyan if r_i == 0 else white, 0.94)
-			var ti := MeshInstance3D.new()
-			ti.mesh = tm
-			ti.material_override = tmat
+			var ti := _new_mesh_inst(tm, tmat)
 			ti.position = Vector3(0.0, 0.85 + float(r_i) * 0.75, 0.0)
 			ti.rotation = Vector3(0.18 if r_i == 0 else -0.18, 0.0, 0.12)
 			ti.scale = Vector3(1.0, 0.16, 1.0)
@@ -173,9 +181,7 @@ func _build_swordsman_attack(step: int, reach: float) -> void:
 		var wave_m := BoxMesh.new()
 		wave_m.size = Vector3(3.4, 0.18, 0.75)
 		var wmat := _make_mat(red.lerp(gold, 0.30), 0.94)
-		var wave := MeshInstance3D.new()
-		wave.mesh = wave_m
-		wave.material_override = wmat
+		var wave := _new_mesh_inst(wave_m, wmat)
 		wave.position = Vector3(0.0, 1.25, 1.4)
 		wave.rotation = Vector3(0.0, 0.0, tilt)
 		add_child(wave)
@@ -184,22 +190,18 @@ func _build_swordsman_attack(step: int, reach: float) -> void:
 		var core_m := BoxMesh.new()
 		core_m.size = Vector3(3.2, 0.09, 0.30)
 		var cmat := _make_mat(gold, 0.98)
-		var core := MeshInstance3D.new()
-		core.mesh = core_m
-		core.material_override = cmat
+		var core := _new_mesh_inst(core_m, cmat)
 		core.position = Vector3(0.0, 1.25, 1.55)
 		core.rotation = Vector3(0.0, 0.0, tilt)
 		add_child(core)
 		_parts.append({"kind": "surge_forward", "node": core, "mat": cmat, "z0": 1.25, "z1": reach * 0.96, "s0": 0.75, "s1": 1.48, "max_a": 0.98})
 	else:
 		# Giant Cross-X Crimson Flame Slash surging forward!
+		var slash_m := BoxMesh.new()
+		slash_m.size = Vector3(4.6, 0.24, 0.95)
 		for s_i in range(2):
-			var slash_m := BoxMesh.new()
-			slash_m.size = Vector3(4.6, 0.24, 0.95)
 			var smat := _make_mat(red.lerp(gold, 0.35 if s_i == 0 else 0.15), 0.96)
-			var sl := MeshInstance3D.new()
-			sl.mesh = slash_m
-			sl.material_override = smat
+			var sl := _new_mesh_inst(slash_m, smat)
 			sl.position = Vector3(0.0, 1.45, 1.4)
 			sl.rotation = Vector3(0.0, 0.0, 0.68 if s_i == 0 else -0.68)
 			add_child(sl)
@@ -238,9 +240,9 @@ func _build_raijin_attack(step: int, reach: float) -> void:
 			cyl.top_radius = 0.08 if step < 3 else 0.12
 			cyl.bottom_radius = 0.10 if step < 3 else 0.14
 			cyl.height = maxf(0.1, seg_v.length())
-			var seg := MeshInstance3D.new()
-			seg.mesh = cyl
-			seg.material_override = bmat
+			cyl.radial_segments = 6
+			cyl.rings = 1
+			var seg := _new_mesh_inst(cyl, bmat)
 			seg.position = (prev + nxt) * 0.5
 			var udir := seg_v.normalized()
 			if absf(udir.y) < 0.99:
@@ -261,16 +263,15 @@ func _build_yukionna_attack(step: int, reach: float) -> void:
 	if step < 3:
 		# Shoot 3 luminous hexagonal ice crystal darts forward up to 7.8m!
 		var spreads := [-0.26, 0.0, 0.26] if step == 2 else [-0.15, 0.15]
+		var dart_m := CylinderMesh.new()
+		dart_m.top_radius = 0.02
+		dart_m.bottom_radius = 0.22
+		dart_m.height = 1.65
+		dart_m.radial_segments = 6
+		dart_m.rings = 1
 		for ang in spreads:
-			var dart_m := CylinderMesh.new()
-			dart_m.top_radius = 0.02
-			dart_m.bottom_radius = 0.22
-			dart_m.height = 1.65
-			dart_m.radial_segments = 6
 			var dmat := _make_mat(ice.lerp(frost, 0.35), 0.94)
-			var dart := MeshInstance3D.new()
-			dart.mesh = dart_m
-			dart.material_override = dmat
+			var dart := _new_mesh_inst(dart_m, dmat)
 			var dir_x := sin(ang)
 			var dir_z := cos(ang)
 			dart.position = Vector3(dir_x * 1.0, 1.45, dir_z * 1.0)
@@ -289,10 +290,10 @@ func _build_yukionna_attack(step: int, reach: float) -> void:
 		var ring_m := TorusMesh.new()
 		ring_m.inner_radius = 0.55
 		ring_m.outer_radius = 0.92
+		ring_m.rings = 20
+		ring_m.ring_segments = 6
 		var rmat := _make_mat(frost, 0.92)
-		var rinst := MeshInstance3D.new()
-		rinst.mesh = ring_m
-		rinst.material_override = rmat
+		var rinst := _new_mesh_inst(ring_m, rmat)
 		rinst.position = Vector3(0.0, 0.25, center_z)
 		rinst.scale = Vector3(1.0, 0.12, 1.0)
 		add_child(rinst)
@@ -307,10 +308,9 @@ func _build_yukionna_attack(step: int, reach: float) -> void:
 			sp_m.bottom_radius = 0.42
 			sp_m.height = h
 			sp_m.radial_segments = 6
+			sp_m.rings = 1
 			var smat := _make_mat(ice.lerp(frost, 0.45 if i == 0 else 0.2), 0.92)
-			var sp := MeshInstance3D.new()
-			sp.mesh = sp_m
-			sp.material_override = smat
+			var sp := _new_mesh_inst(sp_m, smat)
 			sp.position = Vector3(cos(a) * rad, -h * 0.5, center_z + sin(a) * rad)
 			sp.rotation = Vector3(sin(a) * 0.22, a, -cos(a) * 0.22)
 			add_child(sp)

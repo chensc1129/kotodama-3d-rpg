@@ -46,6 +46,7 @@ var _hit_flash_max: float = 0.12
 var _stagger_timer: float = 0.0
 var _recoil_scale: Vector3 = Vector3.ONE
 var _recoil_tilt: Vector3 = Vector3.ZERO
+var _last_status_mode: int = -1
 
 
 func setup(tpl: Dictionary, p_is_boss: bool, wave_num: int, is_hard: bool) -> void:
@@ -67,7 +68,7 @@ func setup(tpl: Dictionary, p_is_boss: bool, wave_num: int, is_hard: bool) -> vo
 	atk_timer = 1.2 + randf() * 1.5
 
 	var ang := randf() * TAU
-	var dist := 13.5 + randf() * 9.5
+	var dist := GameData.ARENA_RADIUS * 0.45 + randf() * (GameData.ARENA_RADIUS * 0.34)
 	position = Vector3(cos(ang) * dist, 0.0, sin(ang) * dist)
 
 	_build_mesh(tpl)
@@ -77,11 +78,13 @@ func _build_mesh(tpl: Dictionary) -> void:
 	var model_path: String = ENEMY_MODELS.get(template_id, ENEMY_MODELS["aooni"])
 	var packed: PackedScene = load(model_path) as PackedScene
 	var rim_col := primary_color.lerp(Color.WHITE, 0.4)
+	var is_mob := UiStyle.is_mobile_device()
 
 	if packed != null:
 		var inst := packed.instantiate()
 		add_child(inst)
-		var outline_w := 0.018 if is_boss else 0.014
+		# On mobile WebGL2, skipping next_pass ink outlines for regular mobs halves vertex + draw-call load.
+		var outline_w := 0.018 if is_boss else (0.0 if is_mob else 0.014)
 		_toon_mats = ToonMaterialHelper.apply_anime_toon(inst, outline_w, rim_col, 0.42)
 		_visual_root = inst.find_child("VisualRoot", true, false) as Node3D
 		if _visual_root == null:
@@ -99,11 +102,12 @@ func _build_mesh(tpl: Dictionary) -> void:
 	var ring_mesh := TorusMesh.new()
 	ring_mesh.inner_radius = 0.85
 	ring_mesh.outer_radius = 1.02
-	ring_mesh.rings = 24
-	ring_mesh.ring_segments = 8
+	ring_mesh.rings = 16 if is_mob else 24
+	ring_mesh.ring_segments = 6 if is_mob else 8
 	_status_ring = MeshInstance3D.new()
 	_status_ring.mesh = ring_mesh
 	_status_ring.material_override = _status_mat
+	_status_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_status_ring.position = Vector3(0.0, 0.18, 0.0)
 	_status_ring.scale = Vector3(1.0, 0.15, 1.0)
 	_status_ring.visible = false
@@ -205,16 +209,26 @@ func is_controlled() -> bool:
 func update_status_visuals(delta: float) -> void:
 	if _status_ring == null:
 		return
+	var mode := 0
 	if petrify_timer > 0.0:
+		mode = 1
+		_status_ring.rotation.y += delta * 3.0
+	elif freeze_timer > 0.0:
+		mode = 2
+	elif stun_timer > 0.0:
+		mode = 3
+	if mode == _last_status_mode:
+		return
+	_last_status_mode = mode
+	if mode == 1:
 		_set_status_shader(Color.html("#94a3b8"), 0.72)
 		_status_ring.visible = true
 		_status_mat.albedo_color = Color.html("#f472b6")
-		_status_ring.rotation.y += delta * 3.0
-	elif freeze_timer > 0.0:
+	elif mode == 2:
 		_set_status_shader(Color.html("#67e8f9"), 0.65)
 		_status_ring.visible = true
 		_status_mat.albedo_color = Color.html("#06b6d4")
-	elif stun_timer > 0.0:
+	elif mode == 3:
 		_set_status_shader(Color.html("#fde047"), 0.55)
 		_status_ring.visible = true
 		_status_mat.albedo_color = Color.html("#facc15")
