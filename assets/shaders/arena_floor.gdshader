@@ -134,12 +134,12 @@ void fragment() {
 		rough_d = 0.18;
 		met_d = 0.12;
 
-		bump_h = w.r * st_a.z + w.g * (rake_wave * 0.55 + gravel_grain * 0.25) + w.b * st_c.z + w.a * cob.z;
+		bump_h = w.r * st_a.z + w.g * (rake_wave * 0.55) + w.b * st_c.z;
 		bump_h_x = w.r * flagstone_pattern(xz + vec2(eps, 0.0), vec2(0.55, 0.72), 0.055).z
-			+ w.g * (sin(length(xz + vec2(eps, 0.0)) * 5.8) * 0.28)
+			+ w.g * ((sin(length(xz + vec2(eps, 0.0)) * 5.8 + sin(atan(xz.y, xz.x + eps) * 6.0) * 0.6) * 0.5 + 0.5) * 0.55)
 			+ w.b * flagstone_pattern(rot_xz + vec2(eps, eps) * 0.7071, vec2(0.68, 0.68), 0.045).z;
 		bump_h_z = w.r * flagstone_pattern(xz + vec2(0.0, eps), vec2(0.55, 0.72), 0.055).z
-			+ w.g * (sin(length(xz + vec2(0.0, eps)) * 5.8) * 0.28)
+			+ w.g * ((sin(length(xz + vec2(0.0, eps)) * 5.8 + sin(atan(xz.y + eps, xz.x) * 6.0) * 0.6) * 0.5 + 0.5) * 0.55)
 			+ w.b * flagstone_pattern(rot_xz + vec2(eps, -eps) * 0.7071, vec2(0.68, 0.68), 0.045).z;
 
 	} else if (stage_id == 1) {
@@ -176,7 +176,7 @@ void fragment() {
 		rough_d = 0.16;
 		met_d = 0.15;
 
-		bump_h = w.r * st_a.z + w.g * (n_fine * 0.45) + w.b * (leaf_cells.z * 0.4) + w.a * cob.z;
+		bump_h = w.r * st_a.z + w.g * (n_fine * 0.45);
 		bump_h_x = w.r * flagstone_pattern(xz + vec2(eps, 0.0), vec2(0.62, 0.62), 0.075).z + w.g * vnoise((xz + vec2(eps, 0.0)) * 3.8) * 0.45;
 		bump_h_z = w.r * flagstone_pattern(xz + vec2(0.0, eps), vec2(0.62, 0.62), 0.075).z + w.g * vnoise((xz + vec2(0.0, eps)) * 3.8) * 0.45;
 
@@ -216,7 +216,7 @@ void fragment() {
 		rough_d = mix(0.25, 0.85, crust);
 		met_d = 0.08;
 
-		bump_h = w.r * bas.z + w.g * obs.z + w.b * (strata * 0.45 + n_fine * 0.35);
+		bump_h = w.r * bas.z + w.g * obs.z;
 		bump_h_x = w.r * cobble_pattern(xz + vec2(eps, 0.0), 0.68).z + w.g * flagstone_pattern(diag_xz + vec2(eps, eps) * 0.7071, vec2(0.58, 0.82), 0.055).z;
 		bump_h_z = w.r * cobble_pattern(xz + vec2(0.0, eps), 0.68).z + w.g * flagstone_pattern(diag_xz + vec2(eps, -eps) * 0.7071, vec2(0.58, 0.82), 0.055).z;
 
@@ -225,16 +225,16 @@ void fragment() {
 		// A (R): Polished Indigo Celestial Marble Tiles (瑠璃大理石)
 		vec3 mar = flagstone_pattern(xz, vec2(0.42, 0.42), 0.035);
 		float vein = smoothstep(0.45, 0.55, sin(xz.x * 1.1 + xz.y * 0.9 + fbm2(xz * 0.6) * 4.5) * 0.5 + 0.5);
-		vec3 marble_col = mix(vec3(0.11, 0.19, 0.34), vec3(0.21, 0.33, 0.54), mar.y * 0.5 + vein * 0.5);
-		col_a = mix(marble_col, vec3(0.75, 0.62, 0.30), mar.x * 0.78);
-		rough_a = mix(0.22, 0.40, mar.x);
+		vec3 marble_col = mix(vec3(0.13, 0.22, 0.39), vec3(0.24, 0.37, 0.59), mar.y * 0.5 + vein * 0.5);
+		col_a = mix(marble_col, vec3(0.82, 0.68, 0.32), mar.x * 0.82);
+		rough_a = mix(0.24, 0.42, mar.x);
 		met_a = mix(0.24, 0.58, mar.x);
 
 		// B (G): Imperial Courtyard Geometric Stone Paving (天守中庭石敷)
 		vec2 rot45 = vec2(xz.x + xz.y, xz.x - xz.y) * 0.7071;
 		vec3 tile = flagstone_pattern(rot45, vec2(0.65, 0.65), 0.048);
-		vec3 court_col = mix(vec3(0.16, 0.24, 0.40), vec3(0.25, 0.35, 0.54), tile.y * 0.65 + n_fine * 0.35);
-		col_b = mix(court_col, vec3(0.42, 0.50, 0.66), tile.x * 0.72);
+		vec3 court_col = mix(vec3(0.18, 0.27, 0.45), vec3(0.28, 0.39, 0.58), tile.y * 0.65 + n_fine * 0.35);
+		col_b = mix(court_col, vec3(0.48, 0.58, 0.74), tile.x * 0.72);
 		rough_b = mix(0.48, 0.70, tile.x);
 		met_b = 0.16;
 
@@ -245,7 +245,7 @@ void fragment() {
 		float gold_trim = smoothstep(1.55, 1.95, cross_coord);
 		vec3 ramp_stone = mix(vec3(0.32, 0.38, 0.52), vec3(0.86, 0.70, 0.26), gold_trim * 0.85);
 		col_c = mix(ramp_stone, vec3(0.98, 0.88, 0.45), step_line * 0.75);
-		emi_c = vec3(0.96, 0.80, 0.30) * (step_line * 0.28 + gold_trim * 0.22);
+		emi_c = vec3(0.96, 0.80, 0.30) * (step_line * 0.24 + gold_trim * 0.18);
 		rough_c = mix(0.30, 0.20, max(step_line, gold_trim));
 		met_c = mix(0.35, 0.72, max(step_line, gold_trim));
 
@@ -256,7 +256,7 @@ void fragment() {
 		rough_d = 0.68;
 		met_d = 0.10;
 
-		bump_h = w.r * mar.z + w.g * tile.z + w.b * (1.0 - step_line * 0.6) + w.a * wall.z;
+		bump_h = w.r * mar.z + w.g * tile.z + w.a * wall.z;
 		bump_h_x = w.r * flagstone_pattern(xz + vec2(eps, 0.0), vec2(0.42, 0.42), 0.035).z + w.g * flagstone_pattern(rot45 + vec2(eps, eps) * 0.7071, vec2(0.65, 0.65), 0.048).z + w.a * flagstone_pattern(xz + vec2(eps, 0.0), vec2(0.75, 0.50), 0.065).z;
 		bump_h_z = w.r * flagstone_pattern(xz + vec2(0.0, eps), vec2(0.42, 0.42), 0.035).z + w.g * flagstone_pattern(rot45 + vec2(eps, -eps) * 0.7071, vec2(0.65, 0.65), 0.048).z + w.a * flagstone_pattern(xz + vec2(0.0, eps), vec2(0.75, 0.50), 0.065).z;
 	}
@@ -282,8 +282,8 @@ void fragment() {
 	EMISSION = final_emi;
 
 	// World-space analytical micro-bump converted to view space (zero UV seams!)
-	float dh_dx = (bump_h_x - bump_h) / eps;
-	float dh_dz = (bump_h_z - bump_h) / eps;
-	vec3 bumped_world_n = normalize(v_world_nrm + vec3(-dh_dx, 0.0, -dh_dz) * 0.055 * (1.0 - steepness));
+	float dh_dx = clamp((bump_h_x - bump_h) / eps, -2.5, 2.5);
+	float dh_dz = clamp((bump_h_z - bump_h) / eps, -2.5, 2.5);
+	vec3 bumped_world_n = normalize(v_world_nrm + vec3(-dh_dx, 0.0, -dh_dz) * 0.048 * (1.0 - steepness));
 	NORMAL = normalize((VIEW_MATRIX * vec4(bumped_world_n, 0.0)).xyz);
 }

@@ -538,16 +538,17 @@ func _build_heightfield_terrain(_floor_col: Color, _ring_col: Color) -> void:
 			var v11: Array = grid[ri + 1][sn]
 			var v01: Array = grid[ri][sn]
 
+			# Godot 4 front-face winding is Clockwise (CW) when viewed from above (+Y)
 			st.set_color(v00[2]); st.set_normal(v00[1]); st.add_vertex(v00[0])
-			st.set_color(v11[2]); st.set_normal(v11[1]); st.add_vertex(v11[0])
 			st.set_color(v10[2]); st.set_normal(v10[1]); st.add_vertex(v10[0])
-
-			st.set_color(v00[2]); st.set_normal(v00[1]); st.add_vertex(v00[0])
-			st.set_color(v01[2]); st.set_normal(v01[1]); st.add_vertex(v01[0])
 			st.set_color(v11[2]); st.set_normal(v11[1]); st.add_vertex(v11[0])
 
-	# Outer rocky cliff skirt
-	var skirt_w := Color(0.0, 0.0, 1.0, 0.0)
+			st.set_color(v00[2]); st.set_normal(v00[1]); st.add_vertex(v00[0])
+			st.set_color(v11[2]); st.set_normal(v11[1]); st.add_vertex(v11[0])
+			st.set_color(v01[2]); st.set_normal(v01[1]); st.add_vertex(v01[0])
+
+	# Outer rocky cliff skirt (use stone/rock channel per stage, never golden ramp!)
+	var skirt_w := Color(0.0, 0.0, 0.0, 1.0) if current_stage_id == "sky_tenshu" else Color(0.0, 0.0, 1.0, 0.0)
 	for si in range(segs):
 		var sn := (si + 1) % segs
 		var top0: Vector3 = grid[rings][si][0]
@@ -556,13 +557,14 @@ func _build_heightfield_terrain(_floor_col: Color, _ring_col: Color) -> void:
 		var bot1 := Vector3(top1.x * 1.05, top1.y - 5.2, top1.z * 1.05)
 		var out_n := Vector3(top0.x + top1.x, 0.0, top0.z + top1.z).normalized()
 
+		# Outward-facing CW winding for cliff skirt
 		st.set_color(skirt_w); st.set_normal(out_n); st.add_vertex(top0)
-		st.set_color(skirt_w); st.set_normal(out_n); st.add_vertex(top1)
 		st.set_color(skirt_w); st.set_normal(out_n); st.add_vertex(bot1)
+		st.set_color(skirt_w); st.set_normal(out_n); st.add_vertex(top1)
 
 		st.set_color(skirt_w); st.set_normal(out_n); st.add_vertex(top0)
-		st.set_color(skirt_w); st.set_normal(out_n); st.add_vertex(bot1)
 		st.set_color(skirt_w); st.set_normal(out_n); st.add_vertex(bot0)
+		st.set_color(skirt_w); st.set_normal(out_n); st.add_vertex(bot1)
 
 	var mesh := st.commit()
 	var mat := ShaderMaterial.new()
@@ -592,8 +594,8 @@ func _build_boundary_ring(ring_col: Color) -> void:
 		var y1 := get_base_terrain_height(x1_i, z1_i) + 0.12
 		var p0i := Vector3(x0_i, y0, z0_i); var p0o := Vector3(x0_o, y0, z0_o)
 		var p1i := Vector3(x1_i, y1, z1_i); var p1o := Vector3(x1_o, y1, z1_o)
-		st.set_normal(Vector3.UP); st.add_vertex(p0i); st.set_normal(Vector3.UP); st.add_vertex(p1o); st.set_normal(Vector3.UP); st.add_vertex(p0o)
-		st.set_normal(Vector3.UP); st.add_vertex(p0i); st.set_normal(Vector3.UP); st.add_vertex(p1i); st.set_normal(Vector3.UP); st.add_vertex(p1o)
+		st.set_normal(Vector3.UP); st.add_vertex(p0i); st.set_normal(Vector3.UP); st.add_vertex(p0o); st.set_normal(Vector3.UP); st.add_vertex(p1o)
+		st.set_normal(Vector3.UP); st.add_vertex(p0i); st.set_normal(Vector3.UP); st.add_vertex(p1o); st.set_normal(Vector3.UP); st.add_vertex(p1i)
 
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = ring_col
