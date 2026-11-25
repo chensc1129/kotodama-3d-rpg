@@ -867,6 +867,7 @@ func _process(delta: float) -> void:
 	var is_moving := move_input.length() > 0.05
 	var is_dashing := float(b["dash_timer"]) > 0.0
 	var is_sprinting := false
+	var prev_player_pos: Vector3 = player.position if player != null else Vector3.ZERO
 
 	if is_dashing:
 		# High-speed directional burst even from standstill
@@ -926,6 +927,7 @@ func _process(delta: float) -> void:
 	if player != null:
 		if arena != null:
 			player.position = arena.resolve_obstacle_collision(player.position, 0.62)
+			player.position = arena.resolve_terrain_step(prev_player_pos, player.position, player.is_grounded)
 		var player_gy := _get_terrain_y(player.position.x, player.position.z, player.position.y)
 		var landed := player.update_vertical_physics(dt, player_gy)
 		if landed:

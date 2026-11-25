@@ -98,7 +98,10 @@ func update_vertical_physics(delta: float, ground_y: float = 0.0) -> bool:
 			is_grounded = false
 			vertical_velocity = -0.6
 		else:
-			position.y = lerpf(position.y, ground_y, 1.0 - exp(-18.0 * delta))
+			var next_y := lerpf(position.y, ground_y, 1.0 - exp(-18.0 * delta))
+			if next_y > position.y:
+				next_y = minf(next_y, position.y + 9.0 * delta)
+			position.y = next_y
 			vertical_velocity = 0.0
 			return false
 
