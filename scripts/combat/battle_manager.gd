@@ -244,7 +244,10 @@ func _spawn_enemy(tpl: Dictionary, is_boss: bool, wave_num: int, is_hard: bool) 
 	var en := Enemy3D.new()
 	enemies_root.add_child(en)
 	en.setup(tpl, is_boss, wave_num, is_hard)
-	en.position.y = _get_terrain_y(en.position.x, en.position.z)
+	en.position.y = _get_terrain_y(en.position.x, en.position.z, 10.0)
+	if arena != null:
+		en.position = arena.resolve_obstacle_collision(en.position, 0.78 * en.scale.x)
+		en.position.y = _get_terrain_y(en.position.x, en.position.z, 10.0)
 	enemies.append(en)
 
 
@@ -330,8 +333,12 @@ func perform_attack_a() -> void:
 			player.facing = camera_rig.get_aim_facing()
 		player.trigger_slash(step)
 		forward = Vector3(sin(player.facing), 0.0, cos(player.facing)).normalized()
+		var pre_lunge := player.position
 		player.position += forward * lunge_dist
 		player.clamp_to_arena()
+		if arena != null:
+			player.position = arena.resolve_obstacle_collision(player.position, 0.62)
+			player.position = arena.resolve_terrain_step(pre_lunge, player.position, player.is_grounded)
 
 	var sfx_prefix: String = String(prof.get("sfx_prefix", "slash"))
 	AudioManager.play_sfx("%s_%d" % [sfx_prefix, step] if sfx_prefix != "slash" else ("slash%d" % step))
@@ -430,8 +437,12 @@ func perform_attack_a() -> void:
 
 			# Hero-tuned Knockback (if still alive)
 			if is_instance_valid(en) and not en.dead and push_dir.length_squared() > 0.001:
+				var pre_kb := en.position
 				var kb: float = (1.55 if is_crit else (0.72 if step == 2 else 0.48)) * kb_mult * (0.45 if en.is_boss else 1.0)
 				en.position += push_dir * kb
+				if arena != null:
+					en.position = arena.resolve_obstacle_collision(en.position, 0.72 * en.scale.x)
+					en.position = arena.resolve_terrain_step(pre_kb, en.position, true)
 				en.clamp_to_arena()
 
 	if hit_count > 0:
@@ -692,8 +703,12 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 			player.facing = camera_rig.get_aim_facing()
 		player.kick_anim_timer = 0.5
 		var forward := Vector3(sin(player.facing), 0.0, cos(player.facing))
+		var pre_rush := player.position
 		player.position += forward * 4.0
 		player.clamp_to_arena()
+		if arena != null:
+			player.position = arena.resolve_obstacle_collision(player.position, 0.62)
+			player.position = arena.resolve_terrain_step(pre_rush, player.position, player.is_grounded)
 		var dmg := int(round(float(stats["atk"]) * 2.35 * sig_mult * crit_mult))
 		spawn_ring_vfx(player.position, Color.html("#38bdf8"), 9.5, 0.55)
 		for en: Enemy3D in enemies.duplicate():
@@ -705,7 +720,11 @@ func _execute_signature_skill(stats: Dictionary, crit_mult: float) -> void:
 				en.trigger_hit_react(push, true)
 				spawn_hit_spark(en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0), Color.html("#38bdf8"), true, 1.3)
 				if push.length_squared() > 0.001:
+					var pre_ekb := en.position
 					en.position += push.normalized() * (2.2 if en.is_boss else 4.5)
+					if arena != null:
+						en.position = arena.resolve_obstacle_collision(en.position, 0.72 * en.scale.x)
+						en.position = arena.resolve_terrain_step(pre_ekb, en.position, true)
 					en.clamp_to_arena()
 				damage_enemy(en, dmg, "🦶超烈風神腳!", Color.html("#7dd3fc"))
 		GameState.toast_requested.emit("🦶「腳」超烈風神腳！轟飛並暈眩周圍妖怪！")
@@ -929,7 +948,8 @@ func _process(delta: float) -> void:
 			player.position = arena.resolve_obstacle_collision(player.position, 0.62)
 			player.position = arena.resolve_terrain_step(prev_player_pos, player.position, player.is_grounded)
 		var player_gy := _get_terrain_y(player.position.x, player.position.z, player.position.y)
-		var landed := player.update_vertical_physics(dt, player_gy)
+		var player_ceil: float = arena.get_ceiling_height(player.position.x, player.position.z, player.position.y) if arena != null else 999.0
+		var landed := player.update_vertical_physics(dt, player_gy, player_ceil)
 		if landed:
 			AudioManager.play_sfx("land")
 			spawn_ring_vfx(Vector3(player.position.x, player_gy, player.position.z), Color.html("#e2e8f0"), 1.6, 0.20)
@@ -1006,11 +1026,13 @@ func _process(delta: float) -> void:
 		if dist > 0.1:
 			en.rotation.y = atan2(to_player_flat.x, to_player_flat.z)
 
-		var stop_dist: float = 8.5 if en.ranged else 1.7
+		var stop_dist: float = 8.5 if en.ranged else (1.55 + 0.35 * en.scale.x)
 		if dist > stop_dist and dist > 0.001:
+			var prev_en_pos := en.position
 			en.position += to_player_flat.normalized() * en.move_speed * dt
 			if arena != null:
 				en.position = arena.resolve_obstacle_collision(en.position, 0.72 * en.scale.x)
+				en.position = arena.resolve_terrain_step(prev_en_pos, en.position, true)
 			en.clamp_to_arena()
 			en.position.y = lerpf(en.position.y, _get_terrain_y(en.position.x, en.position.z, en.position.y), clampf(dt * 14.0, 0.0, 1.0))
 
@@ -1030,6 +1052,41 @@ func _process(delta: float) -> void:
 		if is_instance_valid(en) and not en.dead:
 			alive.append(en)
 	enemies = alive
+
+	# Soft entity-vs-entity & player-vs-enemy body separation to eliminate character clipping
+	var en_count := enemies.size()
+	for i in range(en_count):
+		var ea := enemies[i]
+		# Separate from player horizontally when on same elevation band
+		if player != null and absf(ea.position.y - player.position.y) < 1.85:
+			var min_p := 0.62 + 0.62 * ea.scale.x
+			var diff_p := Vector2(ea.position.x - player.position.x, ea.position.z - player.position.z)
+			var dp_sq := diff_p.length_squared()
+			if dp_sq < min_p * min_p:
+				var dp := sqrt(dp_sq)
+				var sep_dir := (diff_p / dp) if dp > 0.001 else Vector2(1.0, 0.0)
+				var push_amt := (min_p - dp)
+				ea.position.x += sep_dir.x * push_amt
+				ea.position.z += sep_dir.y * push_amt
+				if arena != null:
+					ea.position = arena.resolve_obstacle_collision(ea.position, 0.72 * ea.scale.x)
+				ea.clamp_to_arena()
+		# Separate from other enemies
+		for j in range(i + 1, en_count):
+			var eb := enemies[j]
+			if absf(ea.position.y - eb.position.y) >= 1.85:
+				continue
+			var min_e := 0.58 * (ea.scale.x + eb.scale.x)
+			var diff_e := Vector2(eb.position.x - ea.position.x, eb.position.z - ea.position.z)
+			var de_sq := diff_e.length_squared()
+			if de_sq < min_e * min_e:
+				var de := sqrt(de_sq)
+				var sdir := (diff_e / de) if de > 0.001 else Vector2(1.0, 0.0)
+				var half_push := (min_e - de) * 0.5
+				ea.position.x -= sdir.x * half_push
+				ea.position.z -= sdir.y * half_push
+				eb.position.x += sdir.x * half_push
+				eb.position.z += sdir.y * half_push
 
 	# Update Enemy Projectiles (3D height check lets jumping clear low projectiles!)
 	var alive_proj: Array[EnemyProjectile3D] = []

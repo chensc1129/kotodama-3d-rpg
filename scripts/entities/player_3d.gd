@@ -90,7 +90,7 @@ func reset_vertical_state(ground_y: float = 0.0) -> void:
 	is_grounded = true
 
 
-func update_vertical_physics(delta: float, ground_y: float = 0.0) -> bool:
+func update_vertical_physics(delta: float, ground_y: float = 0.0, ceiling_y: float = 999.0) -> bool:
 	_current_ground_y = ground_y
 	if is_grounded:
 		# Only enter free-fall on a genuine cliff/platform drop (> 1.25m), smoothly hug slopes & bridges!
@@ -107,6 +107,10 @@ func update_vertical_physics(delta: float, ground_y: float = 0.0) -> bool:
 
 	vertical_velocity -= GRAVITY * delta
 	position.y += vertical_velocity * delta
+	# Prevent jumping head through the underside of a floating sky-deck
+	if vertical_velocity > 0.0 and position.y + 1.85 > ceiling_y:
+		position.y = ceiling_y - 1.85
+		vertical_velocity = -0.5
 	if position.y <= ground_y and vertical_velocity <= 0.0:
 		var impact_vy := vertical_velocity
 		position.y = ground_y

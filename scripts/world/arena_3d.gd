@@ -141,21 +141,22 @@ func get_base_terrain_height(x: float, z: float) -> float:
 			return h
 
 		"sky_tenshu":
-			# Tiered Golden Sky-Castle Courtyard + 4 Ceremonial Spirit-Ramps (N/S/E/W) climbing to +2.55m!
+			# Tiered Golden Sky-Castle Courtyard + 4 Ceremonial Spirit-Ramps (N/S/E/W)
+			# Ramps climb smoothly from r=4.2m -> 10.8m, arriving flush at the 10.8m deck rim (0 overlap!)
 			var h := 0.0
 			var inner_rim := clampf((r - 11.5) / 4.5, 0.0, 1.0)
 			h = 0.55 * inner_rim * inner_rim * (3.0 - 2.0 * inner_rim)
 			var outer_rim := clampf((r - 20.5) / 4.5, 0.0, 1.0)
 			h += 0.85 * outer_rim * outer_rim * (3.0 - 2.0 * outer_rim)
 
-			# North/South sloped ceremonial spirit-ramps climbing smoothly up to +2.55m floating decks
-			if absf(x) < 3.4 and absf(z) > 6.2 and absf(z) < 16.5:
-				var ramp_t := clampf((absf(z) - 6.2) / 8.0, 0.0, 1.0)
+			# North/South sloped ceremonial spirit-ramps climbing smoothly up to +2.55m bastion rim (|z|=10.8)
+			if absf(x) < 3.4 and absf(z) > 4.2 and absf(z) < 11.6:
+				var ramp_t := clampf((absf(z) - 4.2) / 6.6, 0.0, 1.0)
 				var x_fade := clampf(1.0 - maxf(0.0, absf(x) - 2.1) / 1.3, 0.0, 1.0)
 				h = maxf(h, 2.55 * ramp_t * x_fade)
-			# East/West sloped ceremonial spirit-ramps climbing smoothly up to +2.65m floating decks
-			if absf(z) < 3.4 and absf(x) > 6.2 and absf(x) < 16.5:
-				var ramp_tx := clampf((absf(x) - 6.2) / 8.0, 0.0, 1.0)
+			# East/West sloped ceremonial spirit-ramps climbing smoothly up to +2.65m bastion rim (|x|=10.8)
+			if absf(z) < 3.4 and absf(x) > 4.2 and absf(x) < 11.6:
+				var ramp_tx := clampf((absf(x) - 4.2) / 6.6, 0.0, 1.0)
 				var z_fade := clampf(1.0 - maxf(0.0, absf(z) - 2.1) / 1.3, 0.0, 1.0)
 				h = maxf(h, 2.65 * ramp_tx * z_fade)
 			return h
@@ -203,6 +204,22 @@ func get_ground_height(x: float, z: float, entity_y: float = 99.0) -> float:
 	return h
 
 
+func get_ceiling_height(x: float, z: float, feet_y: float) -> float:
+	var ceil_y := 999.0
+	for plat in platforms:
+		if bool(plat.get("grounded", false)):
+			continue
+		var p: Vector3 = plat["pos"]
+		var slab_bottom: float = p.y - float(plat.get("slab_h", 0.52))
+		if slab_bottom > feet_y + 0.45:
+			var rad: float = float(plat["radius"]) + 0.35
+			var dx := x - p.x
+			var dz := z - p.z
+			if (dx * dx + dz * dz) <= rad * rad:
+				ceil_y = minf(ceil_y, slab_bottom)
+	return ceil_y
+
+
 func resolve_obstacle_collision(pos: Vector3, entity_radius: float = 0.65) -> Vector3:
 	var out := pos
 
@@ -219,15 +236,18 @@ func resolve_obstacle_collision(pos: Vector3, entity_radius: float = 0.65) -> Ve
 			out.x = op.x + dir.x * min_d
 			out.z = op.y + dir.y * min_d
 
-	# 2. Grounded elevated deck pedestals (cannot walk straight through the vertical side wall!)
+	# 2. Elevated deck pedestals & floating deck slab anti-clipping
 	for plat in platforms:
-		if not bool(plat.get("grounded", false)):
-			continue
 		var p: Vector3 = plat["pos"]
 		if out.y >= p.y - 0.34:
-			continue # Standing on top or jumping high enough to land cleanly on deck
+			continue # Standing cleanly on top or jumping high enough to land on deck
+		var is_grounded_deck := bool(plat.get("grounded", false))
+		var slab_bottom: float = p.y - float(plat.get("slab_h", 0.52))
+		# Block grounded pedestals completely below deck top; block floating slabs if body overlaps slab!
+		if (not is_grounded_deck) and (out.y + 2.05 <= slab_bottom):
+			continue
 		var rad: float = float(plat["radius"])
-		var min_d: float = rad + entity_radius * 0.82
+		var min_d: float = rad + entity_radius * 0.85
 		var diff := Vector2(out.x - p.x, out.z - p.z)
 		var dist_sq := diff.length_squared()
 		if dist_sq < min_d * min_d:
@@ -235,7 +255,7 @@ func resolve_obstacle_collision(pos: Vector3, entity_radius: float = 0.65) -> Ve
 			out.x = p.x + dir.x * min_d
 			out.z = p.z + dir.y * min_d
 
-	# 3. Prevent walking sideways through bridge railings when below deck level
+	# 3. Prevent walking sideways into bridges or underneath low-headroom bridges (< 2.35m clearance)
 	var pt2 := Vector2(out.x, out.z)
 	for br in bridges:
 		var s3: Vector3 = br["start"]
@@ -251,9 +271,9 @@ func resolve_obstacle_collision(pos: Vector3, entity_radius: float = 0.65) -> Ve
 			continue # Open bridge entrance/exit
 		var closest := s2 + seg * t_raw
 		var deck_y := lerpf(s3.y, e3.y, t_raw) + sin(t_raw * PI) * float(br["arch"])
-		# Only block when colliding horizontally with the bridge deck/railing slab itself
-		if out.y < deck_y - 0.36 and out.y > deck_y - 1.55:
-			var half_w: float = float(br["width"]) * 0.5 + entity_radius * 0.72
+		# Block whenever hero/enemy head would clip through bridge underside (< 2.35m headroom)
+		if out.y < deck_y - 0.36 and out.y > deck_y - 2.35:
+			var half_w: float = float(br["width"]) * 0.5 + entity_radius * 0.78
 			var diff := pt2 - closest
 			var d := diff.length()
 			if d < half_w:
@@ -453,8 +473,8 @@ func _terrain_material_weights(x: float, z: float, h: float) -> Color:
 			# B: Imperial Geometric Stone Paving (mid courtyard)
 			# C: Gilded Gold-Inlaid Spirit Ramps (4 ceremonial N/S/E/W ramps)
 			# D: Weathered Castle Ishigaki Masonry (outer raised terrace rim)
-			var ns_ramp: float = 1.0 if (absf(x) < 3.5 and absf(z) > 6.0 and absf(z) < 16.8) else 0.0
-			var ew_ramp: float = 1.0 if (absf(z) < 3.5 and absf(x) > 6.0 and absf(x) < 16.8) else 0.0
+			var ns_ramp: float = 1.0 if (absf(x) < 3.5 and absf(z) > 4.0 and absf(z) < 11.6) else 0.0
+			var ew_ramp: float = 1.0 if (absf(z) < 3.5 and absf(x) > 4.0 and absf(x) < 11.6) else 0.0
 			var ramp_w := maxf(ns_ramp, ew_ramp) * clampf((h - 0.12) / 0.45, 0.0, 1.0)
 			var center_marble := clampf(1.0 - maxf(0.0, r - 6.8) / 3.2, 0.0, 1.0)
 			var outer_wall := clampf((r - 19.2) / 3.8, 0.0, 1.0)
@@ -588,11 +608,11 @@ func _build_sakura_shrine_props(_ring_col: Color) -> void:
 	_add_walkable_bridge(_bridge_pt(-5.2, 1.0), _bridge_pt(-13.8, 1.5), 4.2, 0.70, "#991b1b", "#450a0a", "#ef4444", 0)
 	_add_walkable_bridge(_bridge_pt(0.0, 5.4), _bridge_pt(0.0, 13.4), 4.4, 0.65, "#991b1b", "#450a0a", "#ef4444", 0)
 
-	# 2 Elevated Carved-Stone Moon-Viewing Decks flanking the North Altar (with smooth approach stairs!)
+	# 2 Elevated Carved-Stone Moon-Viewing Decks flanking the North Altar (with rim-flush approach stairs!)
 	_add_walkable_deck(Vector3(-11.8, 2.25, -14.8), 3.9, "#4c3b63", "#2b1f3a", "#f472b6", 1, true)
 	_add_walkable_deck(Vector3(11.8, 2.25, -14.8), 3.9, "#4c3b63", "#2b1f3a", "#f472b6", 1, true)
-	_add_walkable_bridge(_bridge_pt(-5.6, -15.4), Vector3(-8.4, 2.25, -14.9), 2.8, 0.08, "#523f66", "#2f223d", "#f472b6", 0)
-	_add_walkable_bridge(_bridge_pt(5.6, -15.4), Vector3(8.4, 2.25, -14.9), 2.8, 0.08, "#523f66", "#2f223d", "#f472b6", 0)
+	_add_walkable_bridge(_bridge_pt(-5.2, -15.0), Vector3(-8.05, 2.25, -14.8), 2.8, 0.06, "#523f66", "#2f223d", "#f472b6", 0)
+	_add_walkable_bridge(_bridge_pt(5.2, -15.0), Vector3(8.05, 2.25, -14.8), 2.8, 0.06, "#523f66", "#2f223d", "#f472b6", 0)
 
 	# Twin East/West Open Shrine Pavilion Roofs (ornate corners, walkable under!)
 	_add_shrine_pavilion(Vector3(19.5, get_base_terrain_height(19.5, 2.0), 2.0), "#991b1b", "#1e1b2e", 1.0)
@@ -645,17 +665,17 @@ func _build_maple_temple_props(_ring_col: Color) -> void:
 	_add_walkable_bridge(_bridge_pt(5.0, 0.0), _bridge_pt(17.0, 0.0), 4.0, 0.68, "#7c4722", "#43220d", "#f59e0b", 0)
 	_add_walkable_bridge(_bridge_pt(-5.0, 0.0), _bridge_pt(-17.0, 0.0), 4.0, 0.68, "#7c4722", "#43220d", "#f59e0b", 0)
 
-	# 3 Walkable Elevated Wooden Tea-House Canopy Decks perched on outer autumn hills (with walkable timber stairs!)
+	# 3 Walkable Elevated Wooden Tea-House Canopy Decks perched on outer autumn hills (rim-flush timber stairs!)
 	var nw_y := maxf(2.45, get_base_terrain_height(-15.5, -12.5) + 0.95)
 	var ne_y := maxf(2.45, get_base_terrain_height(15.5, -12.5) + 0.95)
 	var s_y := maxf(2.25, get_base_terrain_height(0.0, 19.2) + 0.95)
 	_add_walkable_deck(Vector3(-15.5, nw_y, -12.5), 4.2, "#713819", "#421d0b", "#fb923c", 1, true)
 	_add_walkable_deck(Vector3(15.5, ne_y, -12.5), 4.2, "#713819", "#421d0b", "#fb923c", 1, true)
 	_add_walkable_deck(Vector3(0.0, s_y, 19.2), 4.4, "#713819", "#421d0b", "#fb923c", 1, true)
-	# Smooth timber stairs climbing up from surrounding hillside onto each canopy deck
-	_add_walkable_bridge(_bridge_pt(-19.5, -17.0), Vector3(-17.4, nw_y, -15.3), 2.8, 0.06, "#7c4722", "#43220d", "#fb923c", 0)
-	_add_walkable_bridge(_bridge_pt(19.5, -17.0), Vector3(17.4, ne_y, -15.3), 2.8, 0.06, "#7c4722", "#43220d", "#fb923c", 0)
-	_add_walkable_bridge(_bridge_pt(5.8, 22.8), Vector3(3.4, s_y, 20.8), 2.8, 0.06, "#7c4722", "#43220d", "#fb923c", 0)
+	# Smooth timber stairs climbing up from surrounding hillside right onto each canopy deck rim
+	_add_walkable_bridge(_bridge_pt(-20.4, -18.5), Vector3(-18.1, nw_y, -15.65), 2.8, 0.05, "#7c4722", "#43220d", "#fb923c", 0)
+	_add_walkable_bridge(_bridge_pt(20.4, -18.5), Vector3(18.1, ne_y, -15.65), 2.8, 0.05, "#7c4722", "#43220d", "#fb923c", 0)
+	_add_walkable_bridge(_bridge_pt(6.6, 23.2), Vector3(3.65, s_y, 21.45), 2.8, 0.05, "#7c4722", "#43220d", "#fb923c", 0)
 
 	# Central Pagoda Sanctuary Spire (tall landmark perched at dead center, solid core!)
 	_add_temple_pagoda(Vector3(0.0, get_base_terrain_height(0.0, 0.0), 0.0))
@@ -738,9 +758,9 @@ func _build_onigashima_lava_props(_ring_col: Color) -> void:
 	# 2 Ultra-High Demon Watch-Decks (+3.25m) perched above East & West rim!
 	_add_walkable_deck(Vector3(19.5, 3.25, 0.0), 4.0, "#292224", "#120e10", "#f97316", 2, true)
 	_add_walkable_deck(Vector3(-19.5, 3.25, 0.0), 4.0, "#292224", "#120e10", "#f97316", 2, true)
-	# Walkable ramps connecting NE/NW plateaus to the East/West Demon Watch-Decks
-	_add_walkable_bridge(Vector3(14.5, 2.45, -11.5), Vector3(19.2, 3.25, -2.5), 3.2, 0.20, "#362f2d", "#1c1917", "#dc2626", 0)
-	_add_walkable_bridge(Vector3(-14.5, 2.45, -11.5), Vector3(-19.2, 3.25, -2.5), 3.2, 0.20, "#362f2d", "#1c1917", "#dc2626", 0)
+	# Walkable rim-flush ramps connecting NE/NW plateaus right to the East/West Demon Watch-Deck rims
+	_add_walkable_bridge(Vector3(14.5, 2.45, -11.5), Vector3(18.15, 3.25, -3.65), 3.2, 0.16, "#362f2d", "#1c1917", "#dc2626", 0)
+	_add_walkable_bridge(Vector3(-14.5, 2.45, -11.5), Vector3(-18.15, 3.25, -3.65), 3.2, 0.16, "#362f2d", "#1c1917", "#dc2626", 0)
 
 	# 4 Tactical Obsidian Monolith Pillars around the central battle hub
 	for op: Vector2 in [Vector2(0.0, -5.8), Vector2(0.0, 5.8), Vector2(5.8, 0.0), Vector2(-5.8, 0.0)]:
@@ -768,35 +788,35 @@ func _build_onigashima_lava_props(_ring_col: Color) -> void:
 
 
 # ==============================================================================
-#  STAGE 4: SKY TENSHU (6 Celestial Marble Floating Decks + 4 Sky-Bridges + 6 Jump Pads)
+#  STAGE 4: SKY TENSHU (4 Solid Marble Bastions + 2 High Floating Decks + 4 Sky-Bridges)
 # ==============================================================================
 func _build_sky_tenshu_props(_ring_col: Color) -> void:
 	_add_torii_gate(Vector3(0.0, get_base_terrain_height(0.0, -24.5), -24.5), "#f59e0b", 1.35)
 
-	# 4 Mid-Tier Walkable Floating Celestial-Marble Sky Platforms (+2.55m ~ +2.65m)
-	_add_walkable_deck(Vector3(0.0, 2.55, -16.2), 5.6, "#274775", "#142442", "#facc15", 3, false)
-	_add_walkable_deck(Vector3(0.0, 2.55, 16.2), 5.4, "#274775", "#142442", "#facc15", 3, false)
-	_add_walkable_deck(Vector3(16.2, 2.65, 0.0), 5.4, "#274775", "#142442", "#facc15", 3, false)
-	_add_walkable_deck(Vector3(-16.2, 2.65, 0.0), 5.4, "#274775", "#142442", "#facc15", 3, false)
+	# 4 Mid-Tier Solid Celestial-Marble Bastion Platforms (+2.55m ~ +2.65m, uniform 5.4m radius -> inner rim at 10.8m!)
+	_add_walkable_deck(Vector3(0.0, 2.55, -16.2), 5.4, "#274775", "#142442", "#facc15", 3, true)
+	_add_walkable_deck(Vector3(0.0, 2.55, 16.2), 5.4, "#274775", "#142442", "#facc15", 3, true)
+	_add_walkable_deck(Vector3(16.2, 2.65, 0.0), 5.4, "#274775", "#142442", "#facc15", 3, true)
+	_add_walkable_deck(Vector3(-16.2, 2.65, 0.0), 5.4, "#274775", "#142442", "#facc15", 3, true)
 
-	# 2 Sovereign Upper-Tier Moon-Decks (+4.25m high!)
+	# 2 Sovereign Upper-Tier Floating Moon-Decks (+4.25m high, sleek 0.48m slab -> >3.2m headroom underneath!)
 	_add_walkable_deck(Vector3(-13.8, 4.25, -13.8), 4.4, "#1e3a6e", "#0f1e3d", "#fef08a", 3, false)
 	_add_walkable_deck(Vector3(13.8, 4.25, -13.8), 4.4, "#1e3a6e", "#0f1e3d", "#fef08a", 3, false)
 
-	# 4 Walkable Glowing Golden Sky-Bridges linking the floating decks into an aerial ring!
-	_add_walkable_bridge(Vector3(4.5, 2.55, -14.8), Vector3(14.8, 2.65, -4.5), 3.4, 0.55, "#244370", "#132240", "#facc15", 2)
-	_add_walkable_bridge(Vector3(-4.5, 2.55, -14.8), Vector3(-14.8, 2.65, -4.5), 3.4, 0.55, "#244370", "#132240", "#facc15", 2)
-	_add_walkable_bridge(Vector3(4.5, 2.55, 14.8), Vector3(14.8, 2.65, 4.5), 3.4, 0.55, "#244370", "#132240", "#facc15", 2)
-	_add_walkable_bridge(Vector3(-4.5, 2.55, 14.8), Vector3(-14.8, 2.65, 4.5), 3.4, 0.55, "#244370", "#132240", "#facc15", 2)
+	# 4 Walkable Glowing Golden Sky-Bridges linking the bastion rims into an aerial ring!
+	_add_walkable_bridge(Vector3(4.5, 2.55, -14.8), Vector3(14.8, 2.65, -4.5), 3.4, 0.65, "#244370", "#132240", "#facc15", 2)
+	_add_walkable_bridge(Vector3(-4.5, 2.55, -14.8), Vector3(-14.8, 2.65, -4.5), 3.4, 0.65, "#244370", "#132240", "#facc15", 2)
+	_add_walkable_bridge(Vector3(4.5, 2.55, 14.8), Vector3(14.8, 2.65, 4.5), 3.4, 0.65, "#244370", "#132240", "#facc15", 2)
+	_add_walkable_bridge(Vector3(-4.5, 2.55, 14.8), Vector3(-14.8, 2.65, 4.5), 3.4, 0.65, "#244370", "#132240", "#facc15", 2)
 
-	# Visual Golden Curb Posts along the 4 Ceremonial Spirit-Ramps (guides players onto smooth ramp entrances)
+	# Visual Golden Curb Posts along the 4 Ceremonial Spirit-Ramps (4.2m -> 10.8m)
 	var curb_mat := StandardMaterial3D.new()
 	curb_mat.albedo_color = Color.html("#facc15")
 	curb_mat.metallic = 0.65
 	curb_mat.roughness = 0.25
 	var curb_mesh := BoxMesh.new()
 	curb_mesh.size = Vector3(0.26, 0.65, 0.26)
-	for dist in [7.2, 10.4, 13.4]:
+	for dist in [5.0, 7.6, 10.1]:
 		for side in [-2.35, 2.35]:
 			for pt: Vector2 in [
 				Vector2(side, -dist), Vector2(side, dist),
@@ -879,7 +899,9 @@ func _add_water_plane(y_level: float, rad: float, deep_hex: String, shallow_hex:
 
 
 func _add_walkable_deck(top_pos: Vector3, rad: float, deck_hex: String, deck_dark_hex: String, rim_hex: String, surface_type: int = 1, grounded: bool = true) -> void:
-	platforms.append({"pos": top_pos, "radius": rad, "grounded": grounded})
+	var terrain_below := get_base_terrain_height(top_pos.x, top_pos.z)
+	var deck_h: float = maxf(1.2, top_pos.y - terrain_below + 0.85) if grounded else 0.48
+	platforms.append({"pos": top_pos, "radius": rad, "grounded": grounded, "slab_h": deck_h})
 
 	var deck_mat := ShaderMaterial.new()
 	deck_mat.shader = PROP_SURFACE_SHADER
@@ -894,11 +916,9 @@ func _add_walkable_deck(top_pos: Vector3, rad: float, deck_hex: String, deck_dar
 	var rim_mat := StandardMaterial3D.new()
 	rim_mat.albedo_color = Color.html(rim_hex); rim_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
-	var terrain_below := get_base_terrain_height(top_pos.x, top_pos.z)
-	var deck_h: float = maxf(1.2, top_pos.y - terrain_below + 0.85) if grounded else 0.92
 	var cyl := CylinderMesh.new()
 	cyl.top_radius = rad
-	cyl.bottom_radius = rad * (0.94 if grounded else 0.76)
+	cyl.bottom_radius = rad * (0.96 if grounded else 0.82)
 	cyl.height = deck_h
 	cyl.radial_segments = 28
 	var deck := MeshInstance3D.new()
