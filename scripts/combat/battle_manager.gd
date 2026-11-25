@@ -9,6 +9,9 @@ signal wave_cleared
 signal battle_ended(is_victory: bool, reached_wave: int)
 signal attack_swung(step: int)
 signal hit_landed(is_crit: bool)
+signal arpg_npc_interact_requested(npc_data: Dictionary, already_cleared: bool)
+signal arpg_cutscene_requested(cutscene_id: String, cutscene_data: Dictionary)
+signal arpg_hud_state_changed(zone_name: String, quest_title: String, quest_desc: String, compass_text: String, quiz_done: int, quiz_total: int, near_npc_name: String, near_npc_hint: String)
 
 @export var arena: Arena3D
 @export var camera_rig: CameraRig
@@ -26,6 +29,7 @@ const SHIFT_DOUBLE_TAP_WINDOW: float = 0.30
 var joy_vector: Vector2 = Vector2.ZERO
 var enemies: Array[Enemy3D] = []
 var projectiles: Array[EnemyProjectile3D] = []
+var npcs: Array[Npc3D] = []
 
 var _pending_skill_type: String = ""
 var _pending_word: Dictionary = {}
@@ -36,6 +40,15 @@ var _move_vel: Vector3 = Vector3.ZERO
 var _hud_sync_acc: float = 0.0
 var _save_dirty: bool = false
 var _save_flush_timer: float = 0.0
+
+# ARPG Chapter 1 Adventure Mode runtime states
+var _npcs_root: Node3D
+var arpg_quest_step: int = 0
+var _arpg_triggered_encounters: Dictionary = {}
+var _arpg_cleared_encounters: Dictionary = {}
+var _arpg_active_encounter_id: String = ""
+var _arpg_nearest_npc: Npc3D = null
+var _arpg_spring_heal_acc: float = 0.0
 
 # Stage-specific mechanic runtime states
 var _sakura_cycle_timer: float = 0.0
@@ -52,6 +65,13 @@ var _stage_hazards: Array[Dictionary] = [] # {pos, radius, timer, max_time, kind
 func _ready() -> void:
 	GameState.appearance_changed.connect(_on_appearance_changed)
 	GameState.stage_changed.connect(_on_stage_changed)
+
+	_npcs_root = Node3D.new()
+	_npcs_root.name = "NpcsRoot"
+	if enemies_root != null and enemies_root.get_parent() != null:
+		enemies_root.get_parent().add_child.call_deferred(_npcs_root)
+	else:
+		add_child(_npcs_root)
 
 	call_deferred("_initialize_world")
 
@@ -72,6 +92,7 @@ func _reset_stage_mechanics() -> void:
 	_enemy_lava_timer = 0.0
 	_hazard_spawn_timer = 4.2
 	_jump_pad_cooldown = 0.0
+	_arpg_spring_heal_acc = 0.0
 	GameState.battle["stage_status"] = ""
 
 
@@ -84,12 +105,14 @@ func _clear_stage_hazards() -> void:
 
 
 func _initialize_world() -> void:
+	var target_stage: String = ArpgChapter1Data.STAGE_ID if GameState.is_arpg_mode() else String(GameState.player["stage_id"])
 	if arena != null:
-		arena.build_stage(GameState.player["stage_id"])
+		arena.build_stage(target_stage)
 	_reset_stage_mechanics()
 	if player != null:
-		player.position = Vector3(0.0, 0.0, 4.0)
-		player.reset_vertical_state(_get_terrain_y(0.0, 4.0))
+		var sp_pos: Vector3 = ArpgChapter1Data.PLAYER_SPAWN if GameState.is_arpg_mode() else Vector3(0.0, 0.0, 4.0)
+		player.position = sp_pos
+		player.reset_vertical_state(_get_terrain_y(sp_pos.x, sp_pos.z))
 		player.rebuild_mesh()
 	if shikigami != null and player != null:
 		shikigami.rebuild_mesh(player.position)
@@ -105,6 +128,8 @@ func _on_appearance_changed() -> void:
 
 
 func _on_stage_changed(stage_id: String) -> void:
+	if GameState.is_arpg_mode():
+		return
 	if arena != null:
 		arena.build_stage(stage_id)
 	_reset_stage_mechanics()
@@ -140,6 +165,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				perform_attack_a()
 				get_viewport().set_input_as_handled()
 				return
+
+	if event.is_action_pressed("interact") and GameState.is_arpg_mode():
+		interact_with_nearest_npc()
+		get_viewport().set_input_as_handled()
+		return
 
 	if event.is_action_pressed("attack"):
 		perform_attack_a()
@@ -182,6 +212,33 @@ func start_new_battle() -> void:
 	GameState.battle["sp"] = 40.0
 	GameState.battle["endless_seconds"] = 0.0
 
+	if GameState.is_arpg_mode():
+		_clear_enemies_and_projectiles()
+		arpg_quest_step = 0
+		_arpg_triggered_encounters.clear()
+		_arpg_cleared_encounters.clear()
+		_arpg_active_encounter_id = ""
+		_arpg_nearest_npc = null
+		if arena != null:
+			arena.build_stage(ArpgChapter1Data.STAGE_ID)
+		if player != null:
+			var sp_pos := ArpgChapter1Data.PLAYER_SPAWN
+			player.position = sp_pos
+			player.reset_vertical_state(_get_terrain_y(sp_pos.x, sp_pos.z))
+			player.facing = PI
+			player.rebuild_mesh()
+		if camera_rig != null:
+			camera_rig.cam_yaw = 0.0
+			camera_rig._target_yaw = 0.0
+		if shikigami != null and player != null:
+			shikigami.rebuild_mesh(player.position)
+		_spawn_arpg_chapter1_npcs()
+		_emit_arpg_hud()
+		hud_updated.emit()
+		call_deferred("_trigger_arpg_opening_cutscene")
+		return
+
+	_clear_arpg_npcs()
 	if arena != null:
 		arena.build_stage(GameState.player["stage_id"])
 	if player != null:
@@ -1125,8 +1182,10 @@ func _process(delta: float) -> void:
 		alive_proj.append(pr)
 	projectiles = alive_proj
 
-	# Check Wave Clear
-	if enemies.is_empty() and b["active"]:
+	# Check Wave Clear (Arena modes only; ARPG Story Mode uses zone encounter clear!)
+	if GameState.is_arpg_mode():
+		_update_arpg_world(dt)
+	elif enemies.is_empty() and b["active"]:
 		if _save_dirty:
 			_save_dirty = false
 			_save_flush_timer = 0.0
@@ -1158,6 +1217,8 @@ func _process(delta: float) -> void:
 	if _hud_sync_acc >= 0.08:
 		_hud_sync_acc = 0.0
 		hud_updated.emit()
+		if GameState.is_arpg_mode():
+			_emit_arpg_hud()
 
 
 # ==============================================================================
@@ -1417,3 +1478,277 @@ func _spawn_enemy_projectile(origin: Vector3, dir: Vector3, dmg: int) -> void:
 	projectiles_root.add_child(pr)
 	pr.setup(origin, dir, dmg)
 	projectiles.append(pr)
+
+
+# ==============================================================================
+#  ARPG ADVENTURE MODE — CHAPTER 1 (櫻花之里・NPC 對話與日文試煉・區域劇情戰)
+# ==============================================================================
+func _trigger_arpg_opening_cutscene() -> void:
+	if GameState.is_arpg_mode() and GameState.battle["active"]:
+		arpg_cutscene_requested.emit("ch1_opening", ArpgChapter1Data.OPENING_CUTSCENE)
+
+
+func _clear_arpg_npcs() -> void:
+	for n in npcs:
+		if is_instance_valid(n):
+			n.queue_free()
+	npcs.clear()
+	_arpg_nearest_npc = null
+
+
+func _spawn_arpg_chapter1_npcs() -> void:
+	_clear_arpg_npcs()
+	if _npcs_root == null:
+		return
+	for raw_npc in ArpgChapter1Data.NPCS:
+		var data: Dictionary = raw_npc
+		var p: Vector3 = data["pos"]
+		var gy := _get_terrain_y(p.x, p.z, 10.0)
+		var npc := Npc3D.new()
+		_npcs_root.add_child(npc)
+		npc.setup(data, gy)
+		npcs.append(npc)
+	_refresh_arpg_npc_markers()
+
+
+func _refresh_arpg_npc_markers() -> void:
+	for npc in npcs:
+		if not is_instance_valid(npc):
+			continue
+		var cleared := GameState.is_arpg_npc_cleared(npc.npc_id)
+		var story_trig: int = int(npc.npc_data.get("story_step_trigger", -1))
+		if story_trig >= 0 and arpg_quest_step == story_trig:
+			npc.set_quest_marker("story")
+		elif not cleared:
+			npc.set_quest_marker("quiz")
+		else:
+			npc.set_quest_marker("done")
+
+
+func interact_with_nearest_npc() -> void:
+	if not GameState.is_arpg_mode():
+		return
+	if not bool(GameState.battle["active"]) or bool(GameState.battle["paused"]):
+		return
+	if _arpg_nearest_npc == null or not is_instance_valid(_arpg_nearest_npc):
+		return
+	GameState.battle["paused"] = true
+	var already := GameState.is_arpg_npc_cleared(_arpg_nearest_npc.npc_id)
+	arpg_npc_interact_requested.emit(_arpg_nearest_npc.npc_data, already)
+
+
+func on_arpg_quiz_reward_claimed(npc_id: String, reward: Dictionary, first_clear: bool) -> void:
+	GameState.claim_arpg_npc_reward(npc_id, reward, first_clear)
+	AudioManager.play_sfx("levelup")
+	if player != null:
+		spawn_ring_vfx(player.position, Color.html("#34d399"), 5.5, 0.55)
+		var summary_txt: String = ("🎁 " + String(reward.get("summary", "獲得試煉獎勵！"))) if first_clear else "🇯🇵 練習獎勵 +30 金幣・全回復"
+		popup_requested.emit(player.position + Vector3(0.0, 2.6, 0.0), summary_txt, Color.html("#fde047"))
+	_refresh_arpg_npc_markers()
+	_emit_arpg_hud()
+
+
+func on_arpg_npc_dialogue_closed(npc_id: String) -> void:
+	GameState.battle["paused"] = false
+	if npc_id == "miko_mio" and arpg_quest_step == 0:
+		arpg_quest_step = 1
+		GameState.toast_requested.emit("📜 主線更新：往北跨過緋紅太鼓橋，擊退橋頭妖怪先遣隊！")
+	elif npc_id == "elder_byakko" and arpg_quest_step == 3:
+		arpg_quest_step = 4
+		GameState.toast_requested.emit("📜 主線更新：踏上夜櫻本殿祭壇，決戰「赤鬼大将・獄炎」！")
+	_refresh_arpg_npc_markers()
+	_emit_arpg_hud()
+
+
+func _find_monster_template(tpl_id: String, is_boss: bool) -> Dictionary:
+	var pool: Array = GameData.BOSS_TEMPLATES if is_boss else GameData.MONSTER_TEMPLATES
+	for raw_tpl in pool:
+		var tpl: Dictionary = raw_tpl
+		if String(tpl.get("id", "")) == tpl_id:
+			return tpl
+	return pool[0]
+
+
+func _spawn_arpg_encounter(enc: Dictionary) -> void:
+	var enc_id: String = String(enc["id"])
+	_arpg_triggered_encounters[enc_id] = true
+	_arpg_active_encounter_id = enc_id
+	var center: Vector3 = enc["spawn_center"]
+	var spread_r: float = float(enc.get("spawn_radius", 7.0))
+	var wave_sc: int = int(enc.get("wave_scale", 2))
+	var is_boss_enc: bool = bool(enc.get("is_boss", false))
+	var monsters: Array = enc.get("monsters", [])
+
+	var total_idx: int = 0
+	for raw_m in monsters:
+		var m_spec: Dictionary = raw_m
+		var tpl_id: String = String(m_spec.get("id", "chochin"))
+		var cnt: int = int(m_spec.get("count", 1))
+		var m_boss: bool = bool(m_spec.get("is_boss", false))
+		var tpl: Dictionary = _find_monster_template(tpl_id, m_boss)
+		for _c in range(cnt):
+			if enemies_root == null:
+				continue
+			var en := Enemy3D.new()
+			enemies_root.add_child(en)
+			en.setup(tpl, m_boss, wave_sc, false)
+			var ang: float = float(total_idx) * 1.45 + randf_range(-0.25, 0.25)
+			var dist: float = 0.0 if m_boss else randf_range(2.6, spread_r)
+			var sx: float = clampf(center.x + cos(ang) * dist, ArpgChapter1Data.MIN_X + 3.0, ArpgChapter1Data.MAX_X - 3.0)
+			var sz: float = clampf(center.z + sin(ang) * dist, ArpgChapter1Data.MIN_Z + 3.0, ArpgChapter1Data.MAX_Z - 3.0)
+			var sy: float = _get_terrain_y(sx, sz, 10.0)
+			en.position = Vector3(sx, sy, sz)
+			if arena != null:
+				en.position = arena.resolve_obstacle_collision(en.position, 0.78 * en.scale.x)
+				en.position.y = _get_terrain_y(en.position.x, en.position.z, 10.0)
+			enemies.append(en)
+			spawn_ring_vfx(en.position, en.primary_color, 4.5 if m_boss else 2.6, 0.42)
+			total_idx += 1
+
+	AudioManager.play_sfx("boss_die" if is_boss_enc else "skill")
+	_trigger_camera_impact(0.45 if is_boss_enc else 0.22, -2.5 if is_boss_enc else 0.0)
+	GameState.toast_requested.emit("⚔️ %s！%s" % [String(enc["title"]), String(enc["desc"])])
+	hud_updated.emit()
+
+
+func _update_arpg_world(dt: float) -> void:
+	if player == null:
+		return
+	var b := GameState.battle
+
+	# 1. Update NPC proximity & gentle turning toward player
+	var nearest: Npc3D = null
+	var best_d := INF
+	for npc in npcs:
+		if not is_instance_valid(npc):
+			continue
+		var d := Vector2(player.position.x - npc.position.x, player.position.z - npc.position.z).length()
+		var near := d <= npc.interaction_radius
+		npc.set_player_nearby(near, player.position, dt)
+		if near and d < best_d:
+			best_d = d
+			nearest = npc
+	_arpg_nearest_npc = nearest
+
+	# 2. Sakura Healing Spring in Senbon Torii Courtyard (-14, -34)
+	var sp_pos := ArpgChapter1Data.HEAL_SPRING_POS
+	var sp_d := Vector2(player.position.x - sp_pos.x, player.position.z - sp_pos.z).length()
+	if sp_d <= ArpgChapter1Data.HEAL_SPRING_RADIUS:
+		b["sp"] = minf(float(b["max_sp"]), float(b["sp"]) + 16.0 * dt)
+		b["stamina"] = minf(float(b["max_stamina"]), float(b["stamina"]) + 55.0 * dt)
+		b["stamina_exhausted"] = false
+		_arpg_spring_heal_acc += float(b["max_hp"]) * 0.14 * dt
+		if _arpg_spring_heal_acc >= 2.0:
+			var h_amt := int(floor(_arpg_spring_heal_acc))
+			_arpg_spring_heal_acc -= float(h_amt)
+			if int(b["hp"]) < int(b["max_hp"]):
+				b["hp"] = mini(int(b["max_hp"]), int(b["hp"]) + h_amt)
+		b["stage_status"] = "🌸 靈櫻癒泉回復中（HP／SP／體力快速恢復）"
+	else:
+		b["stage_status"] = ""
+
+	# 3. Check active encounter completion
+	if not _arpg_active_encounter_id.is_empty() and enemies.is_empty():
+		var finished_enc := ArpgChapter1Data.get_encounter(_arpg_active_encounter_id)
+		_arpg_cleared_encounters[_arpg_active_encounter_id] = true
+		_arpg_active_encounter_id = ""
+		if not finished_enc.is_empty():
+			var r_gold: int = int(finished_enc.get("reward_gold", 100))
+			var r_exp: int = int(finished_enc.get("reward_exp", 80))
+			GameState.player["gold"] = int(GameState.player["gold"]) + r_gold
+			GameState.grant_exp(r_exp)
+			arpg_quest_step = maxi(arpg_quest_step, int(finished_enc.get("next_step", arpg_quest_step)))
+			var heal_v := int(round(float(b["max_hp"]) * 0.25))
+			b["hp"] = mini(int(b["max_hp"]), int(b["hp"]) + heal_v)
+			_save_dirty = false
+			_save_flush_timer = 0.0
+			if bool(finished_enc.get("is_boss", false)):
+				if GameState.player.has("arpg_ch1") and typeof(GameState.player["arpg_ch1"]) == TYPE_DICTIONARY:
+					GameState.player["arpg_ch1"]["chapter_cleared"] = true
+				GameState.save_game_data()
+				_refresh_arpg_npc_markers()
+				_emit_arpg_hud()
+				hud_updated.emit()
+				arpg_cutscene_requested.emit("ch1_epilogue", ArpgChapter1Data.EPILOGUE_CUTSCENE)
+				return
+			GameState.save_game_data()
+			AudioManager.play_sfx("levelup")
+			GameState.toast_requested.emit("✨ %s 淨化完成！獲得 %d 金幣・%d EXP！" % [String(finished_enc["title"]), r_gold, r_exp])
+			_refresh_arpg_npc_markers()
+			_emit_arpg_hud()
+			hud_updated.emit()
+
+	# 4. Trigger next zone encounter when player enters its area
+	if _arpg_active_encounter_id.is_empty() and enemies.is_empty():
+		for raw_enc in ArpgChapter1Data.ENCOUNTERS:
+			var enc: Dictionary = raw_enc
+			var eid: String = String(enc["id"])
+			if _arpg_triggered_encounters.has(eid):
+				continue
+			if arpg_quest_step < int(enc.get("req_step", 0)):
+				continue
+			var tpos: Vector3 = enc["trigger_pos"]
+			var trad: float = float(enc.get("trigger_radius", 13.0))
+			if Vector2(player.position.x - tpos.x, player.position.z - tpos.z).length() <= trad:
+				_spawn_arpg_encounter(enc)
+				break
+
+
+func _emit_arpg_hud() -> void:
+	if player == null:
+		return
+	var zone_name := ArpgChapter1Data.get_zone_name(player.position)
+	var step_info := ArpgChapter1Data.get_quest_step(arpg_quest_step)
+	var q_title: String = String(step_info.get("title", ""))
+	var q_desc: String = String(step_info.get("desc", ""))
+	var target_pos: Vector3 = step_info.get("target_pos", Vector3.ZERO)
+	var target_lbl: String = String(step_info.get("target_label", ""))
+
+	var compass_txt := ""
+	if not _arpg_active_encounter_id.is_empty():
+		var active_enc := ArpgChapter1Data.get_encounter(_arpg_active_encounter_id)
+		compass_txt = "⚔️ 擊倒區域內剩餘妖怪（%d 隻）— %s" % [enemies.size(), String(active_enc.get("title", ""))]
+	elif arpg_quest_step >= 5:
+		compass_txt = "🌸 第一章已通關！可自由拜訪村民挑戰日文試煉"
+	else:
+		var delta_xz := Vector2(target_pos.x - player.position.x, target_pos.z - player.position.z)
+		var dist_m := int(round(delta_xz.length()))
+		if dist_m <= 4:
+			compass_txt = "🧭 已抵達目標附近（%s）" % target_lbl
+		else:
+			var cam_yaw: float = camera_rig.cam_yaw if camera_rig != null else 0.0
+			var fwd := Vector2(-sin(cam_yaw), -cos(cam_yaw))
+			var right := Vector2(cos(cam_yaw), -sin(cam_yaw))
+			var dir_n := delta_xz.normalized()
+			var f_dot := fwd.dot(dir_n)
+			var r_dot := right.dot(dir_n)
+			var dir_label := "前方"
+			if f_dot < -0.55:
+				dir_label = "後方"
+			elif f_dot > 0.55:
+				dir_label = "前方"
+			elif r_dot > 0.0:
+				dir_label = "右側"
+			else:
+				dir_label = "左側"
+			if f_dot > 0.25 and absf(r_dot) > 0.35:
+				dir_label = "右前方" if r_dot > 0.0 else "左前方"
+			compass_txt = "🧭 %s %dm（%s）" % [dir_label, dist_m, target_lbl]
+
+	var near_name := ""
+	var near_hint := ""
+	if _arpg_nearest_npc != null and is_instance_valid(_arpg_nearest_npc):
+		near_name = _arpg_nearest_npc.npc_name
+		var cleared := GameState.is_arpg_npc_cleared(_arpg_nearest_npc.npc_id)
+		near_hint = "日文複習" if cleared else "日文試煉"
+
+	arpg_hud_state_changed.emit(
+		zone_name,
+		q_title,
+		q_desc,
+		compass_txt,
+		GameState.get_arpg_quiz_cleared_count(),
+		ArpgChapter1Data.NPCS.size(),
+		near_name,
+		near_hint
+	)

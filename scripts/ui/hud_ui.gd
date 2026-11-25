@@ -583,13 +583,14 @@ func refresh(enemy_count: int, boss: Enemy3D) -> void:
 			String(char_cfg.get("color_primary", "#f43f5e"))
 		)
 
-	var st_txt := "%s %s  ・  第 %d 幕" % [stage_cfg["icon"], stage_cfg["name"], int(b["wave"])]
+	var is_arpg := GameState.is_arpg_mode()
+	var st_txt := "🗺️ 第一章・櫻花之里" if is_arpg else ("%s %s  ・  第 %d 幕" % [stage_cfg["icon"], stage_cfg["name"], int(b["wave"])])
 	if _stage_lbl.text != st_txt:
 		_stage_lbl.text = st_txt
 	var md_txt := String(mode_cfg["label"])
 	if _mode_lbl.text != md_txt:
 		_mode_lbl.text = md_txt
-	var en_txt := "👹 剩餘 %d" % enemy_count
+	var en_txt := (("⚔️ 交戰中 %d" % enemy_count) if enemy_count > 0 else "🌸 自由探索中") if is_arpg else ("👹 剩餘 %d" % enemy_count)
 	if _enemy_count_lbl.text != en_txt:
 		_enemy_count_lbl.text = en_txt
 
@@ -602,7 +603,8 @@ func refresh(enemy_count: int, boss: Enemy3D) -> void:
 
 	if _stage_mech_lbl != null:
 		var status_txt := String(b.get("stage_status", ""))
-		var m_txt := status_txt if not status_txt.is_empty() else String(stage_cfg.get("mechanic_name", ""))
+		var default_mech := "💬 靠近村民按 F 或點對話按鈕挑戰日文試煉" if is_arpg else String(stage_cfg.get("mechanic_name", ""))
+		var m_txt := status_txt if not status_txt.is_empty() else default_mech
 		if _stage_mech_lbl.text != m_txt:
 			_stage_mech_lbl.text = m_txt
 

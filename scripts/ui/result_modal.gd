@@ -126,11 +126,16 @@ func open_result(is_victory: bool, reached_wave: int) -> void:
 	var p := GameState.player
 	var char_cfg: Dictionary = GameData.get_character(p["char_id"])
 	var stage_cfg: Dictionary = GameData.get_stage(p["stage_id"])
+	var is_arpg := GameState.is_arpg_mode()
 
 	if is_victory:
 		_panel.add_theme_stylebox_override("panel", UiStyle.make_shrine_modal("#0a1020", "#fbbf24", 24, 30, 26))
-		_badge_lbl.text = "✨  百鬼退散・道場制覇  ✨"
-		_title_lbl.text = "👑 全 12 幕制覇！"
+		if is_arpg:
+			_badge_lbl.text = "🌸  櫻花之里淨化・言靈碑復甦  🌸"
+			_title_lbl.text = "🏆 第一章通關！"
+		else:
+			_badge_lbl.text = "✨  百鬼退散・道場制覇  ✨"
+			_title_lbl.text = "👑 全 12 幕制覇！"
 		_title_lbl.add_theme_color_override("font_color", Color.html("#fcd34d"))
 	else:
 		_panel.add_theme_stylebox_override("panel", UiStyle.make_shrine_modal("#140914", "#fb7185", 24, 30, 26))
@@ -139,7 +144,10 @@ func open_result(is_victory: bool, reached_wave: int) -> void:
 		_title_lbl.add_theme_color_override("font_color", Color.html("#fb7185"))
 
 	_tile_hero.text = "%s %s（Lv.%d）" % [char_cfg["icon"], char_cfg["name"], int(p["level"])]
-	_tile_stage.text = "%s %s・第 %d 幕" % [stage_cfg["icon"], stage_cfg["name"], reached_wave]
+	if is_arpg:
+		_tile_stage.text = "🗺️ 第一章：櫻花之里・試煉 %d/5" % GameState.get_arpg_quiz_cleared_count()
+	else:
+		_tile_stage.text = "%s %s・第 %d 幕" % [stage_cfg["icon"], stage_cfg["name"], reached_wave]
 	_tile_kills.text = "%d 隻妖怪" % int(p["total_kills"])
 	_tile_gold.text = "%d 🪙" % int(p["gold"])
 

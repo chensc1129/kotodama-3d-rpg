@@ -16,6 +16,8 @@ var _hero_spotlight_title: Label
 var _hero_spotlight_desc: Label
 var _stage_grid: GridContainer
 var _mode_grid: GridContainer
+var _start_btn: Button
+var _load_lbl: Label
 var _upgrade_modal: UpgradeModal
 var _settings_modal: SettingsModal
 var _loading_overlay: ColorRect
@@ -257,10 +259,10 @@ func _build_ui() -> void:
 	vbox.add_child(_stage_grid)
 
 	# ==================== STEP 3: MODES ====================
-	vbox.add_child(_make_section_header("03", "選擇挑戰模式", "難度越高金幣與經驗獎勵越豐厚", "#fda4af", is_mob))
+	vbox.add_child(_make_section_header("03", "選擇挑戰模式", "可體驗全新「ARPG 物語冒險（第一章）」或傳統百鬼道場闖關", "#fda4af", is_mob))
 
 	_mode_grid = GridContainer.new()
-	_mode_grid.columns = 2 if is_mob else 4
+	_mode_grid.columns = 2 if is_mob else 5
 	_mode_grid.add_theme_constant_override("h_separation", 10)
 	_mode_grid.add_theme_constant_override("v_separation", 10)
 	vbox.add_child(_mode_grid)
@@ -320,14 +322,14 @@ func _build_ui() -> void:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	footer.add_child(spacer)
 
-	var start_btn := Button.new()
-	start_btn.focus_mode = Control.FOCUS_NONE
-	start_btn.text = "⚔️ 進入 3D 道場開戰！"
-	start_btn.custom_minimum_size = Vector2(360 if is_mob else 256, 68 if is_mob else 48)
-	start_btn.add_theme_font_size_override("font_size", 24 if is_mob else 17)
-	UiStyle.apply_button(start_btn, "#be123c", "#fde68a", "#ffffff", 16, 2, 1.0)
-	start_btn.pressed.connect(_on_start_battle_pressed)
-	footer.add_child(start_btn)
+	_start_btn = Button.new()
+	_start_btn.focus_mode = Control.FOCUS_NONE
+	_start_btn.text = "⚔️ 進入 3D 道場開戰！"
+	_start_btn.custom_minimum_size = Vector2(360 if is_mob else 268, 68 if is_mob else 48)
+	_start_btn.add_theme_font_size_override("font_size", 24 if is_mob else 16)
+	UiStyle.apply_button(_start_btn, "#be123c", "#fde68a", "#ffffff", 16, 2, 1.0)
+	_start_btn.pressed.connect(_on_start_battle_pressed)
+	footer.add_child(_start_btn)
 
 	# ==================== EMBEDDED UPGRADE & DICTIONARY MODAL ====================
 	_upgrade_modal = UpgradeModal.new()
@@ -379,12 +381,12 @@ func _build_ui() -> void:
 	load_ico.add_theme_font_size_override("font_size", 46 if is_mob else 36)
 	load_v.add_child(load_ico)
 
-	var load_lbl := Label.new()
-	load_lbl.text = "🌸 正在開啟 3D 道場與百鬼夜行戰場...\n請稍候片刻"
-	load_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	load_lbl.add_theme_font_size_override("font_size", 22 if is_mob else 17)
-	load_lbl.add_theme_color_override("font_color", Color.html("#fde68a"))
-	load_v.add_child(load_lbl)
+	_load_lbl = Label.new()
+	_load_lbl.text = "🌸 正在開啟 3D 道場與百鬼夜行戰場...\n請稍候片刻"
+	_load_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_load_lbl.add_theme_font_size_override("font_size", 22 if is_mob else 17)
+	_load_lbl.add_theme_color_override("font_color", Color.html("#fde68a"))
+	load_v.add_child(_load_lbl)
 
 
 func _make_section_header(num: String, title: String, subtitle: String, hex_col: String, is_mob: bool) -> HBoxContainer:
@@ -618,6 +620,18 @@ func refresh() -> void:
 			var mid: String = m["id"]
 			btn.pressed.connect(func() -> void: GameState.set_mode(mid))
 			_mode_grid.add_child(btn)
+
+	if _start_btn != null:
+		if GameState.is_arpg_mode():
+			_start_btn.text = "🗺️ 啟程！第一章：櫻花之里"
+			UiStyle.apply_button(_start_btn, "#047857", "#6ee7b7", "#ffffff", 16, 2, 1.0)
+			if _load_lbl != null:
+				_load_lbl.text = "⛩️ 正在前往「第一章：櫻花之里」和風冒險世界...\n請稍候片刻"
+		else:
+			_start_btn.text = "⚔️ 進入 3D 道場開戰！"
+			UiStyle.apply_button(_start_btn, "#be123c", "#fde68a", "#ffffff", 16, 2, 1.0)
+			if _load_lbl != null:
+				_load_lbl.text = "🌸 正在開啟 3D 道場與百鬼夜行戰場...\n請稍候片刻"
 
 
 func _on_start_battle_pressed() -> void:

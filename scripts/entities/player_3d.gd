@@ -539,6 +539,10 @@ func update_animations(delta: float, is_moving: bool, is_sprinting: bool = false
 
 
 func clamp_to_arena() -> void:
+	if GameState.is_arpg_mode():
+		position.x = clampf(position.x, ArpgChapter1Data.MIN_X + 1.2, ArpgChapter1Data.MAX_X - 1.2)
+		position.z = clampf(position.z, ArpgChapter1Data.MIN_Z + 1.2, ArpgChapter1Data.MAX_Z - 1.2)
+		return
 	var limit: float = GameData.ARENA_RADIUS - 1.1
 	var flat := Vector2(position.x, position.z)
 	if flat.length() > limit:

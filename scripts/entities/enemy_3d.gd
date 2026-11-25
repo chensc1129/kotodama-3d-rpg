@@ -249,6 +249,11 @@ func _set_hit_flash(val: float) -> void:
 
 
 func clamp_to_arena() -> void:
+	var gs := get_node_or_null("/root/GameState")
+	if gs != null and gs.is_arpg_mode():
+		position.x = clampf(position.x, ArpgChapter1Data.MIN_X + 1.0, ArpgChapter1Data.MAX_X - 1.0)
+		position.z = clampf(position.z, ArpgChapter1Data.MIN_Z + 1.0, ArpgChapter1Data.MAX_Z - 1.0)
+		return
 	var limit: float = GameData.ARENA_RADIUS - 0.8
 	var flat := Vector2(position.x, position.z)
 	if flat.length() > limit:

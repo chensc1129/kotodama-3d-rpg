@@ -13,6 +13,8 @@ const MAIN_MENU_SCENE_PATH: String = "res://scenes/main_menu.tscn"
 @onready var pause_modal: PauseModal = $UILayer/PauseModal
 @onready var result_modal: ResultModal = $UILayer/ResultModal
 var settings_modal: SettingsModal
+var arpg_quest_hud: ArpgQuestHud
+var npc_dialogue_modal: NpcDialogueModal
 
 var _opened_upgrade_from_pause: bool = false
 var _opened_settings_from_pause: bool = false
@@ -23,6 +25,16 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	get_tree().paused = false
 	_apply_mobile_graphics_profile()
+
+	arpg_quest_hud = ArpgQuestHud.new()
+	arpg_quest_hud.name = "ArpgQuestHud"
+	$UILayer.add_child(arpg_quest_hud)
+	$UILayer.move_child(arpg_quest_hud, hud_ui.get_index() + 1)
+	arpg_quest_hud.set_arpg_visible(GameState.is_arpg_mode())
+
+	npc_dialogue_modal = NpcDialogueModal.new()
+	npc_dialogue_modal.name = "NpcDialogueModal"
+	$UILayer.add_child(npc_dialogue_modal)
 
 	settings_modal = SettingsModal.new()
 	settings_modal.name = "SettingsModal"
@@ -47,6 +59,57 @@ func _ready() -> void:
 		_unlock_mouse()
 		get_tree().paused = true
 		result_modal.open_result(is_victory, reached_wave)
+	)
+
+	# ARPG Adventure Mode -> Quest HUD & NPC Dialogue / Japanese Quiz Modal
+	arpg_quest_hud.interact_pressed.connect(battle_manager.interact_with_nearest_npc)
+	battle_manager.arpg_hud_state_changed.connect(func(
+		zone_name: String, quest_title: String, quest_desc: String,
+		compass_text: String, quiz_done: int, quiz_total: int,
+		near_npc_name: String, near_npc_hint: String
+	) -> void:
+		arpg_quest_hud.set_arpg_visible(GameState.is_arpg_mode())
+		arpg_quest_hud.update_quest(zone_name, quest_title, quest_desc, compass_text, quiz_done, quiz_total)
+		arpg_quest_hud.set_interact_prompt(not near_npc_name.is_empty(), near_npc_name, near_npc_hint)
+	)
+	battle_manager.arpg_npc_interact_requested.connect(func(npc_data: Dictionary, already_cleared: bool) -> void:
+		_unlock_mouse()
+		get_tree().paused = true
+		npc_dialogue_modal.open_npc(npc_data, already_cleared)
+	)
+	battle_manager.arpg_cutscene_requested.connect(func(cutscene_id: String, cdata: Dictionary) -> void:
+		_unlock_mouse()
+		GameState.battle["paused"] = true
+		get_tree().paused = true
+		npc_dialogue_modal.open_cutscene(
+			cutscene_id,
+			String(cdata.get("title", "")),
+			String(cdata.get("speaker", "")),
+			String(cdata.get("icon", "🌸")),
+			String(cdata.get("jp_tts", "")),
+			cdata.get("lines", [])
+		)
+	)
+	npc_dialogue_modal.quiz_completed.connect(func(npc_id: String, reward: Dictionary, first_clear: bool) -> void:
+		battle_manager.on_arpg_quiz_reward_claimed(npc_id, reward, first_clear)
+		_on_hud_updated()
+	)
+	npc_dialogue_modal.dialogue_closed.connect(func(npc_id: String) -> void:
+		get_tree().paused = false
+		battle_manager.on_arpg_npc_dialogue_closed(npc_id)
+		_lock_mouse()
+		_on_hud_updated()
+	)
+	npc_dialogue_modal.cutscene_closed.connect(func(cutscene_id: String) -> void:
+		if cutscene_id == "ch1_epilogue":
+			GameState.battle["paused"] = true
+			get_tree().paused = true
+			result_modal.open_result(true, 1)
+			return
+		GameState.battle["paused"] = false
+		get_tree().paused = false
+		_lock_mouse()
+		_on_hud_updated()
 	)
 
 	# HUD -> BattleManager / Modals
@@ -88,7 +151,7 @@ func _ready() -> void:
 		if _opened_upgrade_from_pause:
 			_opened_upgrade_from_pause = false
 			pause_modal.open_pause()
-		elif not chant_overlay.visible and not blessing_modal.visible and not result_modal.visible and not settings_modal.visible:
+		elif not chant_overlay.visible and not blessing_modal.visible and not result_modal.visible and not settings_modal.visible and not npc_dialogue_modal.visible:
 			GameState.battle["paused"] = false
 			get_tree().paused = false
 			_lock_mouse()
@@ -100,7 +163,7 @@ func _ready() -> void:
 		if _opened_settings_from_pause:
 			_opened_settings_from_pause = false
 			pause_modal.open_pause()
-		elif not chant_overlay.visible and not blessing_modal.visible and not result_modal.visible and not upgrade_modal.visible:
+		elif not chant_overlay.visible and not blessing_modal.visible and not result_modal.visible and not upgrade_modal.visible and not npc_dialogue_modal.visible:
 			GameState.battle["paused"] = false
 			get_tree().paused = false
 			_lock_mouse()
@@ -168,7 +231,15 @@ func _exit_tree() -> void:
 
 
 func _has_any_modal_open() -> bool:
-	return chant_overlay.visible or upgrade_modal.visible or blessing_modal.visible or pause_modal.visible or result_modal.visible or (settings_modal != null and settings_modal.visible)
+	return (
+		chant_overlay.visible
+		or upgrade_modal.visible
+		or blessing_modal.visible
+		or pause_modal.visible
+		or result_modal.visible
+		or (settings_modal != null and settings_modal.visible)
+		or (npc_dialogue_modal != null and npc_dialogue_modal.visible)
+	)
 
 
 func _lock_mouse() -> void:
@@ -227,6 +298,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var ke := event as InputEventKey
 		if ke.pressed and not ke.echo and (ke.keycode == KEY_ESCAPE or ke.keycode == KEY_P):
+			if npc_dialogue_modal != null and npc_dialogue_modal.visible:
+				return
 			if settings_modal != null and settings_modal.visible:
 				settings_modal.close_modal()
 				get_viewport().set_input_as_handled()
@@ -241,7 +314,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _open_pause_menu() -> void:
-	if chant_overlay.visible or blessing_modal.visible or result_modal.visible:
+	if chant_overlay.visible or blessing_modal.visible or result_modal.visible or (npc_dialogue_modal != null and npc_dialogue_modal.visible):
 		return
 	_unlock_mouse()
 	GameState.battle["paused"] = true

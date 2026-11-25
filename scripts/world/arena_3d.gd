@@ -55,6 +55,8 @@ func _ready() -> void:
 #  EXACT ANALYTICAL TERRAIN HEIGHT + BRIDGES + PLATFORMS + OBSTACLE COLLISION
 # ==============================================================================
 func get_base_terrain_height(x: float, z: float) -> float:
+	if current_stage_id == ArpgChapter1Data.STAGE_ID:
+		return ArpgCh1Map.get_base_terrain_height(x, z)
 	var r := sqrt(x * x + z * z)
 	var radius := GameData.ARENA_RADIUS
 
@@ -364,6 +366,14 @@ func build_stage(stage_id: String) -> void:
 	_lava_plane_mat = null
 	_water_plane_mat = null
 	_sakura_spot_idx = 0
+
+	if current_stage_id == ArpgChapter1Data.STAGE_ID:
+		if center_light != null:
+			center_light.light_color = Color.html("#f472b6")
+			center_light.light_energy = 1.65
+			center_light.omni_range = 140.0
+		ArpgCh1Map.build_map(self, _arena_content, FLOOR_SHADER, PROP_SURFACE_SHADER, WATER_SHADER, SKY_SHADER, _sky_anim_nodes)
+		return
 
 	var sky_col := Color.html(st["sky_color"])
 	var fog_col := Color.html(st["fog_color"])

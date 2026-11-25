@@ -195,6 +195,12 @@ const STAGES: Array = [
 
 const GAME_MODES: Array = [
 	{
+		"id": "arpg_story",
+		"label": "🗺️ ARPG 物語冒險",
+		"desc": "第一章：櫻花之里・自由探索・NPC日文試煉",
+		"color": "#34d399",
+	},
+	{
 		"id": "normal",
 		"label": "⚔️ 標準闖關",
 		"desc": "12 幕故事進階・適合練功",

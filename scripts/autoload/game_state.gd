@@ -34,6 +34,10 @@ var player: Dictionary = {
 	"owned_shikigami": ["none"],
 	"active_shikigami": "none",
 	"total_kills": 0,
+	"arpg_ch1": {
+		"quiz_cleared_npcs": [],
+		"chapter_cleared": false,
+	},
 }
 
 var battle: Dictionary = {}
@@ -134,6 +138,18 @@ func load_save_data() -> void:
 				cleaned_sh.append(item)
 		player["owned_shikigami"] = cleaned_sh
 
+	if parsed.has("arpg_ch1") and typeof(parsed["arpg_ch1"]) == TYPE_DICTIONARY:
+		var ch1_in: Dictionary = parsed["arpg_ch1"]
+		var cleared_npcs: Array = []
+		if ch1_in.has("quiz_cleared_npcs") and typeof(ch1_in["quiz_cleared_npcs"]) == TYPE_ARRAY:
+			for nid in ch1_in["quiz_cleared_npcs"]:
+				if typeof(nid) == TYPE_STRING and not cleared_npcs.has(nid):
+					cleared_npcs.append(nid)
+		player["arpg_ch1"] = {
+			"quiz_cleared_npcs": cleared_npcs,
+			"chapter_cleared": bool(ch1_in.get("chapter_cleared", false)),
+		}
+
 	var stats := get_computed_stats()
 	battle["max_hp"] = stats["max_hp"]
 	battle["hp"] = stats["max_hp"]
@@ -195,6 +211,62 @@ func get_computed_stats() -> Dictionary:
 		"atk": int(round(float(base["atk"]) * atk_mult)),
 		"speed": speed,
 	}
+
+
+func is_arpg_mode() -> bool:
+	return String(player.get("mode", "normal")) == "arpg_story"
+
+
+func is_arpg_npc_cleared(npc_id: String) -> bool:
+	var ch1: Dictionary = player.get("arpg_ch1", {})
+	var arr: Array = ch1.get("quiz_cleared_npcs", [])
+	return arr.has(npc_id)
+
+
+func get_arpg_quiz_cleared_count() -> int:
+	var ch1: Dictionary = player.get("arpg_ch1", {})
+	var arr: Array = ch1.get("quiz_cleared_npcs", [])
+	return arr.size()
+
+
+func claim_arpg_npc_reward(npc_id: String, reward: Dictionary, first_clear: bool) -> void:
+	if not player.has("arpg_ch1") or typeof(player["arpg_ch1"]) != TYPE_DICTIONARY:
+		player["arpg_ch1"] = {"quiz_cleared_npcs": [], "chapter_cleared": false}
+	var ch1: Dictionary = player["arpg_ch1"]
+	var arr: Array = ch1.get("quiz_cleared_npcs", [])
+	if first_clear:
+		if not arr.has(npc_id):
+			arr.append(npc_id)
+		ch1["quiz_cleared_npcs"] = arr
+		player["gold"] = int(player["gold"]) + int(reward.get("gold", 100))
+		var sp_gain: int = int(reward.get("skill_points", 0))
+		if sp_gain > 0:
+			player["skill_points"] = int(player["skill_points"]) + sp_gain
+		var exp_gain: int = int(reward.get("exp", 0))
+		if exp_gain > 0:
+			grant_exp(exp_gain)
+		var bkey: String = String(reward.get("buff_key", ""))
+		var bval: float = float(reward.get("buff_val", 0.0))
+		if not bkey.is_empty() and bval > 0.0 and battle.has("blessings"):
+			var bless: Dictionary = battle["blessings"]
+			if bless.has(bkey):
+				bless[bkey] = float(bless[bkey]) + bval
+				var st := get_computed_stats()
+				battle["max_hp"] = st["max_hp"]
+	else:
+		# Repeat Japanese quiz practice reward!
+		player["gold"] = int(player["gold"]) + 30
+		grant_exp(20)
+
+	var st_now := get_computed_stats()
+	battle["max_hp"] = st_now["max_hp"]
+	if bool(reward.get("heal_full", false)) or not first_clear:
+		battle["hp"] = int(battle["max_hp"])
+		battle["stamina"] = float(battle["max_stamina"])
+	if bool(reward.get("sp_full", false)):
+		battle["sp"] = float(battle["max_sp"])
+	save_game_data()
+	state_changed.emit()
 
 
 func is_hard_mode() -> bool:
