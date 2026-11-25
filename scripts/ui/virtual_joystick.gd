@@ -56,9 +56,12 @@ func _gui_input(event: InputEvent) -> void:
 	elif event is InputEventScreenTouch:
 		var st := event as InputEventScreenTouch
 		if st.pressed and _touch_index == -1:
-			_touch_index = st.index
-			_update_from_local(st.position)
-			accept_event()
+			var center := size * 0.5
+			var hit_r := minf(size.x, size.y) * 0.52
+			if st.position.distance_to(center) <= hit_r:
+				_touch_index = st.index
+				_update_from_local(st.position)
+				accept_event()
 		elif not st.pressed and st.index == _touch_index:
 			_reset()
 			accept_event()
@@ -78,6 +81,13 @@ func _input(event: InputEvent) -> void:
 		var st := event as InputEventScreenTouch
 		if st.index == _touch_index and not st.pressed:
 			_reset()
+			get_viewport().set_input_as_handled()
+	elif _touch_index != -1 and event is InputEventScreenDrag:
+		var sd := event as InputEventScreenDrag
+		if sd.index == _touch_index:
+			var local_pos := get_global_transform_with_canvas().affine_inverse() * sd.position
+			_update_from_local(local_pos)
+			get_viewport().set_input_as_handled()
 
 
 func _update_from_local(local_pos: Vector2) -> void:
