@@ -117,7 +117,17 @@ func update_vertical_physics(delta: float, ground_y: float = 0.0) -> bool:
 
 func trigger_slash(step: int) -> void:
 	_slash_step = clampi(step, 1, 3)
-	slash_anim_timer = 0.30 if _slash_step == 3 else 0.25
+	var cid: String = String(GameState.player.get("char_id", "sakura"))
+	if cid == "raijin":
+		slash_anim_timer = 0.21 if _slash_step == 3 else 0.155
+	elif cid == "kickboxer":
+		slash_anim_timer = 0.34 if _slash_step == 3 else 0.26
+	elif cid == "swordsman":
+		slash_anim_timer = 0.34 if _slash_step == 3 else 0.27
+	elif cid == "yukionna":
+		slash_anim_timer = 0.34 if _slash_step == 3 else 0.26
+	else:
+		slash_anim_timer = 0.30 if _slash_step == 3 else 0.23
 
 
 func trigger_hit_punch(heavy: bool = false) -> void:
@@ -359,43 +369,155 @@ func update_animations(delta: float, is_moving: bool, is_sprinting: bool = false
 			_right_arm.rotation.x = lerpf(_right_arm.rotation.x, -0.25, smooth)
 			_right_arm.rotation.z = lerpf(_right_arm.rotation.z, 0.12, smooth)
 
-	# 3-Hit Combo Slash Animation + Dual-Layer Glowing Crescent Slash Arc
+	# Character-Exclusive 3-Hit Combo Animation + Tailored Crescent Slash Arc
 	if slash_anim_timer > 0.0:
-		var max_t := 0.30 if _slash_step == 3 else 0.25
+		var cid: String = String(GameState.player.get("char_id", "sakura"))
+		var max_t := 0.30 if _slash_step == 3 else 0.23
+		if cid == "raijin":
+			max_t = 0.21 if _slash_step == 3 else 0.155
+		elif cid == "kickboxer" or cid == "swordsman" or cid == "yukionna":
+			max_t = 0.34 if _slash_step == 3 else 0.27
 		var p := clampf(1.0 - (slash_anim_timer / max_t), 0.0, 1.0)
-		# Snappy ease-out swing curve (fast strike, crisp follow-through!)
-		var ease_p := 1.0 - pow(1.0 - p, 2.4)
-		if _right_arm != null:
+		var ease_p := 1.0 - pow(1.0 - p, 2.5)
+		var show_blade_arc := true
+		var arc_scale_mult := 1.0
+
+		if cid == "kickboxer":
+			# Authentic Martial-Arts Kicks: Left High Whip Kick -> Right Roundhouse -> 360° Leaping Hurricane Kick!
+			show_blade_arc = false
 			if _slash_step == 1:
-				_right_arm.rotation.x = lerpf(-1.75, 1.05, ease_p)
-				_right_arm.rotation.z = lerpf(0.75, -0.55, ease_p)
-				_body_pivot.rotation.y = lerpf(-0.42, 0.42, ease_p)
+				if _left_leg != null:
+					_left_leg.rotation.x = lerpf(0.45, -1.65, ease_p)
+				if _right_leg != null:
+					_right_leg.rotation.x = 0.28
+				_body_pivot.rotation.y = lerpf(0.35, -0.55, ease_p)
+				_body_pivot.rotation.x = -0.22 * sin(p * PI)
 			elif _slash_step == 2:
-				_right_arm.rotation.x = lerpf(0.85, -1.65, ease_p)
-				_right_arm.rotation.z = lerpf(-0.68, 0.78, ease_p)
-				_body_pivot.rotation.y = lerpf(0.42, -0.42, ease_p)
+				if _right_leg != null:
+					_right_leg.rotation.x = lerpf(0.50, -1.75, ease_p)
+				if _left_leg != null:
+					_left_leg.rotation.x = 0.30
+				_body_pivot.rotation.y = lerpf(-0.55, 0.72, ease_p)
+				_body_pivot.rotation.x = -0.26 * sin(p * PI)
 			else:
-				_right_arm.rotation.x = lerpf(-2.35, 1.35, ease_p)
-				_right_arm.rotation.z = 0.0
+				_body_pivot.position.y = sin(p * PI) * 1.15
 				_body_pivot.rotation.y = ease_p * TAU
+				_body_pivot.rotation.x = -0.34
+				if _right_leg != null:
+					_right_leg.rotation.x = -1.55
+				if _left_leg != null:
+					_left_leg.rotation.x = 0.65
+			if _left_arm != null:
+				_left_arm.rotation.x = -0.95
+			if _right_arm != null:
+				_right_arm.rotation.x = -0.95
+
+		elif cid == "yukionna":
+			# Graceful Arcane Sleeve-Cast: Left Sleeve Sweep -> Right Sleeve Flourish -> Floating Frost Lotus Bloom!
+			show_blade_arc = false
+			if _slash_step == 1:
+				if _left_arm != null:
+					_left_arm.rotation.x = lerpf(0.35, -1.55, ease_p)
+					_left_arm.rotation.z = lerpf(0.1, -0.75, ease_p)
+				_body_pivot.rotation.y = lerpf(-0.28, 0.25, ease_p)
+			elif _slash_step == 2:
+				if _right_arm != null:
+					_right_arm.rotation.x = lerpf(0.35, -1.65, ease_p)
+					_right_arm.rotation.z = lerpf(-0.1, 0.75, ease_p)
+				_body_pivot.rotation.y = lerpf(0.28, -0.25, ease_p)
+			else:
+				_body_pivot.position.y = sin(p * PI) * 0.58
+				_body_pivot.rotation.x = -0.14 * sin(p * PI)
+				if _left_arm != null:
+					_left_arm.rotation.x = lerpf(-0.4, -1.75, ease_p)
+					_left_arm.rotation.z = lerpf(0.1, -0.95, ease_p)
+				if _right_arm != null:
+					_right_arm.rotation.x = lerpf(-0.4, -1.75, ease_p)
+					_right_arm.rotation.z = lerpf(-0.1, 0.95, ease_p)
+
+		elif cid == "raijin":
+			# Hyper-Fast Low-Crouch Ninja Dual-Blade Flurry!
+			arc_scale_mult = 0.88
+			_body_pivot.rotation.x = 0.36
+			if _slash_step == 1:
+				if _left_arm != null:
+					_left_arm.rotation.x = lerpf(-1.6, 1.15, ease_p)
+				if _right_arm != null:
+					_right_arm.rotation.x = -0.85
+				_body_pivot.rotation.y = lerpf(0.55, -0.55, ease_p)
+			elif _slash_step == 2:
+				if _right_arm != null:
+					_right_arm.rotation.x = lerpf(-1.75, 1.25, ease_p)
+				if _left_arm != null:
+					_left_arm.rotation.x = -0.85
+				_body_pivot.rotation.y = lerpf(-0.55, 0.55, ease_p)
+			else:
+				if _right_arm != null:
+					_right_arm.rotation.x = lerpf(-2.1, 1.35, ease_p)
+				if _left_arm != null:
+					_left_arm.rotation.x = lerpf(-2.1, 1.35, ease_p)
+				_body_pivot.rotation.y = ease_p * TAU * 1.25
+
+		elif cid == "swordsman":
+			# Heavy Two-Handed Iaido Flame Katana
+			arc_scale_mult = 1.28
+			if _right_arm != null:
+				if _slash_step == 1:
+					_right_arm.rotation.x = lerpf(-2.05, 1.25, ease_p)
+					_right_arm.rotation.z = lerpf(0.85, -0.68, ease_p)
+					_body_pivot.rotation.y = lerpf(-0.58, 0.58, ease_p)
+				elif _slash_step == 2:
+					_right_arm.rotation.x = lerpf(1.05, -1.95, ease_p)
+					_right_arm.rotation.z = lerpf(-0.78, 0.88, ease_p)
+					_body_pivot.rotation.y = lerpf(0.58, -0.58, ease_p)
+				else:
+					_right_arm.rotation.x = lerpf(-2.55, 1.55, ease_p)
+					_right_arm.rotation.z = 0.0
+					_body_pivot.rotation.y = ease_p * TAU
+			if _left_arm != null:
+				_left_arm.rotation.x = -1.05
+
+		else:
+			# Sakura: Graceful Kagura Petal-Dance Blade + Light Finishing Hop
+			arc_scale_mult = 1.08
+			if _right_arm != null:
+				if _slash_step == 1:
+					_right_arm.rotation.x = lerpf(-1.75, 1.05, ease_p)
+					_right_arm.rotation.z = lerpf(0.75, -0.55, ease_p)
+					_body_pivot.rotation.y = lerpf(-0.45, 0.45, ease_p)
+				elif _slash_step == 2:
+					_right_arm.rotation.x = lerpf(0.85, -1.65, ease_p)
+					_right_arm.rotation.z = lerpf(-0.68, 0.78, ease_p)
+					_body_pivot.rotation.y = lerpf(0.45, -0.45, ease_p)
+				else:
+					_body_pivot.position.y = sin(p * PI) * 0.48
+					_right_arm.rotation.x = lerpf(-2.35, 1.35, ease_p)
+					_right_arm.rotation.z = 0.0
+					_body_pivot.rotation.y = ease_p * TAU
+
 		if _weapon_pivot != null:
-			_weapon_pivot.rotation.x = 1.75
+			_weapon_pivot.rotation.x = 1.75 if show_blade_arc else 0.85
 		if _slash_arc_mesh != null and _slash_arc_mat != null:
-			var arc_col := Color.html("#fbbf24") if _slash_step == 3 else _slash_base_color
-			var tilt_z := 0.38 if _slash_step == 1 else (-0.38 if _slash_step == 2 else 0.08)
-			var sc := (1.55 if _slash_step == 3 else 1.12) * (0.78 + ease_p * 0.62)
-			var alpha_val := clampf((1.0 - p) * 1.15, 0.0, 0.94)
-			_slash_arc_mesh.visible = true
-			_slash_arc_mesh.rotation.z = tilt_z
-			_slash_arc_mesh.rotation.y = ease_p * 3.4
-			_slash_arc_mesh.scale = Vector3(sc, 0.085, sc)
-			_slash_arc_mat.albedo_color = Color(arc_col.r, arc_col.g, arc_col.b, alpha_val)
-			if _slash_core_mesh != null and _slash_core_mat != null:
-				_slash_core_mesh.visible = true
-				_slash_core_mesh.rotation.z = tilt_z
-				_slash_core_mesh.rotation.y = ease_p * 3.4
-				_slash_core_mesh.scale = Vector3(sc * 1.03, 0.055, sc * 1.03)
-				_slash_core_mat.albedo_color = Color(1.0, 0.98, 0.92, clampf((1.0 - p * 1.25) * 0.98, 0.0, 0.98))
+			if show_blade_arc:
+				var arc_col := Color.html("#fbbf24") if _slash_step == 3 else _slash_base_color
+				var tilt_z := 0.38 if _slash_step == 1 else (-0.38 if _slash_step == 2 else 0.08)
+				var sc := (1.55 if _slash_step == 3 else 1.12) * arc_scale_mult * (0.78 + ease_p * 0.62)
+				var alpha_val := clampf((1.0 - p) * 1.15, 0.0, 0.94)
+				_slash_arc_mesh.visible = true
+				_slash_arc_mesh.rotation.z = tilt_z
+				_slash_arc_mesh.rotation.y = ease_p * 3.4
+				_slash_arc_mesh.scale = Vector3(sc, 0.085, sc)
+				_slash_arc_mat.albedo_color = Color(arc_col.r, arc_col.g, arc_col.b, alpha_val)
+				if _slash_core_mesh != null and _slash_core_mat != null:
+					_slash_core_mesh.visible = true
+					_slash_core_mesh.rotation.z = tilt_z
+					_slash_core_mesh.rotation.y = ease_p * 3.4
+					_slash_core_mesh.scale = Vector3(sc * 1.03, 0.055, sc * 1.03)
+					_slash_core_mat.albedo_color = Color(1.0, 0.98, 0.92, clampf((1.0 - p * 1.25) * 0.98, 0.0, 0.98))
+			else:
+				_slash_arc_mesh.visible = false
+				if _slash_core_mesh != null:
+					_slash_core_mesh.visible = false
 	else:
 		_body_pivot.rotation.y = lerpf(_body_pivot.rotation.y, 0.0, clampf(delta * 14.0, 0.0, 1.0))
 		if _weapon_pivot != null:

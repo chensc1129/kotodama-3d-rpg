@@ -59,6 +59,55 @@ func play_sfx(sfx_type: String) -> void:
 		"slash3":
 			_trigger_chord(["C5", "G5", "E6"], 0.16, 0.0, "tri", 0.28)
 			_trigger_noise(0.11, 0.0, 0.20, 8.5)
+		# === 5 Heroes Exclusive Attack SFX ===
+		"atk_sakura_1":
+			_trigger_chord(["A5", "E6"], 0.095, 0.0, "sine", 0.20)
+			_trigger_noise(0.06, 0.0, 0.10, 14.0)
+		"atk_sakura_2":
+			_trigger_chord(["B5", "E6"], 0.10, 0.0, "sine", 0.22)
+			_trigger_noise(0.07, 0.0, 0.12, 13.0)
+		"atk_sakura_3":
+			_trigger_chord(["E5", "A5", "B5", "E6"], 0.22, 0.0, "sine", 0.28)
+			_trigger_noise(0.12, 0.0, 0.15, 9.5)
+		"atk_kick_1":
+			_trigger_punch(220.0, 58.0, 0.11, 0.0, 0.34, "sine")
+			_trigger_noise(0.09, 0.0, 0.22, 10.5)
+		"atk_kick_2":
+			_trigger_punch(250.0, 52.0, 0.13, 0.0, 0.38, "sine")
+			_trigger_noise(0.10, 0.0, 0.25, 9.5)
+		"atk_kick_3":
+			_trigger_punch(310.0, 42.0, 0.20, 0.0, 0.48, "sine")
+			_trigger_punch(180.0, 65.0, 0.12, 0.02, 0.22, "square")
+			_trigger_noise(0.16, 0.0, 0.32, 7.5)
+		"atk_sword_1":
+			_trigger_punch(640.0, 220.0, 0.09, 0.0, 0.22, "tri")
+			_trigger_noise(0.085, 0.0, 0.20, 11.0)
+		"atk_sword_2":
+			_trigger_punch(740.0, 260.0, 0.10, 0.0, 0.24, "tri")
+			_trigger_noise(0.095, 0.0, 0.22, 10.0)
+		"atk_sword_3":
+			_trigger_punch(920.0, 180.0, 0.16, 0.0, 0.30, "tri")
+			_trigger_punch(190.0, 48.0, 0.18, 0.01, 0.34, "sine")
+			_trigger_noise(0.15, 0.0, 0.28, 7.5)
+		"atk_raijin_1":
+			_trigger_punch(1180.0, 460.0, 0.055, 0.0, 0.20, "square")
+			_trigger_noise(0.045, 0.0, 0.18, 18.0)
+		"atk_raijin_2":
+			_trigger_punch(1380.0, 540.0, 0.060, 0.0, 0.22, "square")
+			_trigger_noise(0.050, 0.0, 0.20, 17.0)
+		"atk_raijin_3":
+			_trigger_punch(1650.0, 340.0, 0.12, 0.0, 0.26, "square")
+			_trigger_chord(["G5", "D6", "E6"], 0.14, 0.01, "tri", 0.24)
+			_trigger_noise(0.095, 0.0, 0.26, 12.0)
+		"atk_yuki_1":
+			_trigger_chord(["C6", "E6"], 0.11, 0.0, "sine", 0.22)
+			_trigger_punch(1450.0, 880.0, 0.08, 0.0, 0.14, "sine")
+		"atk_yuki_2":
+			_trigger_chord(["D6", "E6"], 0.12, 0.0, "sine", 0.24)
+			_trigger_punch(1620.0, 960.0, 0.09, 0.0, 0.16, "sine")
+		"atk_yuki_3":
+			_trigger_chord(["G5", "C6", "D6", "E6"], 0.24, 0.0, "sine", 0.30)
+			_trigger_noise(0.11, 0.02, 0.18, 12.0)
 		"impact_light":
 			_trigger_punch(135.0, 52.0, 0.095, 0.0, 0.34, "sine")
 			_trigger_noise(0.060, 0.0, 0.24, 15.0)

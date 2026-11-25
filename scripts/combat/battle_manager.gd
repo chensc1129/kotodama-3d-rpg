@@ -276,6 +276,14 @@ func spawn_kotodama_vfx(world_pos: Vector3, word: Dictionary, is_perfect: bool =
 	vfx.setup(world_pos, word, is_perfect)
 
 
+func spawn_hero_attack_vfx(char_id: String, world_pos: Vector3, facing: float, step: int, reach: float) -> void:
+	if vfx_root == null:
+		return
+	var vfx := HeroAttackVfx3D.new()
+	vfx_root.add_child(vfx)
+	vfx.setup(char_id, world_pos, facing, step, reach)
+
+
 func trigger_hitstop(duration: float) -> void:
 	_hitstop_timer = maxf(_hitstop_timer, duration)
 
@@ -292,48 +300,81 @@ func perform_attack_a() -> void:
 	if not b["active"] or b["paused"] or float(b["atk_cooldown"]) > 0.0:
 		return
 
+	var char_cfg: Dictionary = GameData.get_character(GameState.player["char_id"])
+	var cid: String = String(char_cfg["id"])
+	var prof: Dictionary = char_cfg.get("attack_profile", {})
+	var reaches: Array = prof.get("reach", [4.35, 4.5, 5.4])
+	var lunges: Array = prof.get("lunge", [0.38, 0.42, 0.78])
+	var step_mults: Array = prof.get("step_mult", [1.0, 1.2, 1.55])
+
 	b["atk_step"] = (int(b["atk_step"]) % 3) + 1
-	b["atk_reset_timer"] = 1.2
-	b["atk_cooldown"] = 0.22
+	b["atk_reset_timer"] = 1.25
+	b["atk_cooldown"] = float(prof.get("cd", 0.22))
 	var step: int = int(b["atk_step"])
+	var idx: int = clampi(step - 1, 0, 2)
+	var reach: float = float(reaches[idx])
+	var lunge_dist: float = float(lunges[idx])
+	var step_mult: float = float(step_mults[idx])
+	var kb_mult: float = float(prof.get("kb_mult", 1.0))
+	var hitstop_mult: float = float(prof.get("hitstop_mult", 1.0))
+	var trauma_mult: float = float(prof.get("trauma_mult", 1.0))
+
 	attack_swung.emit(step)
+	var forward := Vector3(0.0, 0.0, 1.0)
 	if player != null:
 		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and camera_rig != null:
 			player.facing = camera_rig.get_aim_facing()
 		player.trigger_slash(step)
-		# Weighty forward combat lunge step toward slash/crosshair direction
-		var lunge_dist: float = 0.78 if step == 3 else 0.38
-		var forward := Vector3(sin(player.facing), 0.0, cos(player.facing))
+		forward = Vector3(sin(player.facing), 0.0, cos(player.facing)).normalized()
 		player.position += forward * lunge_dist
 		player.clamp_to_arena()
 
-	AudioManager.play_sfx("slash%d" % step)
+	var sfx_prefix: String = String(prof.get("sfx_prefix", "slash"))
+	AudioManager.play_sfx("%s_%d" % [sfx_prefix, step] if sfx_prefix != "slash" else ("slash%d" % step))
 
 	var stats := GameState.get_computed_stats()
 	var normal_lv: int = int(GameState.player["skills"].get("normal_a", 1))
 	var skill_mult: float = 1.0 + float(normal_lv - 1) * 0.14
-	var step_mult: float = 1.55 if step == 3 else (1.2 if step == 2 else 1.0)
-	var reach: float = 5.4 if step == 3 else 4.35
 	var sakura_mult: float = 1.25 if _in_sakura_buff else 1.0
 
-	var char_cfg: Dictionary = GameData.get_character(GameState.player["char_id"])
 	var vfx_color := Color.html("#fbbf24") if step == 3 else Color.html(char_cfg["color_primary"])
-	spawn_ring_vfx(player.position, vfx_color, reach, 0.28)
+	if player != null:
+		spawn_hero_attack_vfx(cid, player.position, player.facing, step, reach)
+		# Keep subtle ground pulse on finishers & heavy strikes
+		if step == 3 or cid == "kickboxer" or cid == "swordsman":
+			var ring_pos := player.position + (forward * (reach * 0.55) if (cid == "yukionna" and step == 3) else Vector3.ZERO)
+			spawn_ring_vfx(ring_pos, vfx_color, reach * (0.52 if cid == "yukionna" else 0.78), 0.28)
+		# Swing micro-impulse on heavy/fast heroes
+		if step == 3 and cid == "kickboxer":
+			_trigger_camera_impact(0.16, -1.2)
+		elif cid == "raijin":
+			_trigger_camera_impact(0.06, 0.8)
 
 	var hit_count: int = 0
 	var any_crit: bool = false
+	var crit_tag: String = String(prof.get("crit_tag", "あ!! 暴擊"))
+	var base_tag: String = String(prof.get("base_tag", "あ"))
+
 	for item in enemies.duplicate():
 		if not is_instance_valid(item):
 			continue
 		var en := item as Enemy3D
 		if en == null or en.dead:
 			continue
-		var flat_dist := Vector2(en.position.x - player.position.x, en.position.z - player.position.z).length()
+		var to_en := Vector2(en.position.x - player.position.x, en.position.z - player.position.z)
+		var flat_dist := to_en.length()
 		var dy := absf(en.position.y - player.position.y)
-		if flat_dist <= reach and dy <= 2.9:
+		# Yukionna's long-range ice darts focus in a generous forward arc (or full lotus burst on step 3!)
+		var in_range := flat_dist <= reach and dy <= 3.1
+		if in_range and cid == "yukionna" and flat_dist > 3.2:
+			var f2 := Vector2(forward.x, forward.z).normalized()
+			var dot_val := f2.dot(to_en.normalized())
+			if dot_val < (0.15 if step == 3 else 0.35):
+				in_range = false
+		if in_range:
 			hit_count += 1
 			var dmg := int(round(float(stats["atk"]) * skill_mult * step_mult * sakura_mult * (0.92 + randf() * 0.16)))
-			var tag := "あ!! 暴擊" if step == 3 else "あ"
+			var tag := crit_tag if step == 3 else base_tag
 			var is_crit := (step == 3)
 
 			# High-Ground Advantage (+20% damage when attacking from elevated terrain or mid-air!)
@@ -355,6 +396,18 @@ func perform_attack_a() -> void:
 			if en.shock_timer > 0.0:
 				dmg = int(round(float(dmg) * 1.25))
 
+			# Per-Hero 3rd-Hit Signature Micro-Effect!
+			if step == 3:
+				match cid:
+					"kickboxer":
+						en.stun_timer = maxf(en.stun_timer, 0.85)
+					"swordsman":
+						en.burn_timer = maxf(en.burn_timer, 2.4)
+					"raijin":
+						en.shock_timer = maxf(en.shock_timer, 2.2)
+					"yukionna":
+						en.freeze_timer = maxf(en.freeze_timer, 1.45)
+
 			if is_crit:
 				any_crit = true
 
@@ -365,15 +418,15 @@ func perform_attack_a() -> void:
 
 			# Impact hit sparks, white flash, squash recoil & stagger
 			var hit_pos := en.position + Vector3(0.0, 1.35 * en.scale.y, 0.0)
-			spawn_hit_spark(hit_pos, vfx_color, is_crit, 1.15 if is_crit else 0.92)
-			en.trigger_hit_react(push_dir, is_crit or step == 2)
+			spawn_hit_spark(hit_pos, vfx_color, is_crit, (1.22 if is_crit else 0.94) * clampf(trauma_mult, 0.85, 1.3))
+			en.trigger_hit_react(push_dir, is_crit or step == 2 or cid == "kickboxer")
 
-			var pop_color := Color.html("#fde047") if is_crit else Color.WHITE
+			var pop_color := Color.html("#fde047") if is_crit else Color.html(char_cfg["color_primary"]).lerp(Color.WHITE, 0.45)
 			damage_enemy(en, dmg, tag, pop_color)
 
-			# Knockback (if still alive)
+			# Hero-tuned Knockback (if still alive)
 			if is_instance_valid(en) and not en.dead and push_dir.length_squared() > 0.001:
-				var kb: float = (1.55 if is_crit else (0.72 if step == 2 else 0.48)) * (0.45 if en.is_boss else 1.0)
+				var kb: float = (1.55 if is_crit else (0.72 if step == 2 else 0.48)) * kb_mult * (0.45 if en.is_boss else 1.0)
 				en.position += push_dir * kb
 				en.clamp_to_arena()
 
@@ -381,21 +434,22 @@ func perform_attack_a() -> void:
 		hit_landed.emit(any_crit)
 		if any_crit:
 			AudioManager.play_sfx("impact_crit")
-			_trigger_camera_impact(0.48, -3.4)
-			trigger_hitstop(0.068)
+			_trigger_camera_impact(0.46 * trauma_mult, -3.2 * trauma_mult)
+			trigger_hitstop(0.066 * hitstop_mult)
 		elif step == 2 or hit_count >= 2:
 			AudioManager.play_sfx("impact_heavy")
-			_trigger_camera_impact(0.28, -1.6)
-			trigger_hitstop(0.038)
+			_trigger_camera_impact(0.26 * trauma_mult, -1.5 * trauma_mult)
+			trigger_hitstop(0.036 * hitstop_mult)
 		else:
 			AudioManager.play_sfx("impact_light")
-			_trigger_camera_impact(0.18, -0.9)
-			trigger_hitstop(0.026)
+			_trigger_camera_impact(0.17 * trauma_mult, -0.85 * trauma_mult)
+			trigger_hitstop(0.025 * hitstop_mult)
 
 		if player != null:
-			player.trigger_hit_punch(any_crit)
+			player.trigger_hit_punch(any_crit or cid == "kickboxer")
 
-		b["sp"] = minf(float(b["max_sp"]), float(b["sp"]) + 7.0 * float(hit_count))
+		var bonus_sp := 3.5 if (cid == "sakura" and step == 3) else 0.0
+		b["sp"] = minf(float(b["max_sp"]), float(b["sp"]) + 7.0 * float(hit_count) + bonus_sp)
 		b["combo"] = int(b["combo"]) + hit_count
 		b["combo_timer"] = 3.2
 

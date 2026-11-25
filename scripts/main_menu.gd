@@ -499,7 +499,8 @@ func refresh() -> void:
 		_hero_spotlight_title.text = "◆ 已選定：%s【%s】  ｜  專屬技（E）：%s %s（%s）" % [
 			cur_ch["name"], cur_ch["title"], cur_ch["sig_icon"], cur_ch["sig_name"], cur_ch["sig_key"]
 		]
-		_hero_spotlight_desc.text = String(cur_ch["desc"])
+		var style_txt: String = String(cur_ch.get("combat_style", ""))
+		_hero_spotlight_desc.text = "%s\n%s" % [style_txt, String(cur_ch["desc"])] if not style_txt.is_empty() else String(cur_ch["desc"])
 
 	# 2. Structured Stage Cards
 	if _stage_grid != null:
