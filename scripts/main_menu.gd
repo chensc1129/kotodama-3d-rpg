@@ -12,9 +12,11 @@ var _audio_btn: Button
 var _arpg_section_panel: PanelContainer
 var _arpg_progress_lbl: Label
 var _arpg_hero_hint_lbl: Label
+var _arpg_char_grid: GridContainer
 var _arpg_launch_btn: Button
 var _footer_arpg_btn: Button
 var _last_arena_mode: String = "normal"
+var _arena_char_id: String = "sakura"
 var _char_grid: GridContainer
 var _hero_spotlight_panel: PanelContainer
 var _hero_spotlight_icon: Label
@@ -40,6 +42,7 @@ func _ready() -> void:
 	GameState.reset_battle_state()
 	if not GameState.is_arpg_mode():
 		_last_arena_mode = String(GameState.player.get("mode", "normal"))
+	_arena_char_id = String(GameState.player.get("char_id", "sakura"))
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
 	GameState.state_changed.connect(refresh)
@@ -222,10 +225,14 @@ func _build_ui() -> void:
 	_arpg_section_panel.add_theme_stylebox_override("panel", UiStyle.make_accent_card("#071f1c", "#34d399", true, 18, 20, 14))
 	vbox.add_child(_arpg_section_panel)
 
+	var arpg_vbox := VBoxContainer.new()
+	arpg_vbox.add_theme_constant_override("separation", 10 if is_mob else 8)
+	_arpg_section_panel.add_child(arpg_vbox)
+
 	var arpg_row := HBoxContainer.new()
 	arpg_row.add_theme_constant_override("separation", 16)
 	arpg_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	_arpg_section_panel.add_child(arpg_row)
+	arpg_vbox.add_child(arpg_row)
 
 	var arpg_info := VBoxContainer.new()
 	arpg_info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -281,8 +288,17 @@ func _build_ui() -> void:
 	_arpg_launch_btn.pressed.connect(_on_start_arpg_pressed)
 	arpg_cta_col.add_child(_arpg_launch_btn)
 
-	# ==================== STEP 1: CHARACTERS ====================
-	vbox.add_child(_make_section_header("01", "選擇出戰 3D 劍士", "ARPG 物語冒險與 3D 道場共用目前出戰角色・E 專屬技・Q 詠唱日文奧義", "#fcd34d", is_mob))
+	# Dedicated ARPG Character Selector (Starts with 2 starter heroes; unlock more in Chapter 1!)
+	arpg_vbox.add_child(UiStyle.make_divider("#34d399", 0.25, 1))
+
+	_arpg_char_grid = GridContainer.new()
+	_arpg_char_grid.columns = 2 if is_mob else 5
+	_arpg_char_grid.add_theme_constant_override("h_separation", 8)
+	_arpg_char_grid.add_theme_constant_override("v_separation", 8)
+	arpg_vbox.add_child(_arpg_char_grid)
+
+	# ==================== STEP 1: ARENA DOJO CHARACTERS ====================
+	vbox.add_child(_make_section_header("01", "百鬼道場：選擇出戰 3D 劍士", "道場模式全 5 位劍士自由選用・E 專屬技・Q 詠唱日文奧義", "#fcd34d", is_mob))
 
 	_char_grid = GridContainer.new()
 	_char_grid.columns = 2 if is_mob else 5
@@ -509,8 +525,10 @@ func refresh() -> void:
 	if _name_input != null and not _name_input.has_focus():
 		_name_input.text = String(p["name"])
 
-	# Dedicated ARPG Adventure Section live status
-	var cur_ch: Dictionary = GameData.get_character(p["char_id"])
+	# Dedicated ARPG Adventure Section live status & 2-starter character roster
+	var arpg_cid: String = GameState.get_arpg_char_id()
+	var arpg_ch: Dictionary = GameData.get_character(arpg_cid)
+	var unlocked_arpg: Array[String] = GameState.get_arpg_unlocked_chars()
 	if _arpg_progress_lbl != null:
 		var cleared_cnt: int = GameState.get_arpg_quiz_cleared_count()
 		var ch1_done: bool = bool(p.get("arpg_ch1", {}).get("chapter_cleared", false))
@@ -520,15 +538,72 @@ func refresh() -> void:
 			else "📜 進度：日文試煉 %d/5" % cleared_cnt
 		)
 	if _arpg_hero_hint_lbl != null:
-		_arpg_hero_hint_lbl.text = "◆ 將使用目前選定劍士出征：%s %s（Lv.%d）" % [cur_ch["icon"], cur_ch["name"], int(p["level"])]
+		_arpg_hero_hint_lbl.text = "◆ ARPG 出戰角色（已解鎖 %d/5，初始開放 2 位）：%s %s（Lv.%d）" % [
+			unlocked_arpg.size(), arpg_ch["icon"], arpg_ch["name"], int(p["level"])
+		]
 
-	# 1. Structured Hero Cards + Spotlight
+	if _arpg_char_grid != null:
+		for c in _arpg_char_grid.get_children():
+			c.queue_free()
+		# Order starters first so the 2 initial unlocked heroes stand right up front
+		var arpg_order: Array[String] = ["sakura", "swordsman", "kickboxer", "raijin", "yukionna"]
+		for cid in arpg_order:
+			var ch: Dictionary = GameData.CHARACTERS[cid]
+			var is_unlocked: bool = GameState.is_arpg_char_unlocked(cid)
+			var selected: bool = is_unlocked and (arpg_cid == cid)
+			var accent_hex: String = "#34d399" if selected else (String(ch["color_primary"]) if is_unlocked else "#475569")
+			var bg_hex := "#0f332c" if selected else ("#0a1d24" if is_unlocked else "#0b111c")
+
+			var btn := Button.new()
+			btn.focus_mode = Control.FOCUS_NONE
+			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			btn.custom_minimum_size = Vector2(0, 86 if is_mob else 66)
+			UiStyle.apply_card_button(btn, bg_hex, accent_hex, selected, 14)
+			if not is_unlocked:
+				btn.modulate = Color(0.72, 0.76, 0.84, 0.85)
+
+			var pad := MarginContainer.new()
+			pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			pad.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			pad.add_theme_constant_override("margin_left", 10)
+			pad.add_theme_constant_override("margin_right", 8)
+			pad.add_theme_constant_override("margin_top", 6)
+			pad.add_theme_constant_override("margin_bottom", 6)
+			btn.add_child(pad)
+
+			var av := VBoxContainer.new()
+			av.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			av.alignment = BoxContainer.ALIGNMENT_CENTER
+			av.add_theme_constant_override("separation", 2)
+			pad.add_child(av)
+
+			var top_l := Label.new()
+			top_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			top_l.text = ("%s %s ✓" if selected else "%s %s") % [ch["icon"], ch["name"]] if is_unlocked else ("🔒 %s" % ch["name"])
+			top_l.add_theme_font_size_override("font_size", 17 if is_mob else 13)
+			top_l.add_theme_color_override("font_color", Color.html("#fef3c7" if selected else ("#e2e8f0" if is_unlocked else "#94a3b8")))
+			av.add_child(top_l)
+
+			var sub_l := Label.new()
+			sub_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			sub_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			sub_l.text = ("%s %s" % [ch["sig_icon"], ch["sig_name"]]) if is_unlocked else GameState.get_arpg_char_unlock_hint(cid)
+			sub_l.add_theme_font_size_override("font_size", 12 if is_mob else 10)
+			sub_l.add_theme_color_override("font_color", Color.html("#6ee7b7" if is_unlocked else "#64748b"))
+			av.add_child(sub_l)
+
+			var pick_arpg: String = cid
+			btn.pressed.connect(func() -> void: GameState.set_arpg_character(pick_arpg))
+			_arpg_char_grid.add_child(btn)
+
+	# 1. Structured Arena Dojo Hero Cards + Spotlight (All 5 heroes freely playable in Dojo!)
+	var cur_ch: Dictionary = GameData.get_character(_arena_char_id)
 	if _char_grid != null:
 		for c in _char_grid.get_children():
 			c.queue_free()
 		for cid in GameData.CHARACTER_ORDER:
 			var ch: Dictionary = GameData.CHARACTERS[cid]
-			var selected: bool = p["char_id"] == cid
+			var selected: bool = _arena_char_id == cid
 			var accent_hex: String = String(ch["color_primary"])
 			var bg_hex := "#1e162e" if selected else "#0c1326"
 
@@ -598,7 +673,10 @@ func refresh() -> void:
 			cv.add_child(st_lbl)
 
 			var pick_id: String = cid
-			btn.pressed.connect(func() -> void: GameState.set_character(pick_id))
+			btn.pressed.connect(func() -> void:
+				_arena_char_id = pick_id
+				GameState.set_character(pick_id)
+			)
 			_char_grid.add_child(btn)
 
 	# Update Selected Hero Spotlight Banner
@@ -606,7 +684,7 @@ func refresh() -> void:
 		var c_hex: String = String(cur_ch["color_primary"])
 		_hero_spotlight_panel.add_theme_stylebox_override("panel", UiStyle.make_accent_card("#0e152b", c_hex, true, 16, 18, 11))
 		_hero_spotlight_icon.text = cur_ch["icon"]
-		_hero_spotlight_title.text = "◆ 已選定：%s【%s】  ｜  專屬技（E）：%s %s（%s）" % [
+		_hero_spotlight_title.text = "◆ 道場選定：%s【%s】  ｜  專屬技（E）：%s %s（%s）" % [
 			cur_ch["name"], cur_ch["title"], cur_ch["sig_icon"], cur_ch["sig_name"], cur_ch["sig_key"]
 		]
 		var style_txt: String = String(cur_ch.get("combat_style", ""))
@@ -726,6 +804,7 @@ func refresh() -> void:
 func _on_start_arpg_pressed() -> void:
 	if _is_loading_game:
 		return
+	GameState.set_character(GameState.get_arpg_char_id())
 	GameState.set_mode("arpg_story")
 	if _load_lbl != null:
 		_load_lbl.text = "⛩️ 正在前往「第一章：櫻花之里」和風開放冒險世界...\n請稍候片刻"
@@ -735,6 +814,7 @@ func _on_start_arpg_pressed() -> void:
 func _on_start_battle_pressed() -> void:
 	if _is_loading_game:
 		return
+	GameState.set_character(_arena_char_id)
 	if GameState.is_arpg_mode():
 		GameState.set_mode(_last_arena_mode if not _last_arena_mode.is_empty() else "normal")
 	if _load_lbl != null:

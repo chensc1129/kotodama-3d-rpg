@@ -15,6 +15,17 @@ const CHARACTER_ORDER: Array[String] = [
 	"yukionna",
 ]
 
+const ARPG_STARTER_CHARACTERS: Array[String] = [
+	"sakura",
+	"swordsman",
+]
+
+const ARPG_CHARACTER_UNLOCKS: Dictionary = {
+	"kickboxer": {"quizzes": 2, "chapter_clear": false, "hint": "完成 2 位日文試煉 NPC 解鎖"},
+	"raijin": {"quizzes": 4, "chapter_clear": false, "hint": "完成 4 位日文試煉 NPC 解鎖"},
+	"yukionna": {"quizzes": 0, "chapter_clear": true, "hint": "通關第一章主線解鎖"},
+}
+
 const CHARACTERS: Dictionary = {
 	"sakura": {
 		"id": "sakura",

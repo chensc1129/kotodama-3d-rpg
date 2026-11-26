@@ -12,6 +12,7 @@ const SAVE_PATH: String = "user://kotodama_3d_rpg_v2_save.json"
 var player: Dictionary = {
 	"name": "櫻花見習生",
 	"char_id": "sakura",
+	"arpg_char_id": "sakura",
 	"stage_id": "sakura_shrine",
 	"mode": "normal",
 	"level": 1,
@@ -97,7 +98,7 @@ func load_save_data() -> void:
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return
 
-	for key in ["name", "char_id", "stage_id", "mode", "active_shikigami"]:
+	for key in ["name", "char_id", "arpg_char_id", "stage_id", "mode", "active_shikigami"]:
 		if parsed.has(key) and typeof(parsed[key]) == TYPE_STRING:
 			player[key] = parsed[key]
 
@@ -149,6 +150,9 @@ func load_save_data() -> void:
 			"quiz_cleared_npcs": cleared_npcs,
 			"chapter_cleared": bool(ch1_in.get("chapter_cleared", false)),
 		}
+
+	if not is_arpg_char_unlocked(String(player.get("arpg_char_id", "sakura"))):
+		player["arpg_char_id"] = GameData.ARPG_STARTER_CHARACTERS[0]
 
 	var stats := get_computed_stats()
 	battle["max_hp"] = stats["max_hp"]
@@ -234,6 +238,7 @@ func claim_arpg_npc_reward(npc_id: String, reward: Dictionary, first_clear: bool
 		player["arpg_ch1"] = {"quiz_cleared_npcs": [], "chapter_cleared": false}
 	var ch1: Dictionary = player["arpg_ch1"]
 	var arr: Array = ch1.get("quiz_cleared_npcs", [])
+	var prev_unlocked := get_arpg_unlocked_chars()
 	if first_clear:
 		if not arr.has(npc_id):
 			arr.append(npc_id)
@@ -267,6 +272,62 @@ func claim_arpg_npc_reward(npc_id: String, reward: Dictionary, first_clear: bool
 		battle["sp"] = float(battle["max_sp"])
 	save_game_data()
 	state_changed.emit()
+
+	if first_clear:
+		var now_unlocked := get_arpg_unlocked_chars()
+		for cid in now_unlocked:
+			if not prev_unlocked.has(cid):
+				var ch_cfg := GameData.get_character(cid)
+				toast_requested.emit("🎉 新 ARPG 夥伴解鎖！%s %s 已可在 RPG 專區出戰！" % [ch_cfg["icon"], ch_cfg["name"]])
+
+
+func is_arpg_char_unlocked(char_id: String) -> bool:
+	if GameData.ARPG_STARTER_CHARACTERS.has(char_id):
+		return true
+	if not GameData.ARPG_CHARACTER_UNLOCKS.has(char_id):
+		return false
+	var rule: Dictionary = GameData.ARPG_CHARACTER_UNLOCKS[char_id]
+	var req_q: int = int(rule.get("quizzes", 0))
+	var req_clear: bool = bool(rule.get("chapter_clear", false))
+	var ch1: Dictionary = player.get("arpg_ch1", {})
+	var cleared_ch1: bool = bool(ch1.get("chapter_cleared", false))
+	if req_clear:
+		return cleared_ch1
+	return get_arpg_quiz_cleared_count() >= req_q
+
+
+func get_arpg_unlocked_chars() -> Array[String]:
+	var res: Array[String] = []
+	for cid in GameData.CHARACTER_ORDER:
+		if is_arpg_char_unlocked(cid):
+			res.append(cid)
+	return res
+
+
+func get_arpg_char_unlock_hint(char_id: String) -> String:
+	if GameData.ARPG_CHARACTER_UNLOCKS.has(char_id):
+		return String(GameData.ARPG_CHARACTER_UNLOCKS[char_id].get("hint", "推進 ARPG 劇情解鎖"))
+	return ""
+
+
+func get_arpg_char_id() -> String:
+	var cid: String = String(player.get("arpg_char_id", "sakura"))
+	if is_arpg_char_unlocked(cid):
+		return cid
+	return GameData.ARPG_STARTER_CHARACTERS[0]
+
+
+func set_arpg_character(char_id: String) -> bool:
+	if not GameData.CHARACTERS.has(char_id):
+		return false
+	if not is_arpg_char_unlocked(char_id):
+		var ch_cfg := GameData.get_character(char_id)
+		toast_requested.emit("🔒 %s 尚未在 ARPG 解鎖（%s）" % [ch_cfg["name"], get_arpg_char_unlock_hint(char_id)])
+		return false
+	player["arpg_char_id"] = char_id
+	save_game_data()
+	state_changed.emit()
+	return true
 
 
 func is_hard_mode() -> bool:
