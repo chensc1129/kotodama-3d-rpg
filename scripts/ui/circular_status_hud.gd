@@ -28,6 +28,7 @@ var _lv_lbl: Label
 var _sta_lbl: Label
 var _info_box: VBoxContainer
 var _name_lbl: Label
+var _stats_row: HBoxContainer
 var _hp_num_lbl: Label
 var _sp_num_lbl: Label
 
@@ -72,25 +73,30 @@ func _build_labels() -> void:
 	UiStyle.style_label_shadow(_name_lbl, 0.80, 1)
 	_info_box.add_child(_name_lbl)
 
+	_stats_row = HBoxContainer.new()
+	_stats_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stats_row.add_theme_constant_override("separation", 10)
+	_info_box.add_child(_stats_row)
+
 	_hp_num_lbl = Label.new()
 	_hp_num_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hp_num_lbl.add_theme_color_override("font_color", Color.html("#86efac"))
 	UiStyle.style_label_shadow(_hp_num_lbl, 0.78, 1)
-	_info_box.add_child(_hp_num_lbl)
+	_stats_row.add_child(_hp_num_lbl)
 
 	_sp_num_lbl = Label.new()
 	_sp_num_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_sp_num_lbl.add_theme_color_override("font_color", Color.html("#7dd3fc"))
 	UiStyle.style_label_shadow(_sp_num_lbl, 0.78, 1)
-	_info_box.add_child(_sp_num_lbl)
+	_stats_row.add_child(_sp_num_lbl)
 
 
 func set_compact(compact: bool) -> void:
 	is_compact = compact
-	var main_r := 48.0 if compact else 58.0
-	var sat_r := 28.0 if compact else 33.0
-	var total_w := 280.0 if compact else 326.0
-	var total_h := 116.0 if compact else 136.0
+	var main_r := 46.0 if compact else 58.0
+	var sat_r := 25.0 if compact else 33.0
+	var total_w := 288.0 if compact else 336.0
+	var total_h := 112.0 if compact else 136.0
 	custom_minimum_size = Vector2(total_w, total_h)
 	size = custom_minimum_size
 
@@ -99,21 +105,21 @@ func set_compact(compact: bool) -> void:
 
 	_icon_lbl.position = mc - Vector2(28, 28)
 	_icon_lbl.size = Vector2(56, 56)
-	_icon_lbl.add_theme_font_size_override("font_size", 28 if compact else 34)
+	_icon_lbl.add_theme_font_size_override("font_size", 26 if compact else 34)
 
-	_lv_lbl.position = Vector2(mc.x - 32.0, mc.y + main_r - 17.0)
+	_lv_lbl.position = Vector2(mc.x - 32.0, mc.y + main_r - 16.0)
 	_lv_lbl.size = Vector2(64, 20)
-	_lv_lbl.add_theme_font_size_override("font_size", 12 if compact else 13)
+	_lv_lbl.add_theme_font_size_override("font_size", 11 if compact else 13)
 
 	_sta_lbl.position = sc - Vector2(sat_r, sat_r)
 	_sta_lbl.size = Vector2(sat_r * 2.0, sat_r * 2.0)
-	_sta_lbl.add_theme_font_size_override("font_size", 11 if compact else 12)
+	_sta_lbl.add_theme_font_size_override("font_size", 10 if compact else 12)
 
-	_info_box.position = Vector2(mc.x + main_r + 14.0, 12.0 if compact else 14.0)
-	_info_box.size = Vector2(150.0, 62.0)
-	_name_lbl.add_theme_font_size_override("font_size", 14 if compact else 13)
-	_hp_num_lbl.add_theme_font_size_override("font_size", 13 if compact else 12)
-	_sp_num_lbl.add_theme_font_size_override("font_size", 13 if compact else 12)
+	_info_box.position = Vector2(mc.x + main_r + 10.0, 6.0 if compact else 12.0)
+	_info_box.size = Vector2(180.0, 44.0)
+	_name_lbl.add_theme_font_size_override("font_size", 13 if compact else 13)
+	_hp_num_lbl.add_theme_font_size_override("font_size", 12 if compact else 12)
+	_sp_num_lbl.add_theme_font_size_override("font_size", 12 if compact else 12)
 	queue_redraw()
 
 
@@ -174,11 +180,11 @@ func update_stats(
 
 
 func _main_center() -> Vector2:
-	return Vector2(56.0, 58.0) if is_compact else Vector2(66.0, 68.0)
+	return Vector2(54.0, 56.0) if is_compact else Vector2(66.0, 68.0)
 
 
 func _sat_center() -> Vector2:
-	return Vector2(142.0, 84.0) if is_compact else Vector2(166.0, 98.0)
+	return Vector2(134.0, 82.0) if is_compact else Vector2(166.0, 98.0)
 
 
 var _pulse_redraw_accum: float = 0.0
@@ -210,8 +216,8 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	var mc := _main_center()
 	var sc := _sat_center()
-	var main_r := 48.0 if is_compact else 58.0
-	var sat_r := 28.0 if is_compact else 33.0
+	var main_r := 46.0 if is_compact else 58.0
+	var sat_r := 25.0 if is_compact else 33.0
 	var seg_main := 28
 	var seg_sub := 24
 

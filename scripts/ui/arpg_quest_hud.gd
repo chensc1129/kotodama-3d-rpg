@@ -1,8 +1,9 @@
 class_name ArpgQuestHud
 extends Control
-## Lightweight Wafuu Glass quest tracker & floating NPC interaction prompt for
-## Chapter 1 Japanese ARPG Adventure Mode. Responsive across desktop and mobile
-## without overlapping the circular status HUD, virtual joystick, or action orbs.
+## Sleek, collapsible Wafuu Glass quest tracker & floating NPC interaction prompt for
+## Chapter 1 Japanese ARPG Adventure Mode.
+## Anchored cleanly in the top-left below the status cluster on both desktop and mobile
+## so the center 3D viewport and player character remain 100% unobstructed.
 
 signal interact_pressed
 
@@ -12,13 +13,16 @@ var _prompt_visible: bool = false
 var _prompt_npc_name: String = ""
 var _prompt_hint_tag: String = ""
 var _pulse_elapsed: float = 0.0
+var _desc_expanded: bool = false
+var _last_quest_desc: String = ""
 
 # Quest tracker nodes
-var _quest_anchor: Control
 var _quest_panel: PanelContainer
 var _zone_trial_lbl: Label
+var _expand_btn: Button
 var _quest_title_lbl: Label
 var _quest_compass_lbl: Label
+var _quest_desc_lbl: Label
 
 # Bottom-center NPC interact prompt nodes
 var _interact_holder: CenterContainer
@@ -29,6 +33,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_is_mobile = UiStyle.is_mobile_device()
+	_desc_expanded = not _is_mobile
 	_build_ui()
 	_apply_responsive_layout()
 	set_arpg_visible(false)
@@ -37,34 +42,60 @@ func _ready() -> void:
 func _input(event: InputEvent) -> void:
 	if not _is_mobile and event is InputEventScreenTouch:
 		_is_mobile = true
+		_desc_expanded = false
 		_apply_responsive_layout()
+		_refresh_desc_visibility()
 		_refresh_interact_label()
 
 
 func _build_ui() -> void:
-	# ==================== QUEST TRACKER PANEL ====================
-	_quest_anchor = Control.new()
-	_quest_anchor.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_quest_anchor)
-
+	# ==================== COMPACT TOP-LEFT QUEST TRACKER ====================
 	_quest_panel = PanelContainer.new()
 	_quest_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_quest_panel.add_theme_stylebox_override("panel", UiStyle.make_accent_card("#090f1f", "#34d399", false, 16, 15, 9))
-	_quest_anchor.add_child(_quest_panel)
+	_quest_panel.anchor_left = 0.0
+	_quest_panel.anchor_right = 0.0
+	_quest_panel.anchor_top = 0.0
+	_quest_panel.anchor_bottom = 0.0
+	_quest_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_quest_panel.add_theme_stylebox_override("panel", UiStyle.make_accent_card("#090f1f", "#34d399", false, 14, 12, 8))
+	add_child(_quest_panel)
 
 	var q_vbox := VBoxContainer.new()
 	q_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	q_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	q_vbox.add_theme_constant_override("separation", 3)
 	_quest_panel.add_child(q_vbox)
 
+	var header_row := HBoxContainer.new()
+	header_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header_row.add_theme_constant_override("separation", 6)
+	q_vbox.add_child(header_row)
+
 	_zone_trial_lbl = Label.new()
 	_zone_trial_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_zone_trial_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_zone_trial_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_zone_trial_lbl.add_theme_color_override("font_color", Color.html("#6ee7b7"))
-	_zone_trial_lbl.text = "📍 櫻花村廣場  ｜  🇯🇵 日文試煉 0/5"
-	q_vbox.add_child(_zone_trial_lbl)
+	_zone_trial_lbl.text = "📍 櫻花村廣場 · 試煉 0/5"
+	header_row.add_child(_zone_trial_lbl)
+
+	_expand_btn = Button.new()
+	_expand_btn.focus_mode = Control.FOCUS_NONE
+	_expand_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	_expand_btn.text = "▼"
+	var eb_n := UiStyle.make_panel("#0f1c2e", 0.88, "#34d399", 0.55, 8, 1, 6, 1, 0)
+	var eb_h := UiStyle.make_panel("#16304a", 0.96, "#6ee7b7", 0.95, 8, 1, 6, 1, 0)
+	_expand_btn.add_theme_stylebox_override("normal", eb_n)
+	_expand_btn.add_theme_stylebox_override("hover", eb_h)
+	_expand_btn.add_theme_stylebox_override("pressed", eb_h)
+	_expand_btn.add_theme_color_override("font_color", Color.html("#a7f3d0"))
+	_expand_btn.pressed.connect(_toggle_desc_expanded)
+	header_row.add_child(_expand_btn)
 
 	_quest_title_lbl = Label.new()
 	_quest_title_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_quest_title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_quest_title_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_quest_title_lbl.add_theme_color_override("font_color", Color.html("#fef3c7"))
 	UiStyle.style_label_shadow(_quest_title_lbl, 0.78)
 	_quest_title_lbl.text = "📜 第一章：與巫女美桜對話"
@@ -72,10 +103,19 @@ func _build_ui() -> void:
 
 	_quest_compass_lbl = Label.new()
 	_quest_compass_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_quest_compass_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_quest_compass_lbl.add_theme_color_override("font_color", Color.html("#bae6fd"))
+	_quest_compass_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_quest_compass_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_quest_compass_lbl.add_theme_color_override("font_color", Color.html("#7dd3fc"))
 	_quest_compass_lbl.text = "🧭 前方 12m（巫女・美桜）"
 	q_vbox.add_child(_quest_compass_lbl)
+
+	_quest_desc_lbl = Label.new()
+	_quest_desc_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_quest_desc_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_quest_desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_quest_desc_lbl.add_theme_color_override("font_color", Color.html("#cbd5e1"))
+	_quest_desc_lbl.visible = false
+	q_vbox.add_child(_quest_desc_lbl)
 
 	# ==================== FLOATING NPC INTERACT PROMPT ====================
 	_interact_holder = CenterContainer.new()
@@ -90,69 +130,83 @@ func _build_ui() -> void:
 	_interact_btn = Button.new()
 	_interact_btn.focus_mode = Control.FOCUS_NONE
 	_interact_btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	UiStyle.apply_button(_interact_btn, "#064e3b", "#fde047", "#fef9c3", 26, 2, 0.96)
+	UiStyle.apply_button(_interact_btn, "#064e3b", "#fde047", "#fef9c3", 24, 2, 0.96)
 	_interact_btn.pressed.connect(func() -> void: interact_pressed.emit())
 	_interact_holder.add_child(_interact_btn)
 
 
+func _toggle_desc_expanded() -> void:
+	_desc_expanded = not _desc_expanded
+	_refresh_desc_visibility()
+
+
+func _refresh_desc_visibility() -> void:
+	if _quest_desc_lbl == null or _expand_btn == null:
+		return
+	var show_desc: bool = _desc_expanded and not _last_quest_desc.is_empty()
+	_quest_desc_lbl.visible = show_desc
+	_expand_btn.text = "▲" if _desc_expanded else "▼"
+	call_deferred("_fit_quest_panel")
+
+
+func _fit_quest_panel() -> void:
+	if _quest_panel == null or not is_instance_valid(_quest_panel):
+		return
+	var target_w: float = 316.0 if _is_mobile else 334.0
+	_quest_panel.custom_minimum_size = Vector2(target_w, 0.0)
+	_quest_panel.size = Vector2(target_w, 0.0)
+	var min_sz: Vector2 = _quest_panel.get_combined_minimum_size()
+	_quest_panel.size = Vector2(target_w, min_sz.y)
+
+
 func _apply_responsive_layout() -> void:
-	if _quest_anchor == null or _quest_panel == null or _interact_holder == null:
+	if _quest_panel == null or _interact_holder == null:
 		return
 
 	if _is_mobile:
-		# Compact top-center pill at offset_top = 96 so it never overlaps circular HUD or joystick
-		_quest_anchor.anchor_left = 0.5
-		_quest_anchor.anchor_right = 0.5
-		_quest_anchor.anchor_top = 0.0
-		_quest_anchor.anchor_bottom = 0.0
-		_quest_anchor.offset_left = -215.0
-		_quest_anchor.offset_right = 215.0
-		_quest_anchor.offset_top = 96.0
-		_quest_anchor.offset_bottom = 184.0
+		# Sleek top-left tracker cleanly tucked below CircularStatusHud — NEVER blocking center viewport!
+		var w: float = 316.0
+		_quest_panel.position = Vector2(18.0, 128.0)
+		_quest_panel.custom_minimum_size = Vector2(w, 0.0)
+		_quest_panel.add_theme_stylebox_override("panel", UiStyle.make_accent_card("#090f1f", "#34d399", false, 14, 12, 7))
 
-		_quest_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-		_quest_panel.custom_minimum_size = Vector2(430.0, 0.0)
-		_quest_panel.add_theme_stylebox_override("panel", UiStyle.make_accent_card("#090f1f", "#34d399", false, 18, 14, 7))
+		_zone_trial_lbl.add_theme_font_size_override("font_size", 13)
+		_quest_title_lbl.add_theme_font_size_override("font_size", 14)
+		_quest_compass_lbl.add_theme_font_size_override("font_size", 13)
+		_quest_desc_lbl.add_theme_font_size_override("font_size", 12)
+		_quest_desc_lbl.custom_minimum_size = Vector2(w - 28.0, 0.0)
 
-		_zone_trial_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_quest_title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_quest_compass_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_zone_trial_lbl.add_theme_font_size_override("font_size", 14)
-		_quest_title_lbl.add_theme_font_size_override("font_size", 16)
-		_quest_compass_lbl.add_theme_font_size_override("font_size", 14)
+		_expand_btn.custom_minimum_size = Vector2(30.0, 24.0)
+		_expand_btn.add_theme_font_size_override("font_size", 11)
 
-		# Interact prompt sits cleanly above mobile controls
-		_interact_holder.offset_top = -256.0
-		_interact_holder.offset_bottom = -180.0
-		_interact_btn.custom_minimum_size = Vector2(360.0, 64.0)
-		_interact_btn.add_theme_font_size_override("font_size", 21)
+		# Interact prompt sits cleanly centered in the open bottom lane between joystick & skill orbs
+		_interact_holder.offset_top = -178.0
+		_interact_holder.offset_bottom = -114.0
+		_interact_btn.custom_minimum_size = Vector2(330.0, 58.0)
+		_interact_btn.add_theme_font_size_override("font_size", 19)
 	else:
 		# Top-left cleanly below the stage card
-		_quest_anchor.anchor_left = 0.0
-		_quest_anchor.anchor_right = 0.0
-		_quest_anchor.anchor_top = 0.0
-		_quest_anchor.anchor_bottom = 0.0
-		_quest_anchor.offset_left = 18.0
-		_quest_anchor.offset_right = 370.0
-		_quest_anchor.offset_top = 112.0
-		_quest_anchor.offset_bottom = 224.0
+		var w: float = 334.0
+		_quest_panel.position = Vector2(18.0, 112.0)
+		_quest_panel.custom_minimum_size = Vector2(w, 0.0)
+		_quest_panel.add_theme_stylebox_override("panel", UiStyle.make_accent_card("#090f1f", "#34d399", false, 14, 14, 8))
 
-		_quest_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-		_quest_panel.custom_minimum_size = Vector2(330.0, 0.0)
-		_quest_panel.add_theme_stylebox_override("panel", UiStyle.make_accent_card("#090f1f", "#34d399", false, 16, 15, 9))
-
-		_zone_trial_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		_quest_title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		_quest_compass_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_zone_trial_lbl.add_theme_font_size_override("font_size", 12)
-		_quest_title_lbl.add_theme_font_size_override("font_size", 15)
+		_quest_title_lbl.add_theme_font_size_override("font_size", 14)
 		_quest_compass_lbl.add_theme_font_size_override("font_size", 13)
+		_quest_desc_lbl.add_theme_font_size_override("font_size", 12)
+		_quest_desc_lbl.custom_minimum_size = Vector2(w - 30.0, 0.0)
+
+		_expand_btn.custom_minimum_size = Vector2(26.0, 22.0)
+		_expand_btn.add_theme_font_size_override("font_size", 10)
 
 		# Desktop bottom-center interact prompt
-		_interact_holder.offset_top = -152.0
-		_interact_holder.offset_bottom = -95.0
-		_interact_btn.custom_minimum_size = Vector2(300.0, 48.0)
-		_interact_btn.add_theme_font_size_override("font_size", 16)
+		_interact_holder.offset_top = -138.0
+		_interact_holder.offset_bottom = -86.0
+		_interact_btn.custom_minimum_size = Vector2(296.0, 46.0)
+		_interact_btn.add_theme_font_size_override("font_size", 15)
+
+	_refresh_desc_visibility()
 
 
 # ==================== PUBLIC API ====================
@@ -162,6 +216,8 @@ func set_arpg_visible(enabled: bool) -> void:
 	visible = enabled
 	if _interact_holder != null:
 		_interact_holder.visible = enabled and _prompt_visible
+	if enabled:
+		call_deferred("_fit_quest_panel")
 
 
 func update_quest(
@@ -172,17 +228,26 @@ func update_quest(
 	quiz_done: int,
 	quiz_total: int
 ) -> void:
+	var changed_layout: bool = false
 	if _zone_trial_lbl != null:
-		_zone_trial_lbl.text = "📍 %s  ｜  🇯🇵 日文試煉 %d/%d" % [zone_name, quiz_done, quiz_total]
+		var zt := "📍 %s · 試煉 %d/%d" % [zone_name, quiz_done, quiz_total]
+		if _zone_trial_lbl.text != zt:
+			_zone_trial_lbl.text = zt
 	if _quest_title_lbl != null:
-		_quest_title_lbl.text = "📜 %s" % quest_title if not quest_title.begins_with("📜") else quest_title
+		var qt := "📜 %s" % quest_title if not quest_title.begins_with("📜") else quest_title
+		if _quest_title_lbl.text != qt:
+			_quest_title_lbl.text = qt
 	if _quest_compass_lbl != null:
-		var lines: Array[String] = []
-		if not quest_desc.is_empty():
-			lines.append(quest_desc)
-		if not compass_text.is_empty():
-			lines.append(compass_text if compass_text.begins_with("🧭") else "🧭 %s" % compass_text)
-		_quest_compass_lbl.text = "  ｜  ".join(lines) if (_is_mobile and lines.size() > 1) else "\n".join(lines)
+		var ct := compass_text if compass_text.begins_with("🧭") else ("🧭 %s" % compass_text if not compass_text.is_empty() else "")
+		if _quest_compass_lbl.text != ct:
+			_quest_compass_lbl.text = ct
+	if _last_quest_desc != quest_desc:
+		_last_quest_desc = quest_desc
+		if _quest_desc_lbl != null:
+			_quest_desc_lbl.text = quest_desc
+		changed_layout = true
+	if changed_layout:
+		_refresh_desc_visibility()
 
 
 func set_interact_prompt(visible_flag: bool, npc_name: String, hint_tag: String) -> void:

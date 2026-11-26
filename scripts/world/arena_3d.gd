@@ -729,14 +729,10 @@ func _build_maple_temple_props(_ring_col: Color) -> void:
 	]:
 		_add_mossy_boulder(Vector3(bp.x, get_base_terrain_height(bp.x, bp.y), bp.y), 1.55)
 
-	# Perimeter Tall Bamboo Groves (batched into 1 MultiMeshInstance3D = 1 draw call!)
-	var bamboo_mat := StandardMaterial3D.new()
-	bamboo_mat.albedo_color = Color.html("#15803d")
-	bamboo_mat.roughness = 0.45
-	var stalk_mesh := CylinderMesh.new()
-	stalk_mesh.top_radius = 0.16; stalk_mesh.bottom_radius = 0.22; stalk_mesh.height = 10.5
-	stalk_mesh.radial_segments = 7; stalk_mesh.rings = 1
-	stalk_mesh.material = bamboo_mat
+	# Perimeter Tall Realistic Segmented Bamboo Groves (batched into 1 MultiMeshInstance3D = 1 draw call!)
+	var is_mob_bm := UiStyle.is_mobile_device()
+	var stalk_mesh := WafuuModels3D.make_realistic_bamboo_mesh(is_mob_bm)
+	stalk_mesh.surface_set_material(0, WafuuModels3D.make_wafuu_mat(5, is_mob_bm, 0.44, 0.04))
 	var bamboo_xforms: Array[Transform3D] = []
 	for i in range(22):
 		var ang := (float(i) / 22.0) * TAU + 0.12
@@ -746,8 +742,8 @@ func _build_maple_temple_props(_ring_col: Color) -> void:
 		var bx := cos(ang) * dist; var bz := sin(ang) * dist
 		var by := get_base_terrain_height(bx, bz)
 		for offset: Vector2 in [Vector2(0.0, 0.0), Vector2(0.75, 0.55), Vector2(-0.65, 0.75)]:
-			var basis := Basis.from_euler(Vector3(0.0, 0.0, sin(float(i) + offset.x) * 0.06))
-			bamboo_xforms.append(Transform3D(basis, Vector3(bx + offset.x, by + 5.0, bz + offset.y)))
+			var basis := Basis.from_euler(Vector3(0.0, float(i) * 0.7 + offset.x, sin(float(i) + offset.x) * 0.06))
+			bamboo_xforms.append(Transform3D(basis, Vector3(bx + offset.x, by - 0.12, bz + offset.y)))
 	_add_batched_multimesh(stalk_mesh, bamboo_xforms, false)
 
 	# 7 Crimson & Golden Maple Trees atop outer hills
@@ -1100,155 +1096,28 @@ func _add_tactical_pillar(base_pos: Vector3, rad: float, height: float, stone_he
 
 
 func _add_mossy_boulder(base_pos: Vector3, rad: float) -> void:
-	obstacles.append({"pos": Vector2(base_pos.x, base_pos.z), "radius": rad, "top_y": base_pos.y + rad * 1.25})
-	var rmat := StandardMaterial3D.new()
-	rmat.albedo_color = Color.html("#4b5548"); rmat.roughness = 0.88
-	var b := MeshInstance3D.new()
-	var sm := SphereMesh.new(); sm.radius = rad; sm.height = rad * 1.65; sm.radial_segments = 8; sm.rings = 5
-	b.mesh = sm; b.material_override = rmat
-	b.position = base_pos + Vector3(0.0, rad * 0.55, 0.0)
-	_arena_content.add_child(b)
+	WafuuModels3D.add_mossy_boulder(self, _arena_content, base_pos, rad)
 
 
 func _add_shrine_pavilion(base_pos: Vector3, pillar_hex: String, roof_hex: String, sc: float = 1.0) -> void:
-	var pav := Node3D.new()
-	pav.position = base_pos
-	pav.scale = Vector3(sc, sc, sc)
-	var pmat := StandardMaterial3D.new(); pmat.albedo_color = Color.html(pillar_hex); pmat.roughness = 0.45
-	var rmat := StandardMaterial3D.new(); rmat.albedo_color = Color.html(roof_hex); rmat.roughness = 0.55
-
-	var pm := CylinderMesh.new(); pm.top_radius = 0.22; pm.bottom_radius = 0.25; pm.height = 4.6; pm.radial_segments = 8; pm.rings = 1
-	for ox in [-2.6, 2.6]:
-		for oz in [-2.6, 2.6]:
-			var p := MeshInstance3D.new()
-			p.mesh = pm; p.material_override = pmat
-			p.position = Vector3(ox, 2.3, oz)
-			pav.add_child(p)
-			obstacles.append({"pos": Vector2(base_pos.x + ox * sc, base_pos.z + oz * sc), "radius": 0.40 * sc, "top_y": base_pos.y + 4.6 * sc})
-
-	var roof := MeshInstance3D.new()
-	var rm := CylinderMesh.new(); rm.top_radius = 0.2; rm.bottom_radius = 4.9; rm.height = 2.1; rm.radial_segments = 4; rm.rings = 1
-	roof.mesh = rm; roof.material_override = rmat
-	roof.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	roof.position = Vector3(0.0, 5.4, 0.0); roof.rotation.y = PI * 0.25
-	pav.add_child(roof)
-	_arena_content.add_child(pav)
+	WafuuModels3D.add_shrine_pavilion(self, _arena_content, base_pos, pillar_hex, roof_hex, sc)
 
 
 func _add_temple_pagoda(base_pos: Vector3) -> void:
-	obstacles.append({"pos": Vector2(base_pos.x, base_pos.z), "radius": 1.65, "top_y": base_pos.y + 8.5})
-	var pag := Node3D.new()
-	pag.position = base_pos
-	var body_m := StandardMaterial3D.new(); body_m.albedo_color = Color.html("#7c2d12"); body_m.roughness = 0.55
-	var roof_m := StandardMaterial3D.new(); roof_m.albedo_color = Color.html("#1e293b"); roof_m.roughness = 0.48
-	var gold_m := StandardMaterial3D.new(); gold_m.albedo_color = Color.html("#fbbf24"); gold_m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-
-	for tier in range(3):
-		var sc := 1.0 - float(tier) * 0.22
-		var ty := float(tier) * 2.4
-		var b := MeshInstance3D.new()
-		var bm := BoxMesh.new(); bm.size = Vector3(2.4 * sc, 2.0, 2.4 * sc)
-		b.mesh = bm; b.material_override = body_m; b.position = Vector3(0.0, ty + 1.0, 0.0)
-		pag.add_child(b)
-
-		var r := MeshInstance3D.new()
-		var rm := CylinderMesh.new(); rm.top_radius = 0.4 * sc; rm.bottom_radius = 3.2 * sc; rm.height = 1.1; rm.radial_segments = 4; rm.rings = 1
-		r.mesh = rm; r.material_override = roof_m; r.position = Vector3(0.0, ty + 2.25, 0.0); r.rotation.y = PI * 0.25
-		pag.add_child(r)
-
-	var spire := MeshInstance3D.new()
-	var sm := CylinderMesh.new(); sm.top_radius = 0.05; sm.bottom_radius = 0.16; sm.height = 2.6; sm.radial_segments = 6; sm.rings = 1
-	spire.mesh = sm; spire.material_override = gold_m; spire.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	spire.position = Vector3(0.0, 8.3, 0.0)
-	pag.add_child(spire)
-	_arena_content.add_child(pag)
+	WafuuModels3D.add_temple_pagoda(self, _arena_content, base_pos)
 
 
 func _add_torii_gate(base_pos: Vector3, pillar_hex: String, sc: float = 1.0) -> void:
-	var torii := Node3D.new()
-	torii.position = base_pos
-	torii.scale = Vector3(sc, sc, sc)
-
-	var pillar_mat := StandardMaterial3D.new()
-	pillar_mat.albedo_color = Color.html(pillar_hex); pillar_mat.roughness = 0.40
-	var cap_mat := StandardMaterial3D.new()
-	cap_mat.albedo_color = Color.html("#0f172a"); cap_mat.roughness = 0.50
-
-	var pillar_mesh := CylinderMesh.new()
-	pillar_mesh.top_radius = 0.35; pillar_mesh.bottom_radius = 0.42; pillar_mesh.height = 7.2; pillar_mesh.radial_segments = 10; pillar_mesh.rings = 1
-	for px in [-3.2, 3.2]:
-		var p := MeshInstance3D.new()
-		p.mesh = pillar_mesh; p.material_override = pillar_mat; p.position = Vector3(px, 3.6, 0.0)
-		torii.add_child(p)
-
-	var kasagi := MeshInstance3D.new()
-	var km := BoxMesh.new(); km.size = Vector3(8.8, 0.55, 0.8)
-	kasagi.mesh = km; kasagi.material_override = cap_mat; kasagi.position = Vector3(0.0, 7.3, 0.0)
-	torii.add_child(kasagi)
-
-	var nuki := MeshInstance3D.new()
-	var nm := BoxMesh.new(); nm.size = Vector3(7.6, 0.40, 0.50)
-	nuki.mesh = nm; nuki.material_override = pillar_mat; nuki.position = Vector3(0.0, 5.7, 0.0)
-	torii.add_child(nuki)
-	_arena_content.add_child(torii)
+	WafuuModels3D.add_torii_gate(_arena_content, base_pos, pillar_hex, sc, sc >= 1.2)
 
 
 func _add_stone_lantern(base_pos: Vector3, glow_hex: String) -> void:
-	var lg := Node3D.new()
-	lg.position = base_pos
-
-	var stone_mat := StandardMaterial3D.new(); stone_mat.albedo_color = Color.html("#64748b"); stone_mat.roughness = 0.8
-	var roof_mat := StandardMaterial3D.new(); roof_mat.albedo_color = Color.html("#475569"); roof_mat.roughness = 0.7
-	var glow_mat := StandardMaterial3D.new(); glow_mat.albedo_color = Color.html(glow_hex); glow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-
-	var b := MeshInstance3D.new()
-	var bm := BoxMesh.new(); bm.size = Vector3(1.1, 2.2, 1.1)
-	b.mesh = bm; b.material_override = stone_mat; b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	b.position = Vector3(0.0, 1.1, 0.0)
-	lg.add_child(b)
-
-	var g := MeshInstance3D.new()
-	var gm := BoxMesh.new(); gm.size = Vector3(0.75, 0.75, 0.75)
-	g.mesh = gm; g.material_override = glow_mat; g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	g.position = Vector3(0.0, 2.55, 0.0)
-	lg.add_child(g)
-
-	var r := MeshInstance3D.new()
-	var rm := CylinderMesh.new(); rm.top_radius = 0.0; rm.bottom_radius = 1.15; rm.height = 0.9; rm.radial_segments = 4; rm.rings = 1
-	r.mesh = rm; r.material_override = roof_mat; r.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	r.position = Vector3(0.0, 3.35, 0.0); r.rotation.y = PI * 0.25
-	lg.add_child(r)
-	_arena_content.add_child(lg)
+	WafuuModels3D.add_stone_lantern(_arena_content, base_pos, glow_hex)
 
 
 func _add_stylized_tree(base_pos: Vector3, trunk_hex: String, leaf_hex: String, sc: float = 1.0) -> void:
-	var tree := Node3D.new()
-	tree.position = base_pos
-	tree.scale = Vector3(sc, sc, sc)
-
-	var trunk_m := StandardMaterial3D.new(); trunk_m.albedo_color = Color.html(trunk_hex); trunk_m.roughness = 0.85
-	var leaf_m := StandardMaterial3D.new(); leaf_m.albedo_color = Color.html(leaf_hex); leaf_m.roughness = 0.55
-
-	var trunk := MeshInstance3D.new()
-	var tc := CylinderMesh.new(); tc.top_radius = 0.24; tc.bottom_radius = 0.42; tc.height = 4.2; tc.radial_segments = 7; tc.rings = 1
-	trunk.mesh = tc; trunk.material_override = trunk_m; trunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	trunk.position = Vector3(0.0, 2.0, 0.0)
-	tree.add_child(trunk)
-
-	var st_leaves := SurfaceTool.new()
-	st_leaves.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for cp: Array in [[Vector3(0.0, 4.6, 0.0), 2.1], [Vector3(1.2, 4.1, 0.7), 1.45], [Vector3(-1.1, 4.2, -0.6), 1.55]]:
-		var sp := SphereMesh.new()
-		var r: float = float(cp[1])
-		sp.radius = r; sp.height = r * 1.45; sp.radial_segments = 10; sp.rings = 6
-		st_leaves.append_from(sp, 0, Transform3D(Basis.IDENTITY, cp[0]))
-	var fol := MeshInstance3D.new()
-	fol.mesh = st_leaves.commit()
-	fol.material_override = leaf_m
-	fol.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	tree.add_child(fol)
-
-	_arena_content.add_child(tree)
+	var variant: int = int(absf(base_pos.x * 3.0 + base_pos.z * 7.0)) % 3
+	WafuuModels3D.add_realistic_tree(_arena_content, base_pos, trunk_hex, leaf_hex, sc, variant)
 
 
 func _build_ambient_particles(particle_col: Color) -> void:

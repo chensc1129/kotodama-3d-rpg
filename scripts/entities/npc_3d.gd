@@ -46,7 +46,11 @@ var _marker_state: String = "none"
 static func _get_cjk_font() -> Font:
 	if not _font_checked:
 		_font_checked = true
-		if ResourceLoader.exists(FONT_PATH):
+		if ResourceLoader.exists("res://resources/ui_theme.tres"):
+			var th := load("res://resources/ui_theme.tres") as Theme
+			if th != null and th.default_font != null:
+				_cached_font = th.default_font
+		if _cached_font == null and ResourceLoader.exists(FONT_PATH):
 			_cached_font = load(FONT_PATH) as Font
 	return _cached_font
 
@@ -84,7 +88,6 @@ func setup(data: Dictionary, ground_y: float) -> void:
 
 	var accent_hex: String = String(data.get("accent", data.get("color", "#e8c474")))
 	_accent_color = Color.html(accent_hex)
-	var icon: String = String(data.get("icon", "✨"))
 	var model_key: String = String(data.get("model", "sakura"))
 	_is_kitsune = (model_key == "kitsune")
 
@@ -144,10 +147,10 @@ func setup(data: Dictionary, ground_y: float) -> void:
 
 	var cjk_font: Font = _get_cjk_font()
 
-	# Floating 3D Nameplate
+	# Floating 3D Nameplate (uses crisp vector glyphs so 3D Label3D never renders tofu boxes)
 	_name_label = Label3D.new()
 	_name_label.name = "Nameplate"
-	_name_label.text = "%s %s" % [icon, npc_name]
+	_name_label.text = npc_name
 	_name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_name_label.no_depth_test = true
 	_name_label.position = Vector3(0.0, NAMEPLATE_Y, 0.0)
@@ -185,11 +188,11 @@ func set_quest_marker(state: String) -> void:
 		return
 	match state:
 		"story":
-			_quest_label.text = "❗ 主線"
+			_quest_label.text = "★ 主線"
 			_quest_label.modulate = Color.html("#fde047")
 			_quest_label.visible = true
 		"quiz":
-			_quest_label.text = "🇯🇵 日文試煉"
+			_quest_label.text = "◆ 日文試煉"
 			_quest_label.modulate = Color.html("#38bdf8")
 			_quest_label.visible = true
 		"done":

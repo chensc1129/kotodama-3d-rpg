@@ -603,8 +603,9 @@ func refresh(enemy_count: int, boss: Enemy3D) -> void:
 
 	if _stage_mech_lbl != null:
 		var status_txt := String(b.get("stage_status", ""))
-		var default_mech := "💬 靠近村民按 F 或點對話按鈕挑戰日文試煉" if is_arpg else String(stage_cfg.get("mechanic_name", ""))
+		var default_mech := "" if (is_arpg and _is_mobile_ui) else ("💬 靠近村民按 F 或點對話按鈕挑戰日文試煉" if is_arpg else String(stage_cfg.get("mechanic_name", "")))
 		var m_txt := status_txt if not status_txt.is_empty() else default_mech
+		_stage_mech_lbl.visible = not m_txt.is_empty()
 		if _stage_mech_lbl.text != m_txt:
 			_stage_mech_lbl.text = m_txt
 

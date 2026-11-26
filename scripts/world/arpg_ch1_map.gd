@@ -176,22 +176,22 @@ static func build_map(
 	# 4. Shimmering Koi River Water Plane (Zone 2)
 	_build_koi_river(content_root, water_shader)
 
-	# 5. Two Flush-Anchored Walkable Bridges over Koi River (Zone 2)
+	# 5. Two Flush-Anchored Ornate Walkable Bridges over Koi River (Zone 2)
 	# Main Grand Vermilion Taiko Bridge (x = 0.0, z: 18.5 -> 5.5)
-	_add_walkable_bridge(
+	WafuuModels3D.add_ornate_bridge(
 		arena, content_root, prop_shader,
 		_bridge_pt(0.0, 18.5), _bridge_pt(0.0, 5.5),
 		5.2, 0.95, "#991b1b", "#450a0a", "#ef4444", 0
 	)
 	# East Rustic Cedar Footbridge (x = 24.0, z: 18.5 -> 5.5)
-	_add_walkable_bridge(
+	WafuuModels3D.add_ornate_bridge(
 		arena, content_root, prop_shader,
 		_bridge_pt(24.0, 18.5), _bridge_pt(24.0, 5.5),
 		3.8, 0.72, "#7c4722", "#43220d", "#d97706", 0
 	)
 
 	# 6. Zone 1: Sakura Village Plaza Architecture
-	_build_zone1_village(arena, content_root)
+	_build_zone1_village(arena, content_root, is_mob)
 
 	# 7. Zone 3: Misty Bamboo Forest (Single MultiMesh Grove + Jizo + Lookout Deck + Boulders)
 	_build_zone3_bamboo_forest(arena, content_root, prop_shader, is_mob)
@@ -446,46 +446,57 @@ static func _build_koi_river(content_root: Node3D, water_shader: Shader) -> void
 
 
 # ==============================================================================
-#  ZONE 1: SAKURA VILLAGE PLAZA
+#  ZONE 1: SAKURA VILLAGE PLAZA (Authentic Japanese Teahouse, Forge & Machiya!)
 # ==============================================================================
-static func _build_zone1_village(arena: Arena3D, content_root: Node3D) -> void:
-	# Welcoming South Village Torii Gate at (0, y, 48.0)
-	_add_torii_gate(content_root, Vector3(0.0, get_base_terrain_height(0.0, 48.0), 48.0), "#dc2626", 1.15)
+static func _build_zone1_village(arena: Arena3D, content_root: Node3D, is_mob: bool) -> void:
+	# Welcoming South Village Myojin Torii Gate with sacred shimenawa at (0, y, 48.0)
+	WafuuModels3D.add_torii_gate(content_root, Vector3(0.0, get_base_terrain_height(0.0, 48.0), 48.0), "#dc2626", 1.15, true)
 
-	# Cozy Teahouse Pavilion (茶屋) at (-18.5, y, 29.0) + red wagasa umbrella prop
-	var tea_pos := Vector3(-18.5, get_base_terrain_height(-18.5, 29.0), 29.0)
-	_add_shrine_pavilion(arena, content_root, tea_pos, "#991b1b", "#2a1b2e", 1.05)
-	_add_wagasa_umbrella(content_root, Vector3(-12.5, get_base_terrain_height(-12.5, 32.5), 32.5))
+	# Traditional Japanese Teahouse (櫻花茶屋) at (-20.0, y, 28.5) facing plaza + bamboo-ribbed red wagasa
+	var tea_pos := Vector3(-20.0, get_base_terrain_height(-20.0, 28.5), 28.5)
+	WafuuModels3D.add_japanese_teahouse(arena, content_root, tea_pos, 1.05, 0.58)
+	WafuuModels3D.add_wagasa_umbrella(content_root, Vector3(-12.2, get_base_terrain_height(-12.2, 33.0), 33.0))
 
-	# Blacksmith Forge Pavilion (鍛冶屋) at (19.5, y, 28.0) + glowing ember forge hearth
-	var forge_pos := Vector3(19.5, get_base_terrain_height(19.5, 28.0), 28.0)
-	_add_shrine_pavilion(arena, content_root, forge_pos, "#7c2d12", "#1e293b", 1.05)
-	_add_forge_hearth(arena, content_root, Vector3(20.5, get_base_terrain_height(20.5, 28.2), 28.2))
+	# Traditional Japanese Blacksmith Forge (鉄斎鍛冶屋) at (20.8, y, 27.8) facing plaza
+	var forge_pos := Vector3(20.8, get_base_terrain_height(20.8, 27.8), 27.8)
+	WafuuModels3D.add_japanese_forge(arena, content_root, forge_pos, 1.05, -0.58)
 
-	# Village Stone Lanterns lining plaza and road approaches
-	var village_lanterns: Array[Vector2] = [
+	# Twin Edo-style Machiya Village Homes framing the warm lantern-lit village flanks
+	var house_w := Vector3(-28.5, get_base_terrain_height(-28.5, 40.5), 40.5)
+	WafuuModels3D.add_japanese_house(arena, content_root, house_w, 1.08, 0.48, "#1e293b")
+	var house_e := Vector3(28.5, get_base_terrain_height(28.5, 40.5), 40.5)
+	WafuuModels3D.add_japanese_house(arena, content_root, house_e, 1.08, -0.48, "#262038")
+
+	# Batched Carved Granite Kasuga-doro Stone Lanterns lining plaza & road approaches (2 draw calls total!)
+	var village_lanterns_2d: Array[Vector2] = [
 		Vector2(-6.2, 46.5), Vector2(6.2, 46.5),
 		Vector2(-7.0, 36.0), Vector2(7.0, 36.0),
 		Vector2(-5.8, 21.5), Vector2(5.8, 21.5),
 		Vector2(20.5, 21.0), Vector2(27.5, 21.0),
-		Vector2(-15.5, 23.5), Vector2(16.5, 23.0),
+		Vector2(-15.5, 23.0), Vector2(16.5, 22.8),
 	]
-	for lp: Vector2 in village_lanterns:
-		_add_stone_lantern(content_root, Vector3(lp.x, get_base_terrain_height(lp.x, lp.y), lp.y), "#fde047")
+	var village_lantern_pts: Array[Vector3] = []
+	for lp: Vector2 in village_lanterns_2d:
+		village_lantern_pts.append(Vector3(lp.x, get_base_terrain_height(lp.x, lp.y), lp.y))
+	WafuuModels3D.add_batched_stone_lanterns(content_root, village_lantern_pts, "#fde047", is_mob)
 
-	# Village Sakura Trees (merged foliage per tree, clear of spawn & NPC spots)
+	# Lush Multi-Branching Sakura Trees framing Sakura Village (clear of houses, spawn & NPC spots)
 	var village_trees: Array[Vector2] = [
-		Vector2(-29.0, 44.0), Vector2(29.0, 44.0),
-		Vector2(-35.0, 30.0), Vector2(35.0, 30.0),
-		Vector2(-26.0, 21.5), Vector2(34.0, 21.5),
-		Vector2(-11.5, 49.0), Vector2(11.5, 49.0),
-		Vector2(-42.0, 42.0), Vector2(42.0, 42.0),
+		Vector2(-19.5, 46.5), Vector2(19.5, 46.5),
+		Vector2(-37.5, 31.0), Vector2(37.5, 31.0),
+		Vector2(-29.5, 21.5), Vector2(35.0, 21.5),
+		Vector2(-11.5, 49.5), Vector2(11.5, 49.5),
+		Vector2(-42.5, 44.0), Vector2(42.5, 44.0),
 	]
 	for idx: int in range(village_trees.size()):
 		var tp: Vector2 = village_trees[idx]
-		var sc: float = 1.25 + float(idx % 3) * 0.16
-		var leaf_hex: String = "#f472b6" if idx % 2 == 0 else "#fbcfe8"
-		_add_stylized_tree(content_root, Vector3(tp.x, get_base_terrain_height(tp.x, tp.y), tp.y), "#3b231e", leaf_hex, sc)
+		var sc: float = 1.24 + float(idx % 3) * 0.16
+		var leaf_hex: String = "#f472b6" if idx % 2 == 0 else "#f9a8d4"
+		WafuuModels3D.add_realistic_tree(
+			content_root,
+			Vector3(tp.x, get_base_terrain_height(tp.x, tp.y), tp.y),
+			"#44291f", leaf_hex, sc, idx % 3
+		)
 
 
 # ==============================================================================
@@ -497,11 +508,9 @@ static func _build_zone3_bamboo_forest(
 	prop_shader: Shader,
 	is_mob: bool
 ) -> void:
-	# 1. Dense emerald bamboo groves batched into ONE single MultiMeshInstance3D!
-	var bamboo_mesh := _make_bamboo_stalk_mesh()
-	var bamboo_mat := StandardMaterial3D.new()
-	bamboo_mat.albedo_color = Color.html("#15803d")
-	bamboo_mat.roughness = 0.60
+	# 1. Realistic segmented bamboo groves batched into ONE single MultiMeshInstance3D!
+	var bamboo_mesh := WafuuModels3D.make_realistic_bamboo_mesh(is_mob)
+	var bamboo_mat := WafuuModels3D.make_wafuu_mat(5, is_mob, 0.44, 0.04)
 	bamboo_mesh.surface_set_material(0, bamboo_mat)
 
 	var rng := RandomNumberGenerator.new()
@@ -518,21 +527,16 @@ static func _build_zone3_bamboo_forest(
 		var bz: float = rng.randf_range(-24.0, 2.5)
 
 		# Keep clearings open:
-		# - NPC Kenta & Mossy Jizo Shrine clearing at (-24, -10)
 		if Vector2(bx + 24.0, bz + 10.0).length() < 7.2:
 			continue
-		# - Ambush #2 clearing around (2, -16)
 		if Vector2(bx - 2.0, bz + 16.0).length() < 8.0:
 			continue
-		# - Eastern Wooden Lookout Deck & its flush west approach ramp at (14..32, -18..-6)
 		if Vector2(bx - 26.0, bz + 12.0).length() < 8.4:
 			continue
 		if bx > 13.0 and bx < 24.0 and absf(bz + 12.0) < 3.5:
 			continue
-		# - East Rustic Cedar Footbridge landing corridor (x ~ 24, z ~ 0..4)
 		if absf(bx - 24.0) < 4.0 and bz > -3.5:
 			continue
-		# - Keep clear around the 4 tactical mossy boulders
 		if (
 			Vector2(bx + 9.2, bz + 7.5).length() < 3.0
 			or Vector2(bx - 9.5, bz + 6.0).length() < 3.0
@@ -542,8 +546,8 @@ static func _build_zone3_bamboo_forest(
 			continue
 
 		var by: float = get_base_terrain_height(bx, bz)
-		var h_scale: float = rng.randf_range(0.85, 1.42)
-		var r_scale: float = rng.randf_range(0.85, 1.18)
+		var h_scale: float = rng.randf_range(0.88, 1.44)
+		var r_scale: float = rng.randf_range(0.88, 1.18)
 		var yaw: float = rng.randf_range(0.0, TAU)
 		var tilt_x: float = rng.randf_range(-0.06, 0.06)
 		var tilt_z: float = rng.randf_range(-0.06, 0.06)
@@ -552,12 +556,11 @@ static func _build_zone3_bamboo_forest(
 
 	_add_batched_multimesh(content_root, bamboo_mesh, bamboo_xforms, "BambooGroveMultiMesh")
 
-	# 2. Mossy Jizo Shrine Stone + Stone Lantern at (-26, y, -12)
+	# 2. Roofed Wooden Hokora Jizo Shrine + Carved Stone Lantern at (-26, y, -12)
 	var jizo_pos := Vector3(-26.0, get_base_terrain_height(-26.0, -12.0), -12.0)
-	_add_jizo_shrine(arena, content_root, jizo_pos)
-	_add_stone_lantern(content_root, Vector3(-22.5, get_base_terrain_height(-22.5, -13.5), -13.5), "#fef08a")
+	WafuuModels3D.add_jizo_shrine(arena, content_root, jizo_pos)
 
-	# 3. Elevated Wooden Lookout Deck at (26.0, y + 1.2, -12.0) + Flush Wooden Ramp!
+	# 3. Elevated Wooden Lookout Deck at (26.0, y + 1.2, -12.0) + Flush Ornate Wooden Ramp!
 	var terrace_y: float = get_base_terrain_height(26.0, -12.0)
 	var deck_top_y: float = terrace_y + 1.2
 	_add_walkable_deck(
@@ -565,15 +568,13 @@ static func _build_zone3_bamboo_forest(
 		Vector3(26.0, deck_top_y, -12.0), 4.8,
 		"#713819", "#421d0b", "#f59e0b", 1, true
 	)
-	# Flush wooden ramp climbing from hillside (15.2, h, -12.0) onto west rim (21.35, deck_top_y, -12.0)
-	_add_walkable_bridge(
+	WafuuModels3D.add_ornate_bridge(
 		arena, content_root, prop_shader,
 		_bridge_pt(15.2, -12.0), Vector3(21.35, deck_top_y, -12.0),
 		3.2, 0.06, "#7c4722", "#43220d", "#f59e0b", 0
 	)
-	_add_stone_lantern(content_root, Vector3(28.5, deck_top_y, -14.2), "#fde047")
 
-	# 4. Four Tactical Mossy Boulders (arena.obstacles) in the bamboo clearing
+	# 4. Four Tactical Mossy Granite Boulders (arena.obstacles) in the bamboo clearing
 	var boulders: Array[Vector2] = [
 		Vector2(-9.2, -7.5),
 		Vector2(9.5, -6.0),
@@ -581,11 +582,18 @@ static func _build_zone3_bamboo_forest(
 		Vector2(10.2, -19.0),
 	]
 	for bp: Vector2 in boulders:
-		_add_mossy_boulder(arena, content_root, Vector3(bp.x, get_base_terrain_height(bp.x, bp.y), bp.y), 1.55)
+		WafuuModels3D.add_mossy_boulder(arena, content_root, Vector3(bp.x, get_base_terrain_height(bp.x, bp.y), bp.y), 1.55)
 
-	# Road-side stone lanterns guiding the pilgrimage north through the misty bamboo
-	for lp: Vector2 in [Vector2(-5.5, 1.5), Vector2(5.5, 1.5), Vector2(-5.5, -12.0), Vector2(5.5, -12.0)]:
-		_add_stone_lantern(content_root, Vector3(lp.x, get_base_terrain_height(lp.x, lp.y), lp.y), "#fde68a")
+	# Road-side + Jizo + Lookout stone lanterns batched into 2 draw calls
+	var forest_lantern_pts: Array[Vector3] = [
+		Vector3(-22.5, get_base_terrain_height(-22.5, -13.5), -13.5),
+		Vector3(28.5, deck_top_y, -14.2),
+		Vector3(-5.5, get_base_terrain_height(-5.5, 1.5), 1.5),
+		Vector3(5.5, get_base_terrain_height(5.5, 1.5), 1.5),
+		Vector3(-5.5, get_base_terrain_height(-5.5, -12.0), -12.0),
+		Vector3(5.5, get_base_terrain_height(5.5, -12.0), -12.0),
+	]
+	WafuuModels3D.add_batched_stone_lanterns(content_root, forest_lantern_pts, "#fde68a", is_mob)
 
 
 # ==============================================================================
@@ -597,49 +605,12 @@ static func _build_zone4_senbon_torii(
 	sky_anim_nodes: Array[Dictionary],
 	is_mob: bool
 ) -> void:
-	# 1. Eight sequential Vermilion Torii Gates climbing from z = -24 to z = -45 (step = 3.0m)
-	# Batched into 2 draw calls total (vermilion structure + dark slate kasagi caps)!
-	var st_red := SurfaceTool.new()
-	st_red.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var st_cap := SurfaceTool.new()
-	st_cap.begin(Mesh.PRIMITIVE_TRIANGLES)
-
-	var pillar_mesh := CylinderMesh.new()
-	pillar_mesh.top_radius = 0.28; pillar_mesh.bottom_radius = 0.34; pillar_mesh.height = 6.2
-	pillar_mesh.radial_segments = 8; pillar_mesh.rings = 1
-	var nuki_mesh := BoxMesh.new()
-	nuki_mesh.size = Vector3(7.4, 0.36, 0.44)
-	var kasagi_mesh := BoxMesh.new()
-	kasagi_mesh.size = Vector3(8.5, 0.48, 0.74)
-
+	# 1. Eight sequential Curved Myojin Torii Gates climbing from z = -24 to z = -45 (2 draw calls total!)
+	var torii_pts: Array[Vector3] = []
 	for i: int in range(8):
 		var tz: float = -24.0 - float(i) * 3.0
-		var ty: float = get_base_terrain_height(0.0, tz)
-		for side: float in [-3.1, 3.1]:
-			st_red.append_from(pillar_mesh, 0, Transform3D(Basis.IDENTITY, Vector3(side, ty + 3.05, tz)))
-		st_red.append_from(nuki_mesh, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, ty + 4.95, tz)))
-		st_cap.append_from(kasagi_mesh, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, ty + 6.25, tz)))
-
-	var red_mat := StandardMaterial3D.new()
-	red_mat.albedo_color = Color.html("#dc2626")
-	red_mat.roughness = 0.40
-	var cap_mat := StandardMaterial3D.new()
-	cap_mat.albedo_color = Color.html("#0f172a")
-	cap_mat.roughness = 0.50
-
-	var red_inst := MeshInstance3D.new()
-	red_inst.name = "SenbonToriiRed"
-	red_inst.mesh = st_red.commit()
-	red_inst.material_override = red_mat
-	red_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	content_root.add_child(red_inst)
-
-	var cap_inst := MeshInstance3D.new()
-	cap_inst.name = "SenbonToriiCaps"
-	cap_inst.mesh = st_cap.commit()
-	cap_inst.material_override = cap_mat
-	cap_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	content_root.add_child(cap_inst)
+		torii_pts.append(Vector3(0.0, get_base_terrain_height(0.0, tz), tz))
+	WafuuModels3D.build_senbon_torii(content_root, torii_pts, "#dc2626")
 
 	# 2. Glowing Sakura Healing Spring circle at (-14.0, y, -34.0)
 	var spring_y: float = get_base_terrain_height(SPRING_POS_2D.x, SPRING_POS_2D.y)
@@ -647,7 +618,6 @@ static func _build_zone4_senbon_torii(
 	arena.sakura_zone_pos = spring_world
 	arena.sakura_zone_radius = SPRING_RADIUS
 
-	# Shimmering healing spring water basin disc
 	var basin_mat := StandardMaterial3D.new()
 	basin_mat.albedo_color = Color(0.28, 0.80, 0.96, 0.48)
 	basin_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -662,7 +632,6 @@ static func _build_zone4_senbon_torii(
 	basin_inst.position = spring_world + Vector3(0.0, 0.04, 0.0)
 	content_root.add_child(basin_inst)
 
-	# Double rotating pink-cyan spirit ring added to sky_anim_nodes with kind = "spin"
 	var spring_rings := Node3D.new()
 	spring_rings.name = "SakuraHealingSpring"
 	spring_rings.position = spring_world + Vector3(0.0, 0.08, 0.0)
@@ -682,20 +651,30 @@ static func _build_zone4_senbon_torii(
 	content_root.add_child(spring_rings)
 	sky_anim_nodes.append({"node": spring_rings, "kind": "spin", "speed": 1.15})
 
-	_add_stone_lantern(content_root, Vector3(-19.5, get_base_terrain_height(-19.5, -34.0), -34.0), "#f472b6")
-	_add_stylized_tree(content_root, Vector3(-20.0, get_base_terrain_height(-20.0, -39.0), -39.0), "#3b231e", "#fbcfe8", 1.45)
+	WafuuModels3D.add_stone_lantern(content_root, Vector3(-19.5, get_base_terrain_height(-19.5, -34.0), -34.0), "#f472b6")
+	WafuuModels3D.add_realistic_tree(content_root, Vector3(-20.5, get_base_terrain_height(-20.5, -39.5), -39.5), "#44291f", "#f9a8d4", 1.45, 2)
 
-	# 3. Stone Shrine Alcove for Elder Byakko at (16.5, y, -34.0)
+	# 3. Carved Stone Shrine Alcove for Elder Byakko at (16.5, y, -34.0)
 	var byakko_y: float = get_base_terrain_height(16.5, -34.0)
-	_add_byakko_alcove(arena, content_root, Vector3(16.5, byakko_y, -34.0))
+	WafuuModels3D.add_byakko_alcove(
+		arena, content_root,
+		Vector3(16.5, byakko_y, -34.0),
+		Callable(ArpgCh1Map, "get_base_terrain_height")
+	)
 
-	# Hillside sakura trees framing the Senbon Torii ascent
-	for tp: Vector2 in [
+	# Hillside realistic sakura trees framing the Senbon Torii ascent
+	var hill_trees: Array[Vector2] = [
 		Vector2(-11.5, -26.5), Vector2(11.5, -26.5),
 		Vector2(-26.0, -32.0), Vector2(28.0, -32.0),
 		Vector2(-13.5, -42.5), Vector2(13.5, -42.5),
-	]:
-		_add_stylized_tree(content_root, Vector3(tp.x, get_base_terrain_height(tp.x, tp.y), tp.y), "#3b231e", "#f472b6", 1.32)
+	]
+	for idx: int in range(hill_trees.size()):
+		var tp: Vector2 = hill_trees[idx]
+		WafuuModels3D.add_realistic_tree(
+			content_root,
+			Vector3(tp.x, get_base_terrain_height(tp.x, tp.y), tp.y),
+			"#44291f", "#f472b6", 1.32, idx % 3
+		)
 
 
 # ==============================================================================
@@ -707,8 +686,8 @@ static func _build_zone5_grand_altar(
 	sky_anim_nodes: Array[Dictionary],
 	is_mob: bool
 ) -> void:
-	# 1. Grand North Torii Gate at (0.0, 2.8, -47.0), scale 1.45
-	_add_torii_gate(content_root, Vector3(0.0, 2.8, -47.0), "#dc2626", 1.45)
+	# 1. Grand North Myojin Torii Gate with sacred shimenawa at (0.0, 2.8, -47.0), scale 1.45
+	WafuuModels3D.add_torii_gate(content_root, Vector3(0.0, 2.8, -47.0), "#dc2626", 1.45, true)
 
 	# 2. Four Tactical Shrine Columns (arena.obstacles) framing the boss sanctuary
 	var columns: Array[Vector2] = [
@@ -723,12 +702,12 @@ static func _build_zone5_grand_altar(
 		)
 
 	# 3. Corrupted/Sacred Kotodama Monolith Stone (言靈守護碑) at (0.0, 2.8, -69.0)
-	_add_kotodama_monolith(arena, content_root, Vector3(0.0, 2.8, -69.0), sky_anim_nodes, is_mob)
+	WafuuModels3D.add_kotodama_monolith(arena, content_root, Vector3(0.0, 2.8, -69.0), sky_anim_nodes, is_mob)
 
-	# 4. Giant Weeping Sakura Tree behind the Monolith at (0.0, 2.8, -73.0)
-	_add_giant_weeping_sakura(content_root, Vector3(0.0, 2.8, -73.0))
+	# 4. Monumental Sacred Weeping Sakura Tree with Shimenawa behind the Monolith at (0.0, 2.8, -73.0)
+	WafuuModels3D.add_giant_weeping_sakura(content_root, Vector3(0.0, 2.8, -73.0), is_mob)
 
-	# 5. Perimeter Night-Sakura Trees & Stone Lanterns framing the Grand Altar
+	# 5. Perimeter Night-Sakura Trees & Batched Kasuga-doro Lanterns framing the Grand Altar
 	var altar_trees: Array[Vector2] = [
 		Vector2(-26.0, -52.0), Vector2(26.0, -52.0),
 		Vector2(-29.0, -64.0), Vector2(29.0, -64.0),
@@ -738,15 +717,20 @@ static func _build_zone5_grand_altar(
 	for idx: int in range(altar_trees.size()):
 		var tp: Vector2 = altar_trees[idx]
 		var leaf_hex: String = "#f472b6" if idx % 2 == 0 else "#f9a8d4"
-		_add_stylized_tree(content_root, Vector3(tp.x, get_base_terrain_height(tp.x, tp.y), tp.y), "#3b231e", leaf_hex, 1.55)
+		WafuuModels3D.add_realistic_tree(
+			content_root,
+			Vector3(tp.x, get_base_terrain_height(tp.x, tp.y), tp.y),
+			"#3b231e", leaf_hex, 1.52, idx % 3
+		)
 
-	var altar_lanterns: Array[Vector2] = [
+	var altar_lantern_pts: Array[Vector3] = []
+	for lp: Vector2 in [
 		Vector2(-7.5, -48.0), Vector2(7.5, -48.0),
 		Vector2(-20.0, -58.0), Vector2(20.0, -58.0),
 		Vector2(-7.0, -68.5), Vector2(7.0, -68.5),
-	]
-	for lp: Vector2 in altar_lanterns:
-		_add_stone_lantern(content_root, Vector3(lp.x, get_base_terrain_height(lp.x, lp.y), lp.y), "#f472b6")
+	]:
+		altar_lantern_pts.append(Vector3(lp.x, get_base_terrain_height(lp.x, lp.y), lp.y))
+	WafuuModels3D.add_batched_stone_lanterns(content_root, altar_lantern_pts, "#f472b6", is_mob)
 
 
 # ==============================================================================
@@ -860,7 +844,7 @@ static func _build_ambient_particles(content_root: Node3D, particle_col: Color, 
 
 
 # ==============================================================================
-#  SHARED ARCHITECTURAL PROP, BRIDGE, DECK & OBSTACLE HELPERS
+#  SHARED MULTIMESH, WALKABLE DECK & PILLAR HELPERS
 # ==============================================================================
 static func _add_batched_multimesh(
 	content_root: Node3D,
@@ -881,31 +865,6 @@ static func _add_batched_multimesh(
 	mmi.multimesh = mm
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	content_root.add_child(mmi)
-
-
-static func _make_bamboo_stalk_mesh() -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-
-	# Tall tapered emerald bamboo culm (5-sided for ultra-low poly count across 190 instances)
-	var culm := CylinderMesh.new()
-	culm.top_radius = 0.11; culm.bottom_radius = 0.18; culm.height = 9.2
-	culm.radial_segments = 5; culm.rings = 1
-	st.append_from(culm, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 4.6, 0.0)))
-
-	# 3 Stylized angled bamboo foliage fronds near upper canopy
-	var leaf := BoxMesh.new()
-	leaf.size = Vector3(1.55, 0.08, 0.55)
-	for fi: int in range(3):
-		var a: float = float(fi) * (TAU / 3.0) + 0.3
-		var y_h: float = 6.2 + float(fi) * 1.05
-		var xf := Transform3D(
-			Basis.from_euler(Vector3(0.28, a, -0.22)),
-			Vector3(cos(a) * 0.62, y_h, sin(a) * 0.62)
-		)
-		st.append_from(leaf, 0, xf)
-
-	return st.commit()
 
 
 static func _add_walkable_deck(
@@ -959,411 +918,6 @@ static func _add_walkable_deck(
 	content_root.add_child(rim)
 
 
-static func _add_walkable_bridge(
-	arena: Arena3D,
-	content_root: Node3D,
-	prop_shader: Shader,
-	start_p: Vector3,
-	end_p: Vector3,
-	width: float,
-	arch: float,
-	deck_hex: String,
-	deck_dark_hex: String,
-	rail_hex: String,
-	surface_type: int = 0
-) -> void:
-	arena.bridges.append({"start": start_p, "end": end_p, "width": width, "arch": arch})
-
-	var deck_mat := ShaderMaterial.new()
-	deck_mat.shader = prop_shader
-	deck_mat.set_shader_parameter("surface_type", surface_type)
-	deck_mat.set_shader_parameter("albedo_a", Color.html(deck_hex))
-	deck_mat.set_shader_parameter("albedo_b", Color.html(deck_dark_hex))
-	deck_mat.set_shader_parameter("accent_color", Color.html(rail_hex))
-	deck_mat.set_shader_parameter("roughness_val", 0.62 if surface_type == 0 else 0.34)
-	deck_mat.set_shader_parameter("metallic_val", 0.08 if surface_type == 0 else 0.38)
-	deck_mat.set_shader_parameter("emission_strength", 0.25 if surface_type == 2 else 0.0)
-	deck_mat.set_shader_parameter("tile_scale", width * 0.55)
-
-	var rail_mat := StandardMaterial3D.new()
-	rail_mat.albedo_color = Color.html(rail_hex)
-	rail_mat.roughness = 0.40
-	rail_mat.metallic = 0.20
-
-	var dir3: Vector3 = end_p - start_p
-	var total_len: float = Vector2(dir3.x, dir3.z).length()
-	var dy_total: float = end_p.y - start_p.y
-	var yaw: float = atan2(dir3.x, dir3.z)
-
-	# Merge all planks into 1 ArrayMesh and rails+posts into 1 ArrayMesh (2 draw calls total per bridge!)
-	var segs: int = 8
-	var seg_len: float = (total_len / float(segs)) * 1.08
-	var plank_box := BoxMesh.new(); plank_box.size = Vector3(width, 0.24, seg_len)
-	var rail_box := BoxMesh.new(); rail_box.size = Vector3(0.16, 0.18, seg_len)
-	var post_box := BoxMesh.new(); post_box.size = Vector3(0.22, 0.92, 0.22)
-
-	var st_planks := SurfaceTool.new()
-	st_planks.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var st_rails := SurfaceTool.new()
-	st_rails.begin(Mesh.PRIMITIVE_TRIANGLES)
-
-	for i: int in range(segs):
-		var t0: float = float(i) / float(segs)
-		var t1: float = float(i + 1) / float(segs)
-		var z0: float = t0 * total_len
-		var z1: float = t1 * total_len
-		var y0: float = dy_total * t0 + sin(t0 * PI) * arch
-		var y1: float = dy_total * t1 + sin(t1 * PI) * arch
-		var zm: float = (z0 + z1) * 0.5
-		var ym: float = (y0 + y1) * 0.5
-		var pitch: float = -atan2(y1 - y0, maxf(0.001, z1 - z0))
-		var tilt_basis := Basis(Vector3.RIGHT, pitch)
-
-		st_planks.append_from(plank_box, 0, Transform3D(tilt_basis, Vector3(0.0, ym - 0.12, zm)))
-		for side: float in [-1.0, 1.0]:
-			var sx: float = side * (width * 0.48)
-			st_rails.append_from(rail_box, 0, Transform3D(tilt_basis, Vector3(sx, ym + 0.72, zm)))
-			if i % 2 == 0:
-				st_rails.append_from(post_box, 0, Transform3D(Basis.IDENTITY, Vector3(sx, ym + 0.42, zm)))
-
-	var bridge_root := Node3D.new()
-	bridge_root.position = start_p
-	bridge_root.rotation.y = yaw
-
-	var planks_inst := MeshInstance3D.new()
-	planks_inst.mesh = st_planks.commit()
-	planks_inst.material_override = deck_mat
-	planks_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	bridge_root.add_child(planks_inst)
-
-	var rails_inst := MeshInstance3D.new()
-	rails_inst.mesh = st_rails.commit()
-	rails_inst.material_override = rail_mat
-	rails_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	bridge_root.add_child(rails_inst)
-
-	content_root.add_child(bridge_root)
-
-
-static func _add_shrine_pavilion(
-	arena: Arena3D,
-	content_root: Node3D,
-	base_pos: Vector3,
-	pillar_hex: String,
-	roof_hex: String,
-	sc: float = 1.0
-) -> void:
-	var pav := Node3D.new()
-	pav.position = base_pos
-	pav.scale = Vector3(sc, sc, sc)
-
-	var pmat := StandardMaterial3D.new()
-	pmat.albedo_color = Color.html(pillar_hex); pmat.roughness = 0.45
-	var rmat := StandardMaterial3D.new()
-	rmat.albedo_color = Color.html(roof_hex); rmat.roughness = 0.55
-
-	var st_pillars := SurfaceTool.new()
-	st_pillars.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var pm := CylinderMesh.new()
-	pm.top_radius = 0.22; pm.bottom_radius = 0.25; pm.height = 4.6; pm.radial_segments = 8; pm.rings = 1
-	for ox: float in [-2.6, 2.6]:
-		for oz: float in [-2.6, 2.6]:
-			st_pillars.append_from(pm, 0, Transform3D(Basis.IDENTITY, Vector3(ox, 2.3, oz)))
-			arena.obstacles.append({
-				"pos": Vector2(base_pos.x + ox * sc, base_pos.z + oz * sc),
-				"radius": 0.40 * sc,
-				"top_y": base_pos.y + 4.6 * sc,
-			})
-
-	var pillars_inst := MeshInstance3D.new()
-	pillars_inst.mesh = st_pillars.commit()
-	pillars_inst.material_override = pmat
-	pillars_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	pav.add_child(pillars_inst)
-
-	var roof := MeshInstance3D.new()
-	var rm := CylinderMesh.new()
-	rm.top_radius = 0.2; rm.bottom_radius = 4.9; rm.height = 2.1; rm.radial_segments = 4; rm.rings = 1
-	roof.mesh = rm
-	roof.material_override = rmat
-	roof.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	roof.position = Vector3(0.0, 5.4, 0.0)
-	roof.rotation.y = PI * 0.25
-	pav.add_child(roof)
-	content_root.add_child(pav)
-
-
-static func _add_wagasa_umbrella(content_root: Node3D, base_pos: Vector3) -> void:
-	var root := Node3D.new()
-	root.position = base_pos
-
-	var pole_mat := StandardMaterial3D.new()
-	pole_mat.albedo_color = Color.html("#5c3a21"); pole_mat.roughness = 0.72
-	var canopy_mat := StandardMaterial3D.new()
-	canopy_mat.albedo_color = Color.html("#dc2626"); canopy_mat.roughness = 0.48
-	var bench_mat := StandardMaterial3D.new()
-	bench_mat.albedo_color = Color.html("#991b1b"); bench_mat.roughness = 0.58
-
-	var pole := MeshInstance3D.new()
-	var pm := CylinderMesh.new(); pm.top_radius = 0.07; pm.bottom_radius = 0.09; pm.height = 3.2; pm.radial_segments = 6; pm.rings = 1
-	pole.mesh = pm; pole.material_override = pole_mat
-	pole.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	pole.position = Vector3(0.0, 1.6, 0.0)
-	root.add_child(pole)
-
-	var canopy := MeshInstance3D.new()
-	var cm := CylinderMesh.new(); cm.top_radius = 0.12; cm.bottom_radius = 2.15; cm.height = 0.65; cm.radial_segments = 12; cm.rings = 1
-	canopy.mesh = cm; canopy.material_override = canopy_mat
-	canopy.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	canopy.position = Vector3(0.0, 3.1, 0.0)
-	root.add_child(canopy)
-
-	# Red-cloth tea bench beside the umbrella
-	var bench := MeshInstance3D.new()
-	var bm := BoxMesh.new(); bm.size = Vector3(2.2, 0.55, 0.85)
-	bench.mesh = bm; bench.material_override = bench_mat
-	bench.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	bench.position = Vector3(0.0, 0.28, 0.95)
-	root.add_child(bench)
-
-	content_root.add_child(root)
-
-
-static func _add_forge_hearth(arena: Arena3D, content_root: Node3D, base_pos: Vector3) -> void:
-	arena.obstacles.append({"pos": Vector2(base_pos.x, base_pos.z), "radius": 1.15, "top_y": base_pos.y + 1.5})
-
-	var root := Node3D.new()
-	root.position = base_pos
-
-	var stone_mat := StandardMaterial3D.new()
-	stone_mat.albedo_color = Color.html("#334155"); stone_mat.roughness = 0.82
-	var ember_mat := StandardMaterial3D.new()
-	ember_mat.albedo_color = Color.html("#fb923c")
-	ember_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	var iron_mat := StandardMaterial3D.new()
-	iron_mat.albedo_color = Color.html("#1e293b"); iron_mat.roughness = 0.35; iron_mat.metallic = 0.72
-
-	var hearth := MeshInstance3D.new()
-	var hm := BoxMesh.new(); hm.size = Vector3(1.9, 1.1, 1.5)
-	hearth.mesh = hm; hearth.material_override = stone_mat
-	hearth.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	hearth.position = Vector3(0.0, 0.55, 0.0)
-	root.add_child(hearth)
-
-	var coals := MeshInstance3D.new()
-	var cm := BoxMesh.new(); cm.size = Vector3(1.25, 0.25, 0.95)
-	coals.mesh = cm; coals.material_override = ember_mat
-	coals.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	coals.position = Vector3(0.0, 1.12, 0.0)
-	root.add_child(coals)
-
-	var anvil := MeshInstance3D.new()
-	var am := BoxMesh.new(); am.size = Vector3(0.95, 0.72, 0.52)
-	anvil.mesh = am; anvil.material_override = iron_mat
-	anvil.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	anvil.position = Vector3(-1.55, 0.36, 0.65)
-	root.add_child(anvil)
-
-	content_root.add_child(root)
-
-
-static func _add_jizo_shrine(arena: Arena3D, content_root: Node3D, base_pos: Vector3) -> void:
-	arena.obstacles.append({"pos": Vector2(base_pos.x, base_pos.z), "radius": 1.05, "top_y": base_pos.y + 2.8})
-
-	var root := Node3D.new()
-	root.position = base_pos
-
-	var stone_mat := StandardMaterial3D.new()
-	stone_mat.albedo_color = Color.html("#6b7280"); stone_mat.roughness = 0.88
-	var bib_mat := StandardMaterial3D.new()
-	bib_mat.albedo_color = Color.html("#dc2626"); bib_mat.roughness = 0.55
-	var wood_mat := StandardMaterial3D.new()
-	wood_mat.albedo_color = Color.html("#451a03"); wood_mat.roughness = 0.75
-
-	# Stone plinth + statue body & head merged into 1 draw call
-	var st_stone := SurfaceTool.new()
-	st_stone.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var plinth := BoxMesh.new(); plinth.size = Vector3(1.75, 0.55, 1.45)
-	var body := CylinderMesh.new(); body.top_radius = 0.34; body.bottom_radius = 0.44; body.height = 1.15; body.radial_segments = 8; body.rings = 1
-	var head := SphereMesh.new(); head.radius = 0.30; head.height = 0.60; head.radial_segments = 8; head.rings = 5
-	st_stone.append_from(plinth, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 0.28, 0.0)))
-	st_stone.append_from(body, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 1.12, 0.0)))
-	st_stone.append_from(head, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 1.88, 0.0)))
-
-	var stone_inst := MeshInstance3D.new()
-	stone_inst.mesh = st_stone.commit()
-	stone_inst.material_override = stone_mat
-	stone_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(stone_inst)
-
-	# Iconic red Jizo cloth bib
-	var bib := MeshInstance3D.new()
-	var bm := BoxMesh.new(); bm.size = Vector3(0.56, 0.44, 0.26)
-	bib.mesh = bm; bib.material_override = bib_mat
-	bib.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	bib.position = Vector3(0.0, 1.42, 0.26)
-	root.add_child(bib)
-
-	# Small pitched wooden shrine shelter roof
-	var roof := MeshInstance3D.new()
-	var rm := CylinderMesh.new(); rm.top_radius = 0.12; rm.bottom_radius = 1.55; rm.height = 0.85; rm.radial_segments = 4; rm.rings = 1
-	roof.mesh = rm; roof.material_override = wood_mat
-	roof.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	roof.position = Vector3(0.0, 2.75, 0.0)
-	roof.rotation.y = PI * 0.25
-	root.add_child(roof)
-
-	content_root.add_child(root)
-
-
-static func _add_byakko_alcove(arena: Arena3D, content_root: Node3D, npc_pos: Vector3) -> void:
-	# Back shrine stone stele positioned behind Elder Byakko at z - 2.6 so NPC stands cleanly at (16.5, y, -34.0)
-	var stele_pos := Vector3(npc_pos.x, get_base_terrain_height(npc_pos.x, npc_pos.z - 2.6), npc_pos.z - 2.6)
-	arena.obstacles.append({"pos": Vector2(stele_pos.x, stele_pos.z), "radius": 1.35, "top_y": stele_pos.y + 3.6})
-
-	var stone_mat := StandardMaterial3D.new()
-	stone_mat.albedo_color = Color.html("#334155"); stone_mat.roughness = 0.72
-	var accent_mat := StandardMaterial3D.new()
-	accent_mat.albedo_color = Color.html("#e0f2fe"); accent_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var base := BoxMesh.new(); base.size = Vector3(3.4, 0.55, 1.4)
-	var wall := BoxMesh.new(); wall.size = Vector3(2.5, 3.1, 0.55)
-	var cap := BoxMesh.new(); cap.size = Vector3(3.2, 0.35, 1.0)
-	st.append_from(base, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 0.28, 0.0)))
-	st.append_from(wall, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 1.95, 0.0)))
-	st.append_from(cap, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 3.62, 0.0)))
-
-	var stele := MeshInstance3D.new()
-	stele.mesh = st.commit()
-	stele.material_override = stone_mat
-	stele.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	stele.position = stele_pos
-	content_root.add_child(stele)
-
-	# Glowing white-tiger spirit seal inlay on stele front
-	var seal := MeshInstance3D.new()
-	var sm := BoxMesh.new(); sm.size = Vector3(0.85, 1.35, 0.08)
-	seal.mesh = sm; seal.material_override = accent_mat
-	seal.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	seal.position = stele_pos + Vector3(0.0, 2.0, 0.30)
-	content_root.add_child(seal)
-
-	_add_stone_lantern(content_root, Vector3(npc_pos.x - 2.6, get_base_terrain_height(npc_pos.x - 2.6, npc_pos.z - 1.6), npc_pos.z - 1.6), "#bae6fd")
-	_add_stone_lantern(content_root, Vector3(npc_pos.x + 2.6, get_base_terrain_height(npc_pos.x + 2.6, npc_pos.z - 1.6), npc_pos.z - 1.6), "#bae6fd")
-
-
-static func _add_kotodama_monolith(
-	arena: Arena3D,
-	content_root: Node3D,
-	base_pos: Vector3,
-	sky_anim_nodes: Array[Dictionary],
-	is_mob: bool
-) -> void:
-	arena.obstacles.append({"pos": Vector2(base_pos.x, base_pos.z), "radius": 1.75, "top_y": base_pos.y + 7.6})
-
-	var root := Node3D.new()
-	root.name = "KotodamaMonolith"
-	root.position = base_pos
-
-	var stone_mat := StandardMaterial3D.new()
-	stone_mat.albedo_color = Color.html("#1e1b2e"); stone_mat.roughness = 0.42; stone_mat.metallic = 0.28
-	var rune_mat := StandardMaterial3D.new()
-	rune_mat.albedo_color = Color.html("#f472b6")
-	rune_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	var aura_mat := StandardMaterial3D.new()
-	aura_mat.albedo_color = Color(0.88, 0.36, 0.96, 0.82)
-	aura_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	aura_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-
-	# Stepped plinth + tapered obelisk merged into 1 mesh
-	var st_body := SurfaceTool.new()
-	st_body.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var step1 := CylinderMesh.new(); step1.top_radius = 2.6; step1.bottom_radius = 2.9; step1.height = 0.55; step1.radial_segments = 6; step1.rings = 1
-	var step2 := CylinderMesh.new(); step2.top_radius = 1.9; step2.bottom_radius = 2.15; step2.height = 0.55; step2.radial_segments = 6; step2.rings = 1
-	var obelisk := CylinderMesh.new(); obelisk.top_radius = 0.35; obelisk.bottom_radius = 1.15; obelisk.height = 6.4; obelisk.radial_segments = 6; obelisk.rings = 1
-	st_body.append_from(step1, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 0.27, 0.0)))
-	st_body.append_from(step2, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 0.80, 0.0)))
-	st_body.append_from(obelisk, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 4.15, 0.0)))
-
-	var body_inst := MeshInstance3D.new()
-	body_inst.mesh = st_body.commit()
-	body_inst.material_override = stone_mat
-	body_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(body_inst)
-
-	# Glowing Kotodama spirit rune strips along monolith faces
-	var st_runes := SurfaceTool.new()
-	st_runes.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var strip := BoxMesh.new(); strip.size = Vector3(0.24, 4.2, 0.12)
-	for ri: int in range(3):
-		var a: float = float(ri) * (TAU / 3.0)
-		st_runes.append_from(strip, 0, Transform3D(Basis.from_euler(Vector3(0.0, a, 0.0)), Vector3(sin(a) * 0.80, 3.85, cos(a) * 0.80)))
-	var rune_inst := MeshInstance3D.new()
-	rune_inst.mesh = st_runes.commit()
-	rune_inst.material_override = rune_mat
-	rune_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(rune_inst)
-
-	# Rotating sacred halo ring around monolith crown
-	var halo := _make_flat_ring(1.85, 2.20, aura_mat, 5.4, is_mob)
-	root.add_child(halo)
-	sky_anim_nodes.append({"node": halo, "kind": "spin", "speed": 1.35})
-
-	content_root.add_child(root)
-
-
-static func _add_giant_weeping_sakura(content_root: Node3D, base_pos: Vector3) -> void:
-	var tree := Node3D.new()
-	tree.name = "GiantWeepingSakura"
-	tree.position = base_pos
-
-	var trunk_m := StandardMaterial3D.new()
-	trunk_m.albedo_color = Color.html("#2e1a18"); trunk_m.roughness = 0.88
-	var leaf_m := StandardMaterial3D.new()
-	leaf_m.albedo_color = Color.html("#f472b6"); leaf_m.roughness = 0.50
-
-	# Massive gnarled trunk + main boughs merged into 1 mesh
-	var st_trunk := SurfaceTool.new()
-	st_trunk.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var main_t := CylinderMesh.new(); main_t.top_radius = 0.85; main_t.bottom_radius = 1.45; main_t.height = 9.2; main_t.radial_segments = 8; main_t.rings = 1
-	var bough := CylinderMesh.new(); bough.top_radius = 0.35; bough.bottom_radius = 0.65; bough.height = 6.0; bough.radial_segments = 6; bough.rings = 1
-	st_trunk.append_from(main_t, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 4.5, 0.0)))
-	st_trunk.append_from(bough, 0, Transform3D(Basis.from_euler(Vector3(0.2, 0.0, 0.65)), Vector3(-2.6, 8.2, 0.4)))
-	st_trunk.append_from(bough, 0, Transform3D(Basis.from_euler(Vector3(-0.2, 0.0, -0.65)), Vector3(2.6, 8.2, -0.4)))
-	var trunk_inst := MeshInstance3D.new()
-	trunk_inst.mesh = st_trunk.commit()
-	trunk_inst.material_override = trunk_m
-	trunk_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	tree.add_child(trunk_inst)
-
-	# Sprawling weeping blossom canopy merged into 1 single draw call
-	var st_leaves := SurfaceTool.new()
-	st_leaves.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var clusters: Array = [
-		[Vector3(0.0, 11.2, 0.0), 5.2, 0.95],
-		[Vector3(-4.8, 9.6, 1.2), 4.0, 1.15],
-		[Vector3(4.8, 9.8, 0.8), 4.1, 1.15],
-		[Vector3(-2.5, 10.4, -3.2), 3.6, 1.05],
-		[Vector3(2.8, 10.2, -3.0), 3.5, 1.05],
-		[Vector3(0.0, 9.2, 3.6), 3.8, 1.25],
-	]
-	for cp: Array in clusters:
-		var sp := SphereMesh.new()
-		var r: float = float(cp[1])
-		var h_mult: float = float(cp[2])
-		sp.radius = r; sp.height = r * 1.45 * h_mult; sp.radial_segments = 10; sp.rings = 6
-		st_leaves.append_from(sp, 0, Transform3D(Basis.IDENTITY, cp[0]))
-
-	var fol := MeshInstance3D.new()
-	fol.mesh = st_leaves.commit()
-	fol.material_override = leaf_m
-	fol.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	tree.add_child(fol)
-	content_root.add_child(tree)
-
-
 static func _add_tactical_pillar(
 	arena: Arena3D,
 	content_root: Node3D,
@@ -1393,130 +947,6 @@ static func _add_tactical_pillar(
 	ring.position.x = base_pos.x
 	ring.position.z = base_pos.z
 	content_root.add_child(ring)
-
-
-static func _add_mossy_boulder(arena: Arena3D, content_root: Node3D, base_pos: Vector3, rad: float) -> void:
-	arena.obstacles.append({"pos": Vector2(base_pos.x, base_pos.z), "radius": rad, "top_y": base_pos.y + rad * 1.25})
-	var rmat := StandardMaterial3D.new()
-	rmat.albedo_color = Color.html("#4b5548"); rmat.roughness = 0.88
-	var b := MeshInstance3D.new()
-	var sm := SphereMesh.new()
-	sm.radius = rad; sm.height = rad * 1.65; sm.radial_segments = 8; sm.rings = 5
-	b.mesh = sm; b.material_override = rmat
-	b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	b.position = base_pos + Vector3(0.0, rad * 0.55, 0.0)
-	content_root.add_child(b)
-
-
-static func _add_torii_gate(content_root: Node3D, base_pos: Vector3, pillar_hex: String, sc: float = 1.0) -> void:
-	var torii := Node3D.new()
-	torii.position = base_pos
-	torii.scale = Vector3(sc, sc, sc)
-
-	var pillar_mat := StandardMaterial3D.new()
-	pillar_mat.albedo_color = Color.html(pillar_hex); pillar_mat.roughness = 0.40
-	var cap_mat := StandardMaterial3D.new()
-	cap_mat.albedo_color = Color.html("#0f172a"); cap_mat.roughness = 0.50
-
-	var st_red := SurfaceTool.new()
-	st_red.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var pillar_mesh := CylinderMesh.new()
-	pillar_mesh.top_radius = 0.35; pillar_mesh.bottom_radius = 0.42; pillar_mesh.height = 7.2
-	pillar_mesh.radial_segments = 10; pillar_mesh.rings = 1
-	for px: float in [-3.2, 3.2]:
-		st_red.append_from(pillar_mesh, 0, Transform3D(Basis.IDENTITY, Vector3(px, 3.6, 0.0)))
-	var nuki_mesh := BoxMesh.new(); nuki_mesh.size = Vector3(7.6, 0.40, 0.50)
-	st_red.append_from(nuki_mesh, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 5.7, 0.0)))
-
-	var red_inst := MeshInstance3D.new()
-	red_inst.mesh = st_red.commit()
-	red_inst.material_override = pillar_mat
-	red_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	torii.add_child(red_inst)
-
-	var kasagi := MeshInstance3D.new()
-	var km := BoxMesh.new(); km.size = Vector3(8.8, 0.55, 0.80)
-	kasagi.mesh = km; kasagi.material_override = cap_mat
-	kasagi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	kasagi.position = Vector3(0.0, 7.3, 0.0)
-	torii.add_child(kasagi)
-
-	content_root.add_child(torii)
-
-
-static func _add_stone_lantern(content_root: Node3D, base_pos: Vector3, glow_hex: String) -> void:
-	var lg := Node3D.new()
-	lg.position = base_pos
-
-	var stone_mat := StandardMaterial3D.new(); stone_mat.albedo_color = Color.html("#64748b"); stone_mat.roughness = 0.80
-	var roof_mat := StandardMaterial3D.new(); roof_mat.albedo_color = Color.html("#475569"); roof_mat.roughness = 0.70
-	var glow_mat := StandardMaterial3D.new(); glow_mat.albedo_color = Color.html(glow_hex); glow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-
-	var b := MeshInstance3D.new()
-	var bm := BoxMesh.new(); bm.size = Vector3(1.1, 2.2, 1.1)
-	b.mesh = bm; b.material_override = stone_mat
-	b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	b.position = Vector3(0.0, 1.1, 0.0)
-	lg.add_child(b)
-
-	var g := MeshInstance3D.new()
-	var gm := BoxMesh.new(); gm.size = Vector3(0.75, 0.75, 0.75)
-	g.mesh = gm; g.material_override = glow_mat
-	g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	g.position = Vector3(0.0, 2.55, 0.0)
-	lg.add_child(g)
-
-	var r := MeshInstance3D.new()
-	var rm := CylinderMesh.new(); rm.top_radius = 0.0; rm.bottom_radius = 1.15; rm.height = 0.9; rm.radial_segments = 4; rm.rings = 1
-	r.mesh = rm; r.material_override = roof_mat
-	r.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	r.position = Vector3(0.0, 3.35, 0.0)
-	r.rotation.y = PI * 0.25
-	lg.add_child(r)
-
-	content_root.add_child(lg)
-
-
-static func _add_stylized_tree(
-	content_root: Node3D,
-	base_pos: Vector3,
-	trunk_hex: String,
-	leaf_hex: String,
-	sc: float = 1.0
-) -> void:
-	var tree := Node3D.new()
-	tree.position = base_pos
-	tree.scale = Vector3(sc, sc, sc)
-
-	var trunk_m := StandardMaterial3D.new(); trunk_m.albedo_color = Color.html(trunk_hex); trunk_m.roughness = 0.85
-	var leaf_m := StandardMaterial3D.new(); leaf_m.albedo_color = Color.html(leaf_hex); leaf_m.roughness = 0.55
-
-	var trunk := MeshInstance3D.new()
-	var tc := CylinderMesh.new(); tc.top_radius = 0.24; tc.bottom_radius = 0.42; tc.height = 4.2; tc.radial_segments = 7; tc.rings = 1
-	trunk.mesh = tc; trunk.material_override = trunk_m
-	trunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	trunk.position = Vector3(0.0, 2.0, 0.0)
-	tree.add_child(trunk)
-
-	var st_leaves := SurfaceTool.new()
-	st_leaves.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for cp: Array in [
-		[Vector3(0.0, 4.6, 0.0), 2.1],
-		[Vector3(1.2, 4.1, 0.7), 1.45],
-		[Vector3(-1.1, 4.2, -0.6), 1.55],
-	]:
-		var sp := SphereMesh.new()
-		var r: float = float(cp[1])
-		sp.radius = r; sp.height = r * 1.45; sp.radial_segments = 10; sp.rings = 6
-		st_leaves.append_from(sp, 0, Transform3D(Basis.IDENTITY, cp[0]))
-
-	var fol := MeshInstance3D.new()
-	fol.mesh = st_leaves.commit()
-	fol.material_override = leaf_m
-	fol.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	tree.add_child(fol)
-
-	content_root.add_child(tree)
 
 
 static func _make_flat_ring(
