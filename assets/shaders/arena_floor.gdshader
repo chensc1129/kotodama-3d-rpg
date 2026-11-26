@@ -1,7 +1,7 @@
 shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_back;
 
-uniform int stage_id = 0; // 0: sakura_shrine, 1: maple_temple, 2: onigashima_lava, 3: sky_tenshu
+uniform int stage_id = 0; // 0: sakura_shrine, 1: maple_temple, 2: onigashima_lava, 3: sky_tenshu, 4: arpg_ch1_landscape
 uniform bool mobile_mode = false;
 
 varying vec3 v_world_pos;
@@ -198,7 +198,7 @@ void fragment() {
 			final_met += 0.08 * w.a;
 		}
 
-	} else {
+	} else if (stage_id == 3) {
 		// === STAGE 3: SKY TENSHU ===
 		if (w.r > 0.01) {
 			vec3 mar = flagstone_pattern(xz, vec2(0.42, 0.42), 0.035);
@@ -236,6 +236,74 @@ void fragment() {
 			final_rough += 0.68 * w.a;
 			final_met += 0.10 * w.a;
 			bump_h += wall.z * w.a;
+		}
+
+	} else {
+		// === STAGE 4: ARPG CHAPTER 1 NATURAL JAPANESE LANDSCAPE ===
+		if (w.r > 0.01) {
+			// Warm weathered Japanese granite flagstones with mossy dark crevices & bevel highlights
+			vec3 st_g = flagstone_pattern(xz, vec2(0.56, 0.70), 0.062);
+			vec3 granite = mix(vec3(0.45, 0.41, 0.35), vec3(0.61, 0.56, 0.48), st_g.y * 0.65 + n_fine * 0.35);
+			float bevel_hi = st_g.z * (1.0 - st_g.x);
+			granite += vec3(0.055, 0.048, 0.038) * bevel_hi;
+			float moss_cr = smoothstep(0.34, 0.74, vnoise(xz * 0.85 + vec2(2.3, -1.7)));
+			vec3 crevice = mix(vec3(0.15, 0.14, 0.12), vec3(0.14, 0.31, 0.13), moss_cr);
+			final_col += mix(granite, crevice, st_g.x * 0.90) * w.r;
+			final_rough += mix(0.70, 0.94, st_g.x) * w.r;
+			final_met += 0.05 * w.r;
+			bump_h += st_g.z * w.r;
+		}
+		if (w.g > 0.01) {
+			// Lush emerald meadow grass & organic mossy woodland soil with soft wildflower moss variation
+			float macro_n = mobile_mode ? vnoise(xz * 0.24) : fbm2(xz * 0.22);
+			vec3 turf = mix(vec3(0.14, 0.34, 0.14), vec3(0.26, 0.48, 0.18), clamp(macro_n * 0.62 + n_fine * 0.38, 0.0, 1.0));
+			float soil_n = mobile_mode ? vnoise(xz * 0.38 + vec2(4.3, -2.7)) : fbm2(xz * 0.36 + vec2(4.3, -2.7));
+			float soil_mask = smoothstep(0.62, 0.84, soil_n);
+			vec3 wood_soil = mix(vec3(0.22, 0.17, 0.11), vec3(0.31, 0.24, 0.15), n_fine);
+			vec3 meadow = mix(turf, wood_soil, soil_mask * 0.72);
+			float wf_moss = smoothstep(0.62, 0.88, vnoise(xz * 1.45 + vec2(-3.1, 5.2)));
+			meadow = mix(meadow, vec3(0.34, 0.52, 0.20), wf_moss * (1.0 - soil_mask) * 0.36);
+			final_col += meadow * w.g;
+			final_rough += 0.90 * w.g;
+			final_met += 0.01 * w.g;
+			bump_h += (n_fine * 0.40 + macro_n * 0.25) * w.g;
+		}
+		if (w.b > 0.01) {
+			// Golden-ivory sandy beach with wind-rippled micro-waves, mineral sparkle & automatic wet-sand darkening
+			float sand_warp = mobile_mode ? vnoise(xz * 0.6) : fbm2(xz * 0.6);
+			float ripple = sin(xz.x * 4.5 + sand_warp * 3.5) * 0.5 + 0.5;
+			vec3 sand_col = mix(vec3(0.76, 0.67, 0.48), vec3(0.88, 0.79, 0.58), ripple * 0.55 + n_fine * 0.45);
+			// Safe WebGL2 smoothstep (edge0 < edge1) matching smoothstep(0.05, -0.45, y)
+			float wet = 1.0 - smoothstep(-0.45, 0.05, v_world_pos.y);
+			float sparkle = mobile_mode ? 0.0 : smoothstep(0.88, 0.99, hash21(floor(xz * 18.0))) * (1.0 - wet * 0.65);
+			sand_col += vec3(0.18, 0.16, 0.11) * sparkle;
+			sand_col *= mix(1.0, 0.58, wet);
+			final_col += sand_col * w.b;
+			final_rough += mix(0.90, 0.26, wet) * w.b;
+			final_met += mix(0.02, 0.12, wet) * w.b;
+			bump_h += ripple * 0.42 * (1.0 - wet * 0.5) * w.b;
+		}
+		if (w.a > 0.01) {
+			if (v_world_pos.y < 1.2) {
+				// Smooth underwater river / lakebed pebbles with wet teal-slate sheen
+				vec3 cob = cobble_fast(xz, 0.92);
+				vec3 peb = mix(vec3(0.09, 0.21, 0.25), vec3(0.19, 0.33, 0.37), cob.y * 0.72 + cob.z * 0.28);
+				final_col += mix(peb, vec3(0.06, 0.14, 0.16), cob.x * 0.84) * w.a;
+				final_rough += 0.20 * w.a;
+				final_met += 0.14 * w.a;
+				bump_h += cob.z * 0.65 * w.a;
+			} else {
+				// Elevated North Grand Altar: polished dark twilight shrine slate with faint sakura-gold mortar seams
+				vec2 rot_xz = vec2(xz.x + xz.y, xz.x - xz.y) * 0.7071;
+				vec3 altar = flagstone_pattern(rot_xz, vec2(0.62, 0.62), 0.042);
+				vec3 slate = mix(vec3(0.14, 0.13, 0.22), vec3(0.24, 0.21, 0.33), altar.y * 0.68 + n_fine * 0.32);
+				vec3 seam = mix(vec3(0.78, 0.54, 0.48), vec3(0.92, 0.74, 0.42), 0.5 + 0.5 * sin(xz.x * 0.45 + xz.y * 0.45));
+				final_col += mix(slate, seam, altar.x * 0.74) * w.a;
+				final_emi += vec3(0.74, 0.48, 0.36) * altar.x * 0.14 * w.a;
+				final_rough += mix(0.28, 0.48, altar.x) * w.a;
+				final_met += mix(0.22, 0.48, altar.x) * w.a;
+				bump_h += altar.z * w.a;
+			}
 		}
 	}
 

@@ -9,6 +9,7 @@ uniform vec4 base_tint : source_color = vec4(1.0, 1.0, 1.0, 1.0);
 uniform float roughness_base : hint_range(0.10, 1.0) = 0.72;
 uniform float metallic_base : hint_range(0.0, 1.0) = 0.04;
 uniform float moss_amount : hint_range(0.0, 1.0) = 0.0;
+uniform float wind_strength : hint_range(0.0, 3.0) = 1.0;
 uniform bool mobile_mode = false;
 
 varying vec3 v_local_pos;
@@ -35,9 +36,33 @@ float vnoise(vec2 p) {
 
 void vertex() {
 	v_local_pos = VERTEX;
-	v_world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	v_world_pos = wp;
 	v_world_nrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	v_vcol = COLOR.rgb;
+
+	// Subtle, height-weighted GPU wind sway for tree foliage (1) & bamboo culms/leaves (5)
+	if ((surface_mode == 1 || surface_mode == 5) && wind_strength > 0.001) {
+		float sway_h = max(0.0, VERTEX.y - 1.5);
+		if (sway_h > 0.001) {
+			vec2 wdir = vec2(0.85, 0.52);
+			float t_w = TIME * (1.25 + wind_strength * 0.45);
+			float phase = dot(wp.xz, wdir) * 0.36 - t_w;
+			float gust = sin(phase) * 0.65 + sin(phase * 2.13 + wp.y * 0.65) * 0.35;
+			float flutter = mobile_mode ? 0.0 : sin(TIME * 3.3 + wp.x * 1.9 + wp.z * 1.7 + wp.y * 2.1) * 0.16;
+
+			float bend = (surface_mode == 5)
+				? min(sway_h * sway_h * 0.012, 0.44)
+				: min(sway_h * 0.030, 0.22);
+
+			vec2 sway_xz = (wdir * (gust + 0.20) + vec2(-wdir.y, wdir.x) * flutter) * bend * wind_strength;
+			float sway_y = (surface_mode == 1)
+				? (sin(phase * 1.6 + wp.x * 0.8) * 0.014 * min(sway_h, 4.0) * wind_strength)
+				: (-dot(sway_xz, sway_xz) * 0.12);
+
+			VERTEX += inverse(mat3(MODEL_MATRIX)) * vec3(sway_xz.x, sway_y, sway_xz.y);
+		}
+	}
 }
 
 void fragment() {

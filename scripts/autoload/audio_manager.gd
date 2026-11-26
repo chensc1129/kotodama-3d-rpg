@@ -31,6 +31,11 @@ const SFX_COOLDOWN_MS: Dictionary = {
 	"jump": 80,
 	"land": 90,
 	"levelup": 140,
+	"step_stone": 140,
+	"step_grass": 150,
+	"step_sand": 150,
+	"water_step": 160,
+	"water_splash": 180,
 }
 
 
@@ -114,7 +119,12 @@ func play_sfx(sfx_name: String) -> void:
 		_pool_cursor = (_pool_cursor + 1) % POOL_SIZE
 
 	chosen.stream = stream
-	chosen.pitch_scale = randf_range(0.97, 1.03) if sfx_name.begins_with("atk_") or sfx_name.begins_with("impact_") else 1.0
+	if sfx_name.begins_with("atk_") or sfx_name.begins_with("impact_"):
+		chosen.pitch_scale = randf_range(0.97, 1.03)
+	elif sfx_name.begins_with("step_") or sfx_name.begins_with("water_"):
+		chosen.pitch_scale = randf_range(0.94, 1.06)
+	else:
+		chosen.pitch_scale = 1.0
 	chosen.play()
 
 
@@ -295,6 +305,34 @@ func _bake_all_sfx() -> void:
 		_v("sine", 1046.50, 1046.50, 0.36, 0.26, 0.27),
 	])
 
+	# === Tactile Environmental Footstep & Water Splash SFX (Soft, Natural, Zero-Crackle) ===
+	_sfx_bank["step_stone"] = _bake_voices([
+		_v("sine", 195.0, 78.0, 0.045, 0.14),
+		_v("bp_noise", 1650.0, 720.0, 0.036, 0.16),
+	])
+	_sfx_bank["step_grass"] = _bake_voices([
+		_v("bp_noise", 2200.0, 1250.0, 0.075, 0.14),
+		_v("noise", 420.0, 190.0, 0.055, 0.07),
+	])
+	_sfx_bank["step_sand"] = _bake_voices([
+		_v("bp_noise", 1850.0, 920.0, 0.062, 0.16, 0.0),
+		_v("bp_noise", 2400.0, 1150.0, 0.058, 0.12, 0.032),
+		_v("sine", 130.0, 62.0, 0.055, 0.08, 0.0),
+	])
+	_sfx_bank["water_step"] = _bake_voices([
+		_v("sine", 320.0, 740.0, 0.085, 0.22, 0.0),
+		_v("bp_noise", 2100.0, 880.0, 0.110, 0.24, 0.008),
+		_v("sine", 540.0, 960.0, 0.050, 0.10, 0.038),
+	])
+	_sfx_bank["water_splash"] = _bake_voices([
+		_v("sine", 165.0, 58.0, 0.120, 0.30, 0.0),
+		_v("sine", 290.0, 760.0, 0.100, 0.24, 0.012),
+		_v("sine", 420.0, 1080.0, 0.095, 0.18, 0.055),
+		_v("sine", 520.0, 1240.0, 0.085, 0.13, 0.110),
+		_v("bp_noise", 2600.0, 720.0, 0.260, 0.42, 0.0),
+		_v("noise", 950.0, 260.0, 0.220, 0.22, 0.015),
+	])
+
 
 func _v(wave: String, f0: float, f1: float, dur: float, amp: float, delay: float = 0.0) -> Dictionary:
 	return {
@@ -332,6 +370,7 @@ func _bake_voices(voices: Array) -> AudioStreamWAV:
 		var len_frames := int(round(dur * sr_f))
 		var phase := 0.0
 		var lp_noise := 0.0
+		var lp_noise_lo := 0.0
 
 		for i in range(len_frames):
 			var out_idx := start_idx + i
@@ -352,6 +391,14 @@ func _bake_voices(voices: Array) -> AudioStreamWAV:
 			elif wave == "tri":
 				phase = fmod(phase + freq / sr_f, 1.0)
 				osc = 4.0 * absf(phase - 0.5) - 1.0
+			elif wave == "bp_noise":
+				# Clean dual-pole band-pass noise for natural foliage, sand, and water swish
+				var raw_bp := rng.randf_range(-1.0, 1.0)
+				var c_hi := clampf(freq / (sr_f * 0.22), 0.06, 0.88)
+				var c_lo := clampf((freq * 0.35) / (sr_f * 0.22), 0.02, 0.45)
+				lp_noise = lerpf(lp_noise, raw_bp, c_hi)
+				lp_noise_lo = lerpf(lp_noise_lo, raw_bp, c_lo)
+				osc = (lp_noise - lp_noise_lo) * 1.65
 			else:
 				# Gently low-pass filtered noise (warm & punchy, zero harsh aliasing)
 				var raw_n := rng.randf_range(-1.0, 1.0)

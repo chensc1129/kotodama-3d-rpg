@@ -36,6 +36,10 @@ var _lava_plane_mat: Material
 var _water_plane_mat: Material
 var _sky_anim_nodes: Array[Dictionary] = []
 var _elapsed: float = 0.0
+var _splash_time: float = 99.0
+var _gust_time: float = 99.0
+var _current_wind_strength: float = 1.0
+var _wafuu_wind_mats: Array[ShaderMaterial] = []
 var _sakura_spots: Array[Vector2] = [
 	Vector2(0.0, -17.5 * S),
 	Vector2(17.5 * S, 2.0 * S),
@@ -334,6 +338,152 @@ func is_in_lava(x: float, z: float, entity_y: float) -> bool:
 	return entity_y < -0.35 and get_base_terrain_height(x, z) < -0.45
 
 
+func is_on_bridge_or_pier(x: float, z: float, entity_y: float) -> bool:
+	var pt := Vector2(x, z)
+	for br in bridges:
+		var s3: Vector3 = br["start"]
+		var e3: Vector3 = br["end"]
+		var s2 := Vector2(s3.x, s3.z)
+		var e2 := Vector2(e3.x, e3.z)
+		var seg := e2 - s2
+		var seg_len_sq := seg.length_squared()
+		if seg_len_sq < 0.01:
+			continue
+		var t := clampf((pt - s2).dot(seg) / seg_len_sq, 0.0, 1.0)
+		var closest := s2 + seg * t
+		var half_w: float = float(br["width"]) * 0.52
+		if pt.distance_to(closest) <= half_w:
+			var deck_y := lerpf(s3.y, e3.y, t) + sin(t * PI) * float(br["arch"])
+			if entity_y >= deck_y - 0.45 and entity_y <= deck_y + 1.25:
+				return true
+	return false
+
+
+func get_terrain_normal(x: float, z: float) -> Vector3:
+	if current_stage_id == ArpgChapter1Data.STAGE_ID:
+		return ArpgCh1Map.get_terrain_normal(x, z)
+	var eps := 0.30
+	var hx1 := get_base_terrain_height(x + eps, z)
+	var hx0 := get_base_terrain_height(x - eps, z)
+	var hz1 := get_base_terrain_height(x, z + eps)
+	var hz0 := get_base_terrain_height(x, z - eps)
+	return Vector3(hx0 - hx1, 2.0 * eps, hz0 - hz1).normalized()
+
+
+func get_water_level(x: float, z: float) -> float:
+	if current_stage_id == ArpgChapter1Data.STAGE_ID:
+		return ArpgCh1Map.get_water_level(x, z)
+	if current_stage_id == "sakura_shrine":
+		if get_base_terrain_height(x, z) < -0.22:
+			return -0.34
+	elif current_stage_id == "maple_temple":
+		if get_base_terrain_height(x, z) < -0.48:
+			return -0.62
+	return -99.0
+
+
+func get_surface_type(x: float, z: float, entity_y: float) -> String:
+	if is_on_bridge_or_pier(x, z, entity_y):
+		return "wood"
+	if current_stage_id == ArpgChapter1Data.STAGE_ID:
+		return ArpgCh1Map.get_surface_type(x, z, entity_y)
+	var wl := get_water_level(x, z)
+	if wl > -50.0 and entity_y < wl + 0.08:
+		return "water"
+	if current_stage_id == "maple_temple":
+		return "grass"
+	return "stone"
+
+
+func update_interactive_env(player_pos: Vector3, player_vel: Vector3, wind_strength: float, wind_dir: Vector2) -> void:
+	_current_wind_strength = wind_strength
+	if has_meta("interactive_foliage_mats"):
+		var fmats: Array = get_meta("interactive_foliage_mats")
+		for m in fmats:
+			if m is ShaderMaterial:
+				var sm := m as ShaderMaterial
+				sm.set_shader_parameter("player_pos", player_pos)
+				sm.set_shader_parameter("player_vel", player_vel)
+				sm.set_shader_parameter("wind_strength", wind_strength)
+				sm.set_shader_parameter("wind_dir", wind_dir)
+	if has_meta("interactive_water_mats"):
+		var wmats: Array = get_meta("interactive_water_mats")
+		for m in wmats:
+			if m is ShaderMaterial:
+				var sm := m as ShaderMaterial
+				sm.set_shader_parameter("player_pos", player_pos)
+				sm.set_shader_parameter("wind_strength", wind_strength)
+	elif _water_plane_mat is ShaderMaterial:
+		var wsm := _water_plane_mat as ShaderMaterial
+		wsm.set_shader_parameter("player_pos", player_pos)
+		wsm.set_shader_parameter("wind_strength", wind_strength)
+	for wm in _wafuu_wind_mats:
+		if is_instance_valid(wm):
+			wm.set_shader_parameter("wind_strength", wind_strength)
+
+
+func trigger_water_splash(pos: Vector3, strength: float = 1.0) -> void:
+	_splash_time = 0.0
+	if has_meta("interactive_water_mats"):
+		var wmats: Array = get_meta("interactive_water_mats")
+		for m in wmats:
+			if m is ShaderMaterial:
+				var sm := m as ShaderMaterial
+				sm.set_shader_parameter("splash_pos", pos)
+				sm.set_shader_parameter("splash_time", 0.0)
+				sm.set_shader_parameter("splash_strength", clampf(strength, 0.0, 2.0))
+	elif _water_plane_mat is ShaderMaterial:
+		var wsm := _water_plane_mat as ShaderMaterial
+		wsm.set_shader_parameter("splash_pos", pos)
+		wsm.set_shader_parameter("splash_time", 0.0)
+		wsm.set_shader_parameter("splash_strength", clampf(strength, 0.0, 2.0))
+
+
+func trigger_foliage_gust(pos: Vector3) -> void:
+	_gust_time = 0.0
+	if has_meta("interactive_foliage_mats"):
+		var fmats: Array = get_meta("interactive_foliage_mats")
+		for m in fmats:
+			if m is ShaderMaterial:
+				var sm := m as ShaderMaterial
+				sm.set_shader_parameter("gust_pos", pos)
+				sm.set_shader_parameter("gust_time", 0.0)
+
+
+func _collect_wafuu_wind_materials() -> void:
+	_wafuu_wind_mats.clear()
+	var seen: Dictionary = {}
+	var stack: Array[Node] = [_arena_content]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is MeshInstance3D:
+			var mi := n as MeshInstance3D
+			var mat := mi.material_override
+			if mat == null and mi.mesh != null and mi.mesh.get_surface_count() > 0:
+				mat = mi.mesh.surface_get_material(0)
+			if mat is ShaderMaterial:
+				var sm := mat as ShaderMaterial
+				if sm.shader != null and sm.shader.resource_path.ends_with("wafuu_prop.gdshader"):
+					var rid_id := sm.get_instance_id()
+					if not seen.has(rid_id):
+						seen[rid_id] = true
+						_wafuu_wind_mats.append(sm)
+		elif n is MultiMeshInstance3D:
+			var mmi := n as MultiMeshInstance3D
+			var mat := mmi.material_override
+			if mat == null and mmi.multimesh != null and mmi.multimesh.mesh != null and mmi.multimesh.mesh.get_surface_count() > 0:
+				mat = mmi.multimesh.mesh.surface_get_material(0)
+			if mat is ShaderMaterial:
+				var sm := mat as ShaderMaterial
+				if sm.shader != null and sm.shader.resource_path.ends_with("wafuu_prop.gdshader"):
+					var rid_id := sm.get_instance_id()
+					if not seen.has(rid_id):
+						seen[rid_id] = true
+						_wafuu_wind_mats.append(sm)
+		for child in n.get_children():
+			stack.append(child)
+
+
 func cycle_sakura_zone() -> Vector3:
 	_sakura_spot_idx = (_sakura_spot_idx + 1) % _sakura_spots.size()
 	var pt := _sakura_spots[_sakura_spot_idx]
@@ -362,10 +512,17 @@ func build_stage(stage_id: String) -> void:
 	wind_zones.clear()
 	jump_pads.clear()
 	_sky_anim_nodes.clear()
+	_wafuu_wind_mats.clear()
 	_sakura_zone_node = null
 	_lava_plane_mat = null
 	_water_plane_mat = null
 	_sakura_spot_idx = 0
+	_splash_time = 99.0
+	_gust_time = 99.0
+	if has_meta("interactive_foliage_mats"):
+		remove_meta("interactive_foliage_mats")
+	if has_meta("interactive_water_mats"):
+		remove_meta("interactive_water_mats")
 
 	if current_stage_id == ArpgChapter1Data.STAGE_ID:
 		if center_light != null:
@@ -373,6 +530,7 @@ func build_stage(stage_id: String) -> void:
 			center_light.light_energy = 1.65
 			center_light.omni_range = 140.0
 		ArpgCh1Map.build_map(self, _arena_content, FLOOR_SHADER, PROP_SURFACE_SHADER, WATER_SHADER, SKY_SHADER, _sky_anim_nodes)
+		_collect_wafuu_wind_materials()
 		return
 
 	var sky_col := Color.html(st["sky_color"])
@@ -1319,7 +1477,23 @@ func _add_sky_cloud_ring(count: int, ring_radius: float, y_base: float, tint: Co
 
 
 func _process(delta: float) -> void:
-	_elapsed += delta
+	var dt := minf(0.05, delta)
+	_elapsed += dt
+	if _splash_time < 4.0:
+		_splash_time += dt
+		if has_meta("interactive_water_mats"):
+			for m in get_meta("interactive_water_mats"):
+				if m is ShaderMaterial:
+					(m as ShaderMaterial).set_shader_parameter("splash_time", _splash_time)
+		elif _water_plane_mat is ShaderMaterial:
+			(_water_plane_mat as ShaderMaterial).set_shader_parameter("splash_time", _splash_time)
+	if _gust_time < 3.0:
+		_gust_time += dt
+		if has_meta("interactive_foliage_mats"):
+			for m in get_meta("interactive_foliage_mats"):
+				if m is ShaderMaterial:
+					(m as ShaderMaterial).set_shader_parameter("gust_time", _gust_time)
+
 	if _sakura_zone_node != null and is_instance_valid(_sakura_zone_node):
 		_sakura_zone_node.rotation.y = _elapsed * 1.15
 	for wz in wind_zones:
@@ -1354,5 +1528,30 @@ func _process(delta: float) -> void:
 		elif kind == "tumble":
 			sn.rotation.y = _elapsed * float(sk["speed"])
 			sn.rotation.z = sin(_elapsed * 0.5) * 0.32
+		elif kind == "float_boat":
+			var bp: Vector3 = sk["base_pos"]
+			var base_yaw: float = float(sk.get("base_yaw", 0.0))
+			var ph: float = float(sk.get("phase", 0.0))
+			var wf: float = 0.70 + 0.30 * _current_wind_strength
+			var t_w: float = _elapsed * 1.15
+			var heave: float = (sin(t_w * 1.85 + ph) * 0.048 + cos(t_w * 1.25 - ph) * 0.026) * wf
+			var pitch_w: float = cos(t_w * 1.55 + ph) * 0.045 * wf
+			var roll_w: float = sin(t_w * 1.95 + ph * 1.3) * 0.068 * wf
+			sn.position = Vector3(bp.x + sin(t_w * 0.55 + ph) * 0.06, bp.y + heave, bp.z + cos(t_w * 0.45 + ph) * 0.05)
+			sn.rotation = Vector3(pitch_w, base_yaw + sin(t_w * 0.42 + ph) * 0.05, roll_w)
+		elif kind == "koi_swim":
+			var ctr: Vector3 = sk["center"]
+			var rx: float = float(sk.get("rx", 4.0))
+			var rz: float = float(sk.get("rz", 3.0))
+			var spd: float = float(sk.get("speed", 0.45))
+			var ph: float = float(sk.get("phase", 0.0))
+			var ang: float = _elapsed * spd + ph
+			var nx: float = ctr.x + cos(ang) * rx
+			var nz: float = ctr.z + sin(ang) * rz
+			var vx: float = -sin(ang) * rx * spd
+			var vz: float = cos(ang) * rz * spd
+			var wiggle: float = sin(_elapsed * 7.2 + ph * 2.0) * 0.11
+			sn.position = Vector3(nx, ctr.y + sin(_elapsed * 1.6 + ph) * 0.03, nz)
+			sn.rotation = Vector3(0.0, atan2(vx, vz) + wiggle, wiggle * 0.35)
 	if _lava_plane_mat is StandardMaterial3D:
 		(_lava_plane_mat as StandardMaterial3D).emission_energy_multiplier = 1.45 + sin(_elapsed * 3.2) * 0.30

@@ -455,6 +455,10 @@ const EPILOGUE_CUTSCENE: Dictionary = {
 
 
 static func get_zone_name(pos: Vector3) -> String:
+	if pos.x >= 16.0 and pos.z >= -2.0 and pos.z <= 25.0:
+		return "🌊 月見湖・白砂浜"
+	if pos.x <= -16.0 and pos.z >= 13.0 and pos.z <= 26.0:
+		return "🌸 櫻花草原・花海"
 	if pos.z >= 20.0:
 		return "🌸 櫻花村廣場"
 	if pos.z >= 4.0:

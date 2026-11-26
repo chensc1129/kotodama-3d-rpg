@@ -25,6 +25,15 @@ var _slash_step: int = 1
 var _walk_phase: float = 0.0
 var _elapsed: float = 0.0
 var _punch_scale: Vector3 = Vector3.ONE
+var _phys_vel: Vector3 = Vector3.ZERO
+var _ground_normal: Vector3 = Vector3.UP
+var _wind_strength: float = 0.0
+var _water_depth: float = 0.0
+var _prev_facing: float = PI
+var _has_prev_facing: bool = false
+var _bank_roll_z: float = 0.0
+var _scarf_base_x: float = 0.08
+var _aura_water_offset: float = 0.0
 
 var _visual_root: Node3D
 var _body_pivot: Node3D
@@ -88,10 +97,19 @@ func reset_vertical_state(ground_y: float = 0.0) -> void:
 	position.y = ground_y
 	vertical_velocity = 0.0
 	is_grounded = true
+	_water_depth = 0.0
 
 
-func update_vertical_physics(delta: float, ground_y: float = 0.0, ceiling_y: float = 999.0) -> bool:
+func set_physics_motion_state(vel: Vector3, ground_normal: Vector3, wind_strength: float, water_depth: float) -> void:
+	_phys_vel = vel
+	_ground_normal = ground_normal.normalized() if ground_normal.length_squared() > 0.0001 else Vector3.UP
+	_wind_strength = maxf(0.0, wind_strength)
+	_water_depth = maxf(0.0, water_depth)
+
+
+func update_vertical_physics(delta: float, ground_y: float = 0.0, ceiling_y: float = 999.0, water_depth: float = 0.0) -> bool:
 	_current_ground_y = ground_y
+	_water_depth = maxf(0.0, water_depth)
 	if is_grounded:
 		# Only enter free-fall on a genuine cliff/platform drop (> 1.25m), smoothly hug slopes & bridges!
 		if ground_y < position.y - 1.25:
@@ -105,7 +123,19 @@ func update_vertical_physics(delta: float, ground_y: float = 0.0, ceiling_y: flo
 			vertical_velocity = 0.0
 			return false
 
-	vertical_velocity -= GRAVITY * delta
+	var effective_gravity := GRAVITY
+	if _water_depth > 0.10:
+		var depth_ratio := clampf(_water_depth / 1.2, 0.0, 1.0)
+		effective_gravity = GRAVITY * lerpf(1.0, 0.58, depth_ratio)
+		vertical_velocity -= effective_gravity * delta
+		# Smooth hydrodynamic drag when submerged below the water surface
+		var water_surface_y := ground_y + _water_depth
+		if position.y <= water_surface_y:
+			var drag_k := lerpf(2.2, 5.4, depth_ratio)
+			vertical_velocity *= exp(-drag_k * delta)
+	else:
+		vertical_velocity -= effective_gravity * delta
+
 	position.y += vertical_velocity * delta
 	# Prevent jumping head through the underside of a floating sky-deck
 	if vertical_velocity > 0.0 and position.y + 1.85 > ceiling_y:
@@ -116,7 +146,8 @@ func update_vertical_physics(delta: float, ground_y: float = 0.0, ceiling_y: flo
 		position.y = ground_y
 		vertical_velocity = 0.0
 		is_grounded = true
-		if impact_vy < -7.0:
+		var land_thresh := -5.2 if _water_depth > 0.10 else -7.0
+		if impact_vy < land_thresh:
 			_punch_scale = Vector3(1.16, 0.84, 1.16)
 			if _body_pivot != null:
 				_body_pivot.scale = _punch_scale
@@ -289,18 +320,29 @@ func update_name_badge() -> void:
 
 
 func update_animations(delta: float, is_moving: bool, is_sprinting: bool = false) -> void:
+	var safe_dt := maxf(0.001, minf(0.05, delta))
 	_elapsed += delta
 	if slash_anim_timer > 0.0:
 		slash_anim_timer = maxf(0.0, slash_anim_timer - delta)
 	if kick_anim_timer > 0.0:
 		kick_anim_timer = maxf(0.0, kick_anim_timer - delta)
 
+	if not _has_prev_facing:
+		_prev_facing = facing
+		_has_prev_facing = true
+	var turn_vel := angle_difference(_prev_facing, facing) / safe_dt
+	_prev_facing = facing
+
 	_visual_root.rotation.y = lerp_angle(_visual_root.rotation.y, facing, 1.0 - exp(-18.0 * delta))
+
+	var horiz_speed := Vector2(_phys_vel.x, _phys_vel.z).length()
 
 	if _aura_mesh != null:
 		_aura_mesh.rotation.y = _elapsed * (3.2 if is_sprinting else 1.8)
-		# Keep aura ring hugging the exact terrain surface below the hero!
-		_aura_mesh.position.y = 0.04 + (_current_ground_y - position.y)
+		# Float aura ring gently on water surface when wading; hug terrain surface on dry land
+		var target_water_off := (_water_depth + sin(_elapsed * 3.8) * 0.018) if _water_depth > 0.08 else 0.0
+		_aura_water_offset = lerpf(_aura_water_offset, target_water_off, 1.0 - exp(-12.0 * safe_dt))
+		_aura_mesh.position.y = 0.04 + (_current_ground_y - position.y) + _aura_water_offset
 
 	if _orbit_group != null:
 		var cid: String = GameState.player["char_id"]
@@ -309,9 +351,28 @@ func update_animations(delta: float, is_moving: bool, is_sprinting: bool = false
 		else:
 			_orbit_group.rotation.y = _elapsed * 1.9
 
+	# Centrifugal turn banking (clamped +/-0.18 rad)
+	var bank_target := 0.0
+	if is_moving and kick_anim_timer <= 0.0 and slash_anim_timer <= 0.0:
+		var speed_bank := 1.05 if is_sprinting else clampf(maxf(horiz_speed / 8.5, 0.65), 0.5, 1.15)
+		bank_target = clampf(-turn_vel * 0.032 * speed_bank, -0.18, 0.18)
+	_bank_roll_z = lerpf(_bank_roll_z, bank_target, 1.0 - exp(-12.0 * safe_dt))
+
 	if _scarf_node != null:
-		var scarf_base := 0.62 if is_sprinting else (0.35 if is_moving else 0.08)
-		_scarf_node.rotation.x = scarf_base + sin(_elapsed * (12.0 if is_sprinting else 7.5)) * 0.14
+		var move_base := 0.58 if is_sprinting else (0.32 if is_moving else 0.07)
+		var speed_lift := clampf(horiz_speed / 12.0, 0.0, 1.0) * 0.42
+		var wind_lift := clampf(_wind_strength, 0.0, 2.5) * 0.24
+		var target_scarf_x := clampf(maxf(move_base, speed_lift) + wind_lift, 0.04, 1.25)
+		_scarf_base_x = lerpf(_scarf_base_x, target_scarf_x, 1.0 - exp(-10.0 * safe_dt))
+		var flutter_freq := (12.5 if is_sprinting else (8.0 if is_moving else 4.2)) + _wind_strength * 4.5
+		var flutter_amp := 0.10 + clampf(horiz_speed / 16.0, 0.0, 0.08) + clampf(_wind_strength * 0.07, 0.0, 0.12)
+		_scarf_node.rotation.x = _scarf_base_x + sin(_elapsed * flutter_freq) * flutter_amp
+		var scarf_sway_z := clampf(
+			-_bank_roll_z * 1.15 + cos(_elapsed * (flutter_freq * 0.65)) * (0.04 + _wind_strength * 0.06),
+			-0.35,
+			0.35
+		)
+		_scarf_node.rotation.z = lerpf(_scarf_node.rotation.z, scarf_sway_z, 1.0 - exp(-10.0 * safe_dt))
 
 	if _body_pivot == null:
 		return
@@ -319,12 +380,13 @@ func update_animations(delta: float, is_moving: bool, is_sprinting: bool = false
 	# Impact hit-punch / jump-land squash recovery
 	_punch_scale = _punch_scale.lerp(Vector3.ONE, clampf(delta * 15.0, 0.0, 1.0))
 	_body_pivot.scale = _punch_scale
+	_body_pivot.rotation.z = _bank_roll_z
 
 	# Subtle head life motion
 	if _head_pivot != null:
 		_head_pivot.rotation.z = sin(_elapsed * 2.4) * 0.035
 
-	# Vertical body bounce / kick jump / sprint forward lean
+	# Vertical body bounce / kick jump / sprint forward lean + slope pitch alignment
 	if kick_anim_timer > 0.0:
 		var kt := kick_anim_timer / 0.5
 		_body_pivot.position.y = sin(kt * PI) * 1.45
@@ -337,7 +399,14 @@ func update_animations(delta: float, is_moving: bool, is_sprinting: bool = false
 		var bounce_freq := 15.5 if is_sprinting else (10.0 if is_moving else 3.2)
 		var bounce_amp := 0.09 if is_sprinting else (0.06 if is_moving else 0.03)
 		_body_pivot.position.y = sin(_elapsed * bounce_freq) * bounce_amp
-		var target_lean := 0.26 if (slash_anim_timer > 0.0 or is_sprinting) else (0.14 if is_moving else 0.0)
+
+		var yaw := _visual_root.rotation.y
+		var fwd_dir := Vector3(sin(yaw), 0.0, cos(yaw))
+		var slope_proj := -fwd_dir.dot(_ground_normal)
+		var slope_pitch := clampf(slope_proj * (0.42 if is_moving else 0.18), -0.16, 0.18)
+		var speed_lean := clampf(horiz_speed / 13.5, 0.0, 1.0) * 0.12 if is_moving else 0.0
+		var base_lean := 0.26 if (slash_anim_timer > 0.0 or is_sprinting) else (0.14 if is_moving else 0.0)
+		var target_lean := clampf(base_lean + speed_lean + slope_pitch, -0.18, 0.38)
 		_body_pivot.rotation.x = lerpf(_body_pivot.rotation.x, target_lean, clampf(delta * 12.0, 0.0, 1.0))
 
 	# Leg & Arm Locomotion

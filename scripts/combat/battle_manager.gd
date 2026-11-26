@@ -61,6 +61,14 @@ var _hazard_spawn_timer: float = 4.2
 var _jump_pad_cooldown: float = 0.0
 var _stage_hazards: Array[Dictionary] = [] # {pos, radius, timer, max_time, kind, node, mat}
 
+# Realistic environmental physics state (wind field, footsteps, wading splashes, sand footprints)
+var env_vfx: EnvPhysicsVfx
+var _wind_time: float = 0.0
+var _wind_strength: float = 1.0
+var _wind_dir: Vector2 = Vector2(0.85, 0.52)
+var _step_dist_accum: float = 0.0
+var _was_in_water: bool = false
+
 
 func _ready() -> void:
 	GameState.appearance_changed.connect(_on_appearance_changed)
@@ -72,6 +80,13 @@ func _ready() -> void:
 		enemies_root.get_parent().add_child.call_deferred(_npcs_root)
 	else:
 		add_child(_npcs_root)
+
+	env_vfx = EnvPhysicsVfx.new()
+	env_vfx.name = "EnvPhysicsVfx"
+	if vfx_root != null:
+		vfx_root.add_child.call_deferred(env_vfx)
+	else:
+		add_child(env_vfx)
 
 	call_deferred("_initialize_world")
 
@@ -93,6 +108,8 @@ func _reset_stage_mechanics() -> void:
 	_hazard_spawn_timer = 4.2
 	_jump_pad_cooldown = 0.0
 	_arpg_spring_heal_acc = 0.0
+	_step_dist_accum = 0.0
+	_was_in_water = false
 	GameState.battle["stage_status"] = ""
 
 
@@ -579,7 +596,22 @@ func perform_dash() -> void:
 	b["dash_timer"] = 0.24
 	b["invuln_timer"] = 0.45
 	b["dash_cooldown"] = maxf(0.45, 1.05 - float(dash_lv - 1) * 0.05)
-	spawn_ring_vfx(Vector3(player.position.x, 0.0, player.position.z), Color.html("#38bdf8"), 3.2, 0.32)
+	spawn_ring_vfx(Vector3(player.position.x, player.position.y + 0.06, player.position.z), Color.html("#38bdf8"), 3.2, 0.32)
+	if arena != null:
+		arena.trigger_foliage_gust(player.position)
+		var dash_surf: String = arena.get_surface_type(player.position.x, player.position.z, player.position.y)
+		if env_vfx != null:
+			env_vfx.spawn_wind_gust_ring(player.position, 2.8)
+			if dash_surf == "water":
+				var wl: float = arena.get_water_level(player.position.x, player.position.z)
+				var sp_pos := Vector3(player.position.x, wl if wl > -50.0 else player.position.y, player.position.z)
+				env_vfx.spawn_water_splash(sp_pos, 1.15)
+				arena.trigger_water_splash(sp_pos, 1.3)
+				AudioManager.play_sfx("water_splash")
+			elif dash_surf == "sand":
+				env_vfx.spawn_sand_step(player.position, _dash_dir, true)
+			elif dash_surf == "grass":
+				env_vfx.spawn_grass_rustle(player.position, _dash_dir, true)
 	_trigger_camera_impact(0.14, 2.6)
 	hud_updated.emit()
 
@@ -997,6 +1029,24 @@ func _process(delta: float) -> void:
 				if bool(b["stamina_exhausted"]) and float(b["stamina"]) >= max_sta * 0.22:
 					b["stamina_exhausted"] = false
 
+		# Update living global wind field (organic breezes & rolling gusts)
+		_wind_time += dt
+		_wind_strength = clampf(0.90 + 0.48 * sin(_wind_time * 0.55) + 0.28 * sin(_wind_time * 1.42 + 1.1), 0.35, 1.85)
+		var wind_ang: float = 0.54 + sin(_wind_time * 0.16) * 0.26
+		_wind_dir = Vector2(cos(wind_ang), sin(wind_ang))
+
+		var cur_surf: String = "stone"
+		var cur_nrm: Vector3 = Vector3.UP
+		var cur_wl: float = -99.0
+		var cur_water_depth: float = 0.0
+		if player != null and arena != null:
+			cur_nrm = arena.get_terrain_normal(player.position.x, player.position.z)
+			cur_surf = arena.get_surface_type(player.position.x, player.position.z, player.position.y)
+			if cur_surf != "wood":
+				cur_wl = arena.get_water_level(player.position.x, player.position.z)
+				if cur_wl > -50.0:
+					cur_water_depth = maxf(0.0, cur_wl - player.position.y)
+
 		var target_vel := Vector3.ZERO
 		if is_moving and player != null:
 			var clamped := move_input / maxf(1.0, move_input.length())
@@ -1006,12 +1056,30 @@ func _process(delta: float) -> void:
 			var world_dx := clamped.x * cos_y + clamped.y * sin_y
 			var world_dz := -clamped.x * sin_y + clamped.y * cos_y
 
-			var speed_mult: float = (1.58 if is_sprinting else 1.0) * (1.40 if has_wind else 1.0)
-			target_vel = Vector3(world_dx, 0.0, world_dz) * float(stats["speed"]) * speed_mult
+			var move_dir_3 := Vector3(world_dx, 0.0, world_dz)
+			var move_dir_n := move_dir_3.normalized() if move_dir_3.length_squared() > 0.0001 else Vector3.FORWARD
+
+			# Realistic terrain slope physics: slight uphill effort resistance, gentle downhill momentum
+			var slope_dot: float = clampf(move_dir_n.dot(cur_nrm), -0.55, 0.55) # negative = uphill, positive = downhill
+			var slope_mult: float = clampf(1.0 + slope_dot * 0.28, 0.84, 1.14) if player.is_grounded else 1.0
+
+			# Realistic surface & hydrodynamic water drag
+			var surf_speed_mult: float = 1.0
+			if cur_water_depth > 0.08:
+				surf_speed_mult = lerpf(0.95, 0.58, clampf(cur_water_depth / 1.05, 0.0, 1.0))
+			elif cur_surf == "sand":
+				surf_speed_mult = 0.90
+
+			var speed_mult: float = (1.58 if is_sprinting else 1.0) * (1.40 if has_wind else 1.0) * slope_mult * surf_speed_mult
+			target_vel = move_dir_3 * float(stats["speed"]) * speed_mult
 			player.facing = atan2(world_dx, world_dz)
 
 		if player != null:
 			var accel_rate: float = 18.0 if is_moving else 22.0
+			if cur_water_depth > 0.08:
+				accel_rate *= 0.62
+			elif cur_surf == "sand":
+				accel_rate *= 0.72
 			_move_vel = _move_vel.lerp(target_vel, 1.0 - exp(-accel_rate * dt))
 			if _move_vel.length_squared() > 0.01:
 				player.position.x += _move_vel.x * dt
@@ -1026,11 +1094,74 @@ func _process(delta: float) -> void:
 			player.position = arena.resolve_terrain_step(prev_player_pos, player.position, player.is_grounded)
 		var player_gy := _get_terrain_y(player.position.x, player.position.z, player.position.y)
 		var player_ceil: float = arena.get_ceiling_height(player.position.x, player.position.z, player.position.y) if arena != null else 999.0
-		var landed := player.update_vertical_physics(dt, player_gy, player_ceil)
+		var post_nrm: Vector3 = arena.get_terrain_normal(player.position.x, player.position.z) if arena != null else Vector3.UP
+		var post_surf: String = arena.get_surface_type(player.position.x, player.position.z, player.position.y) if arena != null else "stone"
+		var post_wl: float = arena.get_water_level(player.position.x, player.position.z) if (arena != null and post_surf != "wood") else -99.0
+		var post_water_depth: float = maxf(0.0, post_wl - player.position.y) if post_wl > -50.0 else 0.0
+		var in_water_now: bool = post_water_depth > 0.08
+
+		var landed := player.update_vertical_physics(dt, player_gy, player_ceil, post_water_depth)
 		if landed:
-			AudioManager.play_sfx("land")
-			spawn_ring_vfx(Vector3(player.position.x, player_gy, player.position.z), Color.html("#e2e8f0"), 1.6, 0.20)
+			if in_water_now:
+				var splash_p := Vector3(player.position.x, post_wl, player.position.z)
+				AudioManager.play_sfx("water_splash")
+				if env_vfx != null:
+					env_vfx.spawn_water_splash(splash_p, 1.35)
+				if arena != null:
+					arena.trigger_water_splash(splash_p, 1.55)
+			else:
+				AudioManager.play_sfx("step_sand" if post_surf == "sand" else "land")
+				spawn_ring_vfx(Vector3(player.position.x, player_gy, player.position.z), Color.html("#e7d3a8") if post_surf == "sand" else Color.html("#e2e8f0"), 1.6, 0.20)
+				if env_vfx != null:
+					if post_surf == "sand":
+						env_vfx.spawn_sand_step(player.position, _move_vel, true)
+					elif post_surf == "grass":
+						env_vfx.spawn_grass_rustle(player.position, _move_vel, true)
+
+		# Splash burst when wading into the lake/river from dry land!
+		if in_water_now and not _was_in_water:
+			var entry_p := Vector3(player.position.x, post_wl, player.position.z)
+			AudioManager.play_sfx("water_splash")
+			if env_vfx != null:
+				env_vfx.spawn_water_splash(entry_p, 0.90)
+			if arena != null:
+				arena.trigger_water_splash(entry_p, 1.05)
+		_was_in_water = in_water_now
+
+		# Distance-synchronized surface footsteps, beach footprints, wading wakes & grass rustles!
+		var horiz_step: float = Vector2(player.position.x - prev_player_pos.x, player.position.z - prev_player_pos.z).length()
+		if player.is_grounded and horiz_step > 0.002:
+			_step_dist_accum += horiz_step
+			var stride_len: float = 2.05 if is_sprinting else 1.72
+			if _step_dist_accum >= stride_len:
+				_step_dist_accum = 0.0
+				if in_water_now:
+					var wake_p := Vector3(player.position.x, post_wl, player.position.z)
+					AudioManager.play_sfx("water_step")
+					if env_vfx != null:
+						env_vfx.spawn_water_wake_ring(wake_p, 1.25 if is_sprinting else 0.95)
+						env_vfx.spawn_water_splash(wake_p, 0.48 if is_sprinting else 0.26)
+					if arena != null:
+						arena.trigger_water_splash(wake_p, 0.65 if is_sprinting else 0.42)
+				elif post_surf == "sand":
+					AudioManager.play_sfx("step_sand")
+					if env_vfx != null:
+						env_vfx.spawn_sand_step(player.position, _move_vel, is_sprinting)
+				elif post_surf == "grass":
+					AudioManager.play_sfx("step_grass")
+					if env_vfx != null and (is_sprinting or is_dashing):
+						env_vfx.spawn_grass_rustle(player.position, _move_vel, is_dashing)
+				else:
+					AudioManager.play_sfx("step_stone")
+		elif not is_moving and not is_dashing:
+			_step_dist_accum = minf(_step_dist_accum, 0.45)
+
+		player.set_physics_motion_state(_move_vel, post_nrm, _wind_strength, post_water_depth)
 		player.update_animations(dt, is_moving or is_dashing or _move_vel.length_squared() > 0.35, is_sprinting)
+
+		# Feed real-time player position, velocity & wind into interactive grass, wildflowers, trees & lake water!
+		if arena != null:
+			arena.update_interactive_env(player.position, _move_vel, _wind_strength, _wind_dir)
 
 	# Update Stage-Specific Map Mechanics (Sakura Sanctuary / Maple Wind / Lava Geysers / Sky Jump Pads & Thunder)
 	_update_stage_mechanics(dt, stats)
