@@ -3,6 +3,8 @@ render_mode blend_mix, depth_draw_opaque, cull_back;
 
 uniform int stage_id = 0; // 0: sakura_shrine, 1: maple_temple, 2: onigashima_lava, 3: sky_tenshu, 4: arpg_ch1_landscape
 uniform bool mobile_mode = false;
+uniform vec2 wind_dir = vec2(0.85, 0.52);
+uniform float wind_strength = 1.0;
 
 varying vec3 v_world_pos;
 varying vec3 v_world_nrm;
@@ -272,10 +274,32 @@ void fragment() {
 			vec3 wf_tint = mix(vec3(0.37, 0.52, 0.20), vec3(0.49, 0.46, 0.25), vnoise(xz * 0.11 + vec2(8.2, 1.9)));
 			meadow = mix(meadow, wf_tint, wf_patch * (1.0 - soil_mask * 0.5) * 0.38);
 
+			// Multi-frequency micro-grass blade stipple + rolling wind-wave shadow/sheen synced with 3D foliage
+			vec2 wdir = normalize(wind_dir + vec2(0.0001, 0.0));
+			vec2 wperp = vec2(-wdir.y, wdir.x);
+			float grass_cover = 1.0 - soil_mask * 0.72;
+			vec2 blade_uv1 = vec2(dot(xz, wdir) * 6.5, dot(xz, wperp) * 14.0);
+			float stipple_coarse = vnoise(blade_uv1 + vec2(3.1, -1.7));
+			float stipple_fine = mobile_mode
+				? stipple_coarse
+				: vnoise(xz * 22.0 + vec2(stipple_coarse * 1.4, -stipple_coarse * 1.1));
+			float blade_stipple = mix(stipple_coarse, stipple_fine, 0.45);
+			meadow *= mix(0.88, 1.12, blade_stipple * grass_cover + (1.0 - grass_cover) * 0.5);
+
+			float g_front_speed = 1.65 + wind_strength * 0.72;
+			float g_front = sin(dot(xz, wdir) * 0.14 - TIME * g_front_speed) * 0.5 + 0.5;
+			float g_crest = g_front * g_front * (0.65 + 0.35 * sin(dot(xz, wperp) * 0.09 + TIME * 0.45));
+			float g_rip = sin(dot(xz, wdir) * 0.44 - TIME * (2.05 + wind_strength * 0.95)) * 0.5 + 0.5;
+			float wind_wave_g = clamp((g_crest * 0.65 + g_rip * 0.35) * clamp(wind_strength * 0.65, 0.15, 1.25), 0.0, 1.0);
+
+			float wave_mod = mix(0.92, 1.08, wind_wave_g);
+			meadow *= mix(1.0, wave_mod, grass_cover * 0.85);
+			meadow += vec3(0.045, 0.062, 0.020) * wind_wave_g * grass_cover * (0.45 + 0.55 * blade_stipple);
+
 			final_col += meadow * w.g;
-			final_rough += mix(0.92, 0.86, pine_mask) * w.g;
+			final_rough += mix(mix(0.92, 0.84, pine_mask), 0.72, wind_wave_g * grass_cover * 0.45) * w.g;
 			final_met += 0.01 * w.g;
-			bump_h += (n_fine * 0.40 + macro_n * 0.25) * w.g;
+			bump_h += (n_fine * 0.32 + macro_n * 0.22 + blade_stipple * 0.38 * grass_cover) * w.g;
 		}
 		if (w.b > 0.01) {
 			// Golden-ivory coastal beach with crisp wet-sand tide-line (-0.42..+0.08) & white foam shoreline sparkle (-0.38..-0.28)

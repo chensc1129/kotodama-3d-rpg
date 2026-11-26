@@ -252,62 +252,110 @@ static func _append_curved_blade(
 	uv_y_start: float = 0.0,
 	uv_y_end: float = 1.0
 ) -> void:
-	## Builds a gracefully arching, tapered foliage blade with UV.y strictly mapping
-	## from root (uv_y_start) to tip (uv_y_end). Designed for double-sided foliage shaders.
+	## Builds a gracefully arching, tapered botanical foliage blade with a V-creased
+	## central midrib cross-section (3 vertices across width: UV.x = 0.0 -> 0.5 -> 1.0),
+	## outward-tilted edge normals for realistic specular/diffuse light catch, and UV.y
+	## strictly mapping from root (uv_y_start) to tip (uv_y_end).
+	var s_count: int = maxi(segs, 1)
 	var fwd: Vector3 = Vector3(out_dir.x, 0.0, out_dir.z).normalized()
 	if fwd.length_squared() < 0.001:
 		fwd = Vector3.FORWARD
 	var side: Vector3 = Vector3(-fwd.z, 0.0, fwd.x)
-	var n_base: Vector3 = Vector3(fwd.x * 0.32, 0.92, fwd.z * 0.32).normalized()
 
 	var prev_l := Vector3.ZERO
+	var prev_m := Vector3.ZERO
 	var prev_r := Vector3.ZERO
+	var prev_nl := Vector3.UP
+	var prev_nm := Vector3.UP
+	var prev_nr := Vector3.UP
 	var prev_c := col_root
+	var prev_cm := col_root
 	var prev_uvy: float = uv_y_start
 
-	for i: int in range(segs + 1):
-		var t: float = float(i) / float(segs)
-		# Smooth vertical rise + graceful quadratic outward arch & tip droop
-		var y_t: float = height * (t - 0.12 * t * t * t)
-		var r_t: float = arch_out * (t * t)
+	for i: int in range(s_count + 1):
+		var t: float = float(i) / float(s_count)
+		# Smooth vertical rise + graceful quadratic outward arch & organic tip droop
+		var y_t: float = height * (t - 0.14 * t * t * t)
+		var r_t: float = arch_out * (0.22 * t + 0.78 * t * t)
 		var center: Vector3 = base_pos + fwd * r_t + Vector3(0.0, y_t, 0.0)
-		var w_t: float = base_width * (1.0 - t * 0.92)
+
+		# Analytical spine tangent -> upper-face botanical normal
+		var dy_dt: float = height * (1.0 - 0.42 * t * t)
+		var dr_dt: float = arch_out * (0.22 + 1.56 * t)
+		var tan_v: Vector3 = (fwd * dr_dt + Vector3(0.0, dy_dt, 0.0)).normalized()
+		var blade_n: Vector3 = side.cross(tan_v)
+		if blade_n.length_squared() < 0.0001:
+			blade_n = Vector3.UP
+		else:
+			blade_n = blade_n.normalized()
+
+		# Lanceolate leaf width profile (gentle lower-mid swell, graceful taper to needle tip)
+		var w_t: float = base_width * clampf((1.0 - t * 0.88) * (0.92 + 0.24 * sin(t * PI)), 0.05, 1.05)
 		var c_t: Color = col_root.lerp(col_mid, t * 2.0) if t < 0.5 else col_mid.lerp(col_tip, (t - 0.5) * 2.0)
+		var c_midrib: Color = c_t.lightened(0.045 * t)
 		var uvy: float = lerpf(uv_y_start, uv_y_end, t)
 
-		if i == 0:
-			prev_l = center - side * (w_t * 0.5)
-			prev_r = center + side * (w_t * 0.5)
-			prev_c = c_t
-			prev_uvy = uvy
-		elif i < segs:
-			var cur_l: Vector3 = center - side * (w_t * 0.5)
-			var cur_r: Vector3 = center + side * (w_t * 0.5)
-			var n_up: Vector3 = (n_base + Vector3(0.0, 0.25 * t, 0.0)).normalized()
-			_emit_tri_uv(
-				st, prev_l, prev_r, cur_r,
-				n_up, n_up, n_up,
-				Vector2(0.0, prev_uvy), Vector2(1.0, prev_uvy), Vector2(1.0, uvy),
-				prev_c, prev_c, c_t
-			)
-			_emit_tri_uv(
-				st, prev_l, cur_r, cur_l,
-				n_up, n_up, n_up,
-				Vector2(0.0, prev_uvy), Vector2(1.0, uvy), Vector2(0.0, uvy),
-				prev_c, c_t, c_t
-			)
+		if i < s_count:
+			# V-fold midrib trough + outward-tilted edge normals so blades catch angled sunlight
+			var crease: float = w_t * 0.15 * (1.0 - t * 0.55)
+			var cur_m: Vector3 = center - blade_n * crease
+			var cur_l: Vector3 = center - side * (w_t * 0.5) + blade_n * (crease * 0.35)
+			var cur_r: Vector3 = center + side * (w_t * 0.5) + blade_n * (crease * 0.35)
+			var cur_nm: Vector3 = (blade_n * 0.68 + Vector3.UP * 0.32).normalized()
+			var cur_nl: Vector3 = (cur_nm - side * 0.44).normalized()
+			var cur_nr: Vector3 = (cur_nm + side * 0.44).normalized()
+
+			if i > 0:
+				# Left half of V-creased blade (UV.x: 0.0 -> 0.5), CW outward normal = +blade_n
+				_emit_tri_uv(
+					st, prev_l, cur_m, prev_m,
+					prev_nl, cur_nm, prev_nm,
+					Vector2(0.0, prev_uvy), Vector2(0.5, uvy), Vector2(0.5, prev_uvy),
+					prev_c, c_midrib, prev_cm
+				)
+				_emit_tri_uv(
+					st, prev_l, cur_l, cur_m,
+					prev_nl, cur_nl, cur_nm,
+					Vector2(0.0, prev_uvy), Vector2(0.0, uvy), Vector2(0.5, uvy),
+					prev_c, c_t, c_midrib
+				)
+				# Right half of V-creased blade (UV.x: 0.5 -> 1.0), CW outward normal = +blade_n
+				_emit_tri_uv(
+					st, prev_m, cur_r, prev_r,
+					prev_nm, cur_nr, prev_nr,
+					Vector2(0.5, prev_uvy), Vector2(1.0, uvy), Vector2(1.0, prev_uvy),
+					prev_cm, c_t, prev_c
+				)
+				_emit_tri_uv(
+					st, prev_m, cur_m, cur_r,
+					prev_nm, cur_nm, cur_nr,
+					Vector2(0.5, prev_uvy), Vector2(0.5, uvy), Vector2(1.0, uvy),
+					prev_cm, c_midrib, c_t
+				)
+
 			prev_l = cur_l
+			prev_m = cur_m
 			prev_r = cur_r
+			prev_nl = cur_nl
+			prev_nm = cur_nm
+			prev_nr = cur_nr
 			prev_c = c_t
+			prev_cm = c_midrib
 			prev_uvy = uvy
 		else:
-			# Tapered pointed blade tip triangle
-			var tip_n: Vector3 = Vector3(fwd.x * 0.22, 0.97, fwd.z * 0.22).normalized()
+			# Pointed V-creased blade tip converging cleanly to UV.x = 0.5
+			var tip_n: Vector3 = (blade_n * 0.55 + Vector3.UP * 0.45).normalized()
 			_emit_tri_uv(
-				st, prev_l, prev_r, center,
-				tip_n, tip_n, tip_n,
-				Vector2(0.0, prev_uvy), Vector2(1.0, prev_uvy), Vector2(0.5, uvy),
-				prev_c, prev_c, c_t
+				st, prev_l, center, prev_m,
+				prev_nl, tip_n, prev_nm,
+				Vector2(0.0, prev_uvy), Vector2(0.5, uvy), Vector2(0.5, prev_uvy),
+				prev_c, c_t, prev_cm
+			)
+			_emit_tri_uv(
+				st, prev_m, center, prev_r,
+				prev_nm, tip_n, prev_nr,
+				Vector2(0.5, prev_uvy), Vector2(0.5, uvy), Vector2(1.0, prev_uvy),
+				prev_cm, c_t, prev_c
 			)
 
 
@@ -328,29 +376,97 @@ static func make_grass_tuft_mesh(is_mob: bool) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	var blade_count: int = 5 if is_mob else 8
-	var segs: int = 2 if is_mob else 3
-	var c_root := Color.html("#143d1a")
-	var c_mid := Color.html("#2f7a2c")
-	var c_tip := Color.html("#6ab845")
+	var blade_count: int = 8 if is_mob else 13
+	var segs: int = 3
+	# Dark-emerald root AO -> rich chlorophyll mid -> warm sunlit tip
+	var c_root := Color.html("#113316")
+	var c_mid := Color.html("#2f742a")
+	var c_tip := Color.html("#78bc43")
+	var c_olive_mid := Color.html("#527a2d")
+	var c_olive_tip := Color.html("#a4b34b")
 
+	const GOLDEN_ANGLE: float = 2.39996323
 	for i: int in range(blade_count):
-		var frac: float = float(i) / float(blade_count)
-		var ang: float = frac * TAU + float(i % 3) * 0.34
-		var rad: float = 0.045 + float((i * 5) % 4) * 0.032
+		# Golden-angle organic distribution avoids artificial radial symmetry
+		var ang: float = float(i) * GOLDEN_ANGLE + fmod(float(i * 7 + 3) * 0.29, 0.55)
+		var is_inner: bool = i < int(blade_count * 0.35)
+		# Wide organic tuft sprawl (0.26m..0.46m footprint diameter) so tufts interlock seamlessly
+		var rad: float = (
+			lerpf(0.025, 0.090, fmod(float(i) * 0.61 + 0.17, 1.0))
+			if is_inner
+			else lerpf(0.110, 0.225, fmod(float(i) * 0.43 + 0.23, 1.0))
+		)
 		var dir := Vector3(cos(ang), 0.0, sin(ang))
-		var b_pos := dir * rad
-		# Varied organic heights 0.42m..0.88m and graceful outward arch
-		var h_var: float = 0.42 + fmod(float(i) * 0.37 + 0.13, 1.0) * 0.46
-		var w_var: float = lerpf(0.085, 0.135, 1.0 - (h_var - 0.42) / 0.46)
-		var arch: float = h_var * (0.28 + float(i % 3) * 0.10)
-		var tint_shift: float = (float(i % 3) - 1.0) * 0.055
-		var cr: Color = c_root.lightened(maxf(0.0, tint_shift))
+		var b_pos := Vector3(dir.x * rad, -0.02, dir.z * rad)
+
+		# Varied natural blade lengths 0.26m..0.72m
+		var h_seed: float = fmod(float(i) * 0.37 + 0.19, 1.0)
+		var h_var: float = lerpf(0.46, 0.72, h_seed) if is_inner else lerpf(0.26, 0.58, h_seed)
+		var w_var: float = lerpf(0.056, 0.088, 1.0 - (h_var - 0.26) / 0.46)
+		var arch_ratio: float = (
+			lerpf(0.24, 0.38, fmod(float(i) * 0.53 + 0.11, 1.0))
+			if is_inner
+			else lerpf(0.36, 0.54, fmod(float(i) * 0.47 + 0.31, 1.0))
+		)
+		var arch: float = h_var * arch_ratio
+
+		# Slight directional yaw offset so blades don't all point strictly away from tuft center
+		var twist: float = (fmod(float(i) * 0.71, 1.0) - 0.5) * 0.75
+		var blade_dir := Vector3(cos(ang + twist), 0.0, sin(ang + twist))
+
+		var tint_shift: float = (float(i % 4) - 1.5) * 0.045
+		var cr: Color = c_root.lightened(maxf(0.0, tint_shift * 0.5))
 		var cm: Color = c_mid.lightened(maxf(0.0, tint_shift)) if tint_shift >= 0.0 else c_mid.darkened(-tint_shift)
 		var ct: Color = c_tip.lightened(maxf(0.0, tint_shift)) if tint_shift >= 0.0 else c_tip.darkened(-tint_shift)
-		_append_curved_blade(st, b_pos, dir, h_var, w_var, arch, cr, cm, ct, segs, 0.0, 1.0)
+		if i % 5 == 3:
+			# Occasional sun-warmed olive-straw accent blade for wild Japanese meadow realism
+			cm = cm.lerp(c_olive_mid, 0.55)
+			ct = ct.lerp(c_olive_tip, 0.65)
+
+		_append_curved_blade(st, b_pos, blade_dir, h_var, w_var, arch, cr, cm, ct, segs, 0.0, 1.0)
+
+	# 1 (mobile) / 2 (desktop) slender taller golden-tipped wild meadow seed-oat stalks (0.65m..0.88m)
+	var stalk_count: int = 1 if is_mob else 2
+	var c_stalk_root := Color.html("#173e1b")
+	var c_stalk_mid := Color.html("#528034")
+	var c_stalk_neck := Color.html("#bfa84c")
+	var c_oat_base := Color.html("#c8ae4c")
+	var c_oat_mid := Color.html("#e4cf74")
+	var c_oat_tip := Color.html("#f5e8aa")
+
+	for si: int in range(stalk_count):
+		var s_ang: float = 0.85 + float(si) * 2.95
+		var s_dir := Vector3(cos(s_ang), 0.0, sin(s_ang))
+		var s_side := Vector3(-s_dir.z, 0.0, s_dir.x)
+		var s_base := Vector3(s_dir.x * (0.065 + float(si) * 0.035), -0.02, s_dir.z * (0.065 + float(si) * 0.035))
+		var s_h: float = 0.69 if si == 0 else 0.85
+		var s_arch: float = s_h * (0.34 + float(si) * 0.05)
+
+		# Slender arching culm stalk
+		_append_curved_blade(
+			st, s_base, s_dir, s_h, 0.024, s_arch,
+			c_stalk_root, c_stalk_mid, c_stalk_neck,
+			3, 0.0, 0.96
+		)
+
+		# Delicate golden-oat seed spikelets fanning softly along the upper arching tip
+		var spike_ts: Array[float] = [0.73, 0.83, 0.92]
+		for spi: int in range(spike_ts.size()):
+			var t_sp: float = spike_ts[spi]
+			var sy: float = s_h * (t_sp - 0.14 * t_sp * t_sp * t_sp)
+			var sr: float = s_arch * (0.22 * t_sp + 0.78 * t_sp * t_sp)
+			var sp_anchor: Vector3 = s_base + s_dir * sr + Vector3(0.0, sy, 0.0)
+			var lat_sign: float = -1.0 if (spi % 2 == 0) else 1.0
+			var sp_dir: Vector3 = (s_dir * 0.72 + s_side * (lat_sign * (0.55 if spi < 2 else 0.18))).normalized()
+			var sp_len: float = 0.125 - float(spi) * 0.015
+			_append_curved_blade(
+				st, sp_anchor, sp_dir, sp_len * 0.55, 0.030, sp_len * 0.95,
+				c_oat_base, c_oat_mid, c_oat_tip,
+				1, t_sp, minf(1.0, t_sp + 0.12)
+			)
 
 	return st.commit()
+
 
 
 # ==============================================================================

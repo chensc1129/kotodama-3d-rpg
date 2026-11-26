@@ -438,7 +438,7 @@ static func build_map(
 	_setup_environment(arena, sky_shader, is_mob)
 
 	# 2. High-Resolution Rectangular Heightfield TerrainMesh (stage_id = 4) + Cliff Skirts
-	_build_heightfield_terrain(content_root, floor_shader, is_mob)
+	_build_heightfield_terrain(arena, content_root, floor_shader, is_mob)
 
 	# 3. Distant Misty Mountain Horizon Ring (West/North/East silhouettes, open ocean to the South!)
 	_build_distant_mountain_ring(content_root, is_mob)
@@ -479,7 +479,7 @@ static func build_map(
 	_build_zone5_grand_altar(arena, content_root, sky_anim_nodes, is_mob)
 
 	# 12. 4 Batched Real-Leaf Wilderness Forests (Broadleaf, Pine, Maple, Sakura -> 8 draw calls total!)
-	_build_batched_wilderness_forests(content_root, is_mob)
+	_build_batched_wilderness_forests(arena, content_root, is_mob)
 
 	# 13. Dense Wind-Interactive Grass, 3 Wildflower Species, Fjord/Lake Reeds, Lotus, Moonlit Lake Pier/Boat/Koi
 	_build_lush_nature_and_lake(arena, content_root, prop_shader, sky_anim_nodes, is_mob)
@@ -528,7 +528,7 @@ static func _setup_environment(arena: Arena3D, sky_shader: Shader, is_mob: bool)
 		arena.center_light.omni_range = 240.0
 
 
-static func _build_heightfield_terrain(content_root: Node3D, floor_shader: Shader, is_mob: bool) -> void:
+static func _build_heightfield_terrain(arena: Arena3D, content_root: Node3D, floor_shader: Shader, is_mob: bool) -> void:
 	var nx: int = 46 if is_mob else 76
 	var nz: int = 54 if is_mob else 88
 
@@ -610,6 +610,7 @@ static func _build_heightfield_terrain(content_root: Node3D, floor_shader: Shade
 	mat.shader = floor_shader
 	mat.set_shader_parameter("stage_id", 4)
 	mat.set_shader_parameter("mobile_mode", is_mob)
+	arena.set_meta("terrain_floor_mat", mat)
 
 	var terrain_inst := MeshInstance3D.new()
 	terrain_inst.name = "TerrainMesh"
@@ -1346,8 +1347,21 @@ static func _is_blocked_for_tree(x: float, z: float) -> bool:
 	return false
 
 
-static func _build_batched_wilderness_forests(content_root: Node3D, is_mob: bool) -> void:
+static func _append_canopy_spots(canopy_spots: Array, xforms: Array[Transform3D], species: String) -> void:
+	for xf: Transform3D in xforms:
+		var p: Vector3 = xf.origin
+		var sc: float = xf.basis.x.length()
+		var ground_y: float = get_base_terrain_height(p.x, p.z)
+		canopy_spots.append({
+			"pos": Vector3(p.x, ground_y + 4.8 * sc, p.z),
+			"species": species,
+			"radius": 3.4 * sc,
+		})
+
+
+static func _build_batched_wilderness_forests(arena: Arena3D, content_root: Node3D, is_mob: bool) -> void:
 	var rng := RandomNumberGenerator.new()
+	var canopy_spots: Array = []
 
 	# 1. Wilderness Broadleaf Forest (45 mobile / 85 desktop) — lush emerald & sunlit green canopy
 	rng.seed = 71001
@@ -1376,6 +1390,7 @@ static func _build_batched_wilderness_forests(content_root: Node3D, is_mob: bool
 		"#3f2c1f", "#65a30d", "#2e7d32", "#14532d",
 		"broadleaf", broad_xforms, is_mob
 	)
+	_append_canopy_spots(canopy_spots, broad_xforms, "broadleaf")
 
 	# 2. Coastal & Mountain Red Pines (28 mobile / 55 desktop) — Mount Sakuradake, East Headland, Fjord Cliffs & Lake Cove
 	rng.seed = 72002
@@ -1433,6 +1448,7 @@ static func _build_batched_wilderness_forests(content_root: Node3D, is_mob: bool
 		"#5c3322", "#3b8c52", "#1e6138", "#0f3d23",
 		"pine", pine_xforms, is_mob
 	)
+	_append_canopy_spots(canopy_spots, pine_xforms, "pine")
 
 	# 3. Autumn Mountain Maples (18 mobile / 36 desktop) — fiery crimson accents in gorge & mountain flanks
 	rng.seed = 73003
@@ -1474,6 +1490,7 @@ static func _build_batched_wilderness_forests(content_root: Node3D, is_mob: bool
 		"#3b241d", "#fb923c", "#dc2626", "#7f1d1d",
 		"maple", maple_xforms, is_mob
 	)
+	_append_canopy_spots(canopy_spots, maple_xforms, "maple")
 
 	# 4. Sakura Groves (20 mobile / 36 desktop) — Sakura Village, Flower Meadows, Senbon Torii & Grand Altar
 	rng.seed = 74004
@@ -1536,6 +1553,16 @@ static func _build_batched_wilderness_forests(content_root: Node3D, is_mob: bool
 		"#44291f", "#fce7f3", "#f472b6", "#9d174d",
 		"sakura", sakura_xforms, is_mob
 	)
+	_append_canopy_spots(canopy_spots, sakura_xforms, "sakura")
+
+	# 5. Monumental Giant Weeping Sakura behind the Grand Altar Monolith
+	var altar_y: float = get_base_terrain_height(0.0, -129.0)
+	canopy_spots.append({
+		"pos": Vector3(0.0, altar_y + 7.5, -129.0),
+		"species": "sakura",
+		"radius": 6.5,
+	})
+	arena.set_meta("leaf_canopy_spots", canopy_spots)
 
 
 # ==============================================================================
@@ -1646,14 +1673,16 @@ static func _build_lush_nature_and_lake(
 	var reed_mat := _make_foliage_mat(foliage_shader, 0.42, 1.95, is_mob, foliage_mats)
 	var flower_mat := _make_foliage_mat(foliage_shader, 0.25, 1.65, is_mob, foliage_mats)
 	arena.set_meta("interactive_foliage_mats", foliage_mats)
+	if grass_mat is ShaderMaterial:
+		arena.set_meta("meadow_grass_mat", grass_mat)
 
 	var rng := RandomNumberGenerator.new()
 
-	# 1. Wind-Interactive Grass Meadows (520 mobile / 980 desktop) across coastal hills, village & wilderness!
+	# 1. Distant Wind-Interactive Grass Meadow Accents (360 mobile / 680 desktop; near-player rolling carpet handles high density!)
 	var grass_mesh := ArpgNatureProps.make_grass_tuft_mesh(is_mob)
 	grass_mesh.surface_set_material(0, grass_mat)
 	rng.seed = 20261
-	var grass_target: int = 520 if is_mob else 980
+	var grass_target: int = 360 if is_mob else 680
 	var grass_xforms: Array[Transform3D] = []
 	var attempts: int = 0
 	var max_attempts: int = grass_target * 10

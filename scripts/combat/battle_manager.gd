@@ -68,6 +68,9 @@ var _wind_strength: float = 1.0
 var _wind_dir: Vector2 = Vector2(0.85, 0.52)
 var _step_dist_accum: float = 0.0
 var _was_in_water: bool = false
+var _foliage_actors: Array = []
+var _prev_shikigami_pos: Vector3 = Vector3.ZERO
+var _has_prev_shikigami_pos: bool = false
 
 
 func _ready() -> void:
@@ -110,6 +113,8 @@ func _reset_stage_mechanics() -> void:
 	_arpg_spring_heal_acc = 0.0
 	_step_dist_accum = 0.0
 	_was_in_water = false
+	_foliage_actors.clear()
+	_has_prev_shikigami_pos = false
 	GameState.battle["stage_status"] = ""
 
 
@@ -427,6 +432,12 @@ func perform_attack_a() -> void:
 	var vfx_color := Color.html("#fbbf24") if step == 3 else Color.html(char_cfg["color_primary"])
 	if player != null:
 		spawn_hero_attack_vfx(cid, player.position, player.facing, step, reach)
+		if arena != null:
+			var swing_pos := player.position + forward * 1.4
+			var swing_str: float = 1.12 if step == 3 else 0.90
+			var swing_rad: float = 4.8 if step == 3 else 4.2
+			var swing_leaves: int = 10 if step == 3 else 7
+			arena.trigger_foliage_gust(swing_pos, swing_str, swing_rad, swing_leaves)
 		# Keep subtle ground pulse on finishers & heavy strikes
 		if step == 3 or cid == "kickboxer" or cid == "swordsman":
 			var ring_pos := player.position + (forward * (reach * 0.55) if (cid == "yukionna" and step == 3) else Vector3.ZERO)
@@ -598,7 +609,7 @@ func perform_dash() -> void:
 	b["dash_cooldown"] = maxf(0.45, 1.05 - float(dash_lv - 1) * 0.05)
 	spawn_ring_vfx(Vector3(player.position.x, player.position.y + 0.06, player.position.z), Color.html("#38bdf8"), 3.2, 0.32)
 	if arena != null:
-		arena.trigger_foliage_gust(player.position)
+		arena.trigger_foliage_gust(player.position, 1.35, 5.2, 12)
 		var dash_surf: String = arena.get_surface_type(player.position.x, player.position.z, player.position.y)
 		if env_vfx != null:
 			env_vfx.spawn_wind_gust_ring(player.position, 2.8)
@@ -702,6 +713,8 @@ func complete_skill_chant(is_success: bool, is_typed_perfect: bool) -> void:
 		if player != null:
 			spawn_kotodama_vfx(player.position, word, is_typed_perfect)
 			spawn_ring_vfx(player.position, w_col, 18.0, 0.78)
+			if arena != null:
+				arena.trigger_foliage_gust(player.position, 1.85, 7.5, 22)
 		AudioManager.play_sfx("impact_crit")
 		_trigger_camera_impact(0.82 if is_typed_perfect else 0.72, -5.8)
 		trigger_hitstop(0.095)
@@ -769,6 +782,8 @@ func complete_skill_chant(is_success: bool, is_typed_perfect: bool) -> void:
 		if player != null and not word.is_empty():
 			spawn_kotodama_vfx(player.position, word, is_typed_perfect)
 		_execute_signature_skill(stats, crit_mult)
+		if player != null and arena != null:
+			arena.trigger_foliage_gust(player.position, 1.85, 7.5, 22)
 
 	hud_updated.emit()
 
@@ -997,6 +1012,14 @@ func _process(delta: float) -> void:
 	var is_sprinting := false
 	var prev_player_pos: Vector3 = player.position if player != null else Vector3.ZERO
 
+	# Update living global wind field (calm coastal breeze ~0.55 -> dramatic rolling sea-breeze gusts up to ~1.95)
+	_wind_time += dt
+	var wind_swell: float = pow(0.5 + 0.5 * sin(_wind_time * 0.38 - 0.6), 1.65)
+	var wind_ripple: float = 0.22 * sin(_wind_time * 1.35 + 1.1) + 0.12 * cos(_wind_time * 2.18)
+	_wind_strength = clampf(0.58 + wind_swell * 1.12 + wind_ripple, 0.50, 1.95)
+	var wind_ang: float = 0.54 + sin(_wind_time * 0.17) * 0.30 + cos(_wind_time * 0.43) * 0.08
+	_wind_dir = Vector2(cos(wind_ang), sin(wind_ang)).normalized()
+
 	if is_dashing:
 		# High-speed directional burst even from standstill
 		b["is_sprinting"] = true
@@ -1028,12 +1051,6 @@ func _process(delta: float) -> void:
 				b["stamina"] = minf(max_sta, float(b["stamina"]) + STAMINA_REGEN_PER_SEC * dt)
 				if bool(b["stamina_exhausted"]) and float(b["stamina"]) >= max_sta * 0.22:
 					b["stamina_exhausted"] = false
-
-		# Update living global wind field (organic breezes & rolling gusts)
-		_wind_time += dt
-		_wind_strength = clampf(0.90 + 0.48 * sin(_wind_time * 0.55) + 0.28 * sin(_wind_time * 1.42 + 1.1), 0.35, 1.85)
-		var wind_ang: float = 0.54 + sin(_wind_time * 0.16) * 0.26
-		_wind_dir = Vector2(cos(wind_ang), sin(wind_ang))
 
 		var cur_surf: String = "stone"
 		var cur_nrm: Vector3 = Vector3.UP
@@ -1112,6 +1129,8 @@ func _process(delta: float) -> void:
 			else:
 				AudioManager.play_sfx("step_sand" if post_surf == "sand" else "land")
 				spawn_ring_vfx(Vector3(player.position.x, player_gy, player.position.z), Color.html("#e7d3a8") if post_surf == "sand" else Color.html("#e2e8f0"), 1.6, 0.20)
+				if arena != null:
+					arena.trigger_foliage_gust(player.position, 0.95, 3.8, 6)
 				if env_vfx != null:
 					if post_surf == "sand":
 						env_vfx.spawn_sand_step(player.position, _move_vel, true)
@@ -1159,9 +1178,10 @@ func _process(delta: float) -> void:
 		player.set_physics_motion_state(_move_vel, post_nrm, _wind_strength, post_water_depth)
 		player.update_animations(dt, is_moving or is_dashing or _move_vel.length_squared() > 0.35, is_sprinting)
 
-		# Feed real-time player position, velocity & wind into interactive grass, wildflowers, trees & lake water!
+		# Feed real-time player, nearby actors (enemies/NPCs/shikigami) & wind into foliage physics, leaves, trees & water!
 		if arena != null:
-			arena.update_interactive_env(player.position, _move_vel, _wind_strength, _wind_dir)
+			_populate_foliage_actors(dt)
+			arena.update_interactive_env(player.position, _move_vel, _wind_strength, _wind_dir, _foliage_actors, dt)
 
 	# Update Stage-Specific Map Mechanics (Sakura Sanctuary / Maple Wind / Lava Geysers / Sky Jump Pads & Thunder)
 	_update_stage_mechanics(dt, stats)
@@ -1350,6 +1370,67 @@ func _process(delta: float) -> void:
 		hud_updated.emit()
 		if GameState.is_arpg_mode():
 			_emit_arpg_hud()
+
+
+func _populate_foliage_actors(dt: float) -> void:
+	_foliage_actors.clear()
+	if player == null:
+		return
+	var px: float = player.position.x
+	var pz: float = player.position.z
+	const MAX_DIST_SQ: float = 26.0 * 26.0
+
+	for en in enemies:
+		if not is_instance_valid(en) or en.dead:
+			continue
+		var dx: float = en.position.x - px
+		var dz: float = en.position.z - pz
+		var dist_sq: float = dx * dx + dz * dz
+		if dist_sq > MAX_DIST_SQ:
+			continue
+		var vel_est := Vector3.ZERO
+		if not en.is_controlled() and not en.is_staggered():
+			var stop_d: float = 8.5 if en.ranged else (1.55 + 0.35 * en.scale.x)
+			if dist_sq > stop_d * stop_d:
+				vel_est = Vector3(sin(en.rotation.y), 0.0, cos(en.rotation.y)) * en.move_speed
+		_foliage_actors.append({
+			"pos": en.position,
+			"vel": vel_est,
+			"radius": 1.15 * en.scale.x,
+		})
+
+	for npc in npcs:
+		if not is_instance_valid(npc):
+			continue
+		var dx: float = npc.position.x - px
+		var dz: float = npc.position.z - pz
+		if (dx * dx + dz * dz) > MAX_DIST_SQ:
+			continue
+		_foliage_actors.append({
+			"pos": npc.position,
+			"vel": Vector3.ZERO,
+			"radius": 1.15 * npc.scale.x,
+		})
+
+	if shikigami != null and is_instance_valid(shikigami) and shikigami.visible:
+		var sh_vel := Vector3.ZERO
+		if _has_prev_shikigami_pos and dt > 0.0001:
+			var raw_v := (shikigami.position - _prev_shikigami_pos) / dt
+			raw_v.y = 0.0
+			if raw_v.length_squared() <= 625.0:
+				sh_vel = raw_v
+		_prev_shikigami_pos = shikigami.position
+		_has_prev_shikigami_pos = true
+		var sdx: float = shikigami.position.x - px
+		var sdz: float = shikigami.position.z - pz
+		if (sdx * sdx + sdz * sdz) <= MAX_DIST_SQ:
+			_foliage_actors.append({
+				"pos": shikigami.position,
+				"vel": sh_vel,
+				"radius": 1.15 * shikigami.scale.x,
+			})
+	else:
+		_has_prev_shikigami_pos = false
 
 
 # ==============================================================================

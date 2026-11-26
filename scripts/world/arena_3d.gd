@@ -39,7 +39,11 @@ var _elapsed: float = 0.0
 var _splash_time: float = 99.0
 var _gust_time: float = 99.0
 var _current_wind_strength: float = 1.0
+var _wind_gust_val: float = 0.0
 var _wafuu_wind_mats: Array[ShaderMaterial] = []
+var _foliage_phys: Node3D = null
+var _leaf_phys: Node3D = null
+var _floor_mat: ShaderMaterial = null
 var _sakura_spots: Array[Vector2] = [
 	Vector2(0.0, -17.5 * S),
 	Vector2(17.5 * S, 2.0 * S),
@@ -438,8 +442,22 @@ func get_surface_type(x: float, z: float, entity_y: float) -> String:
 	return "stone"
 
 
-func update_interactive_env(player_pos: Vector3, player_vel: Vector3, wind_strength: float, wind_dir: Vector2) -> void:
+func update_interactive_env(
+	player_pos: Vector3,
+	player_vel: Vector3,
+	wind_strength: float,
+	wind_dir: Vector2,
+	dynamic_actors: Array = [],
+	dt: float = 0.0167
+) -> void:
 	_current_wind_strength = wind_strength
+	_wind_gust_val = clampf((wind_strength - 0.85) * 1.15, 0.0, 2.0)
+
+	if _foliage_phys != null and is_instance_valid(_foliage_phys):
+		_foliage_phys.call("step_physics", dt, player_pos, player_vel, wind_dir, wind_strength, dynamic_actors)
+	if _leaf_phys != null and is_instance_valid(_leaf_phys):
+		_leaf_phys.call("step_physics", dt, player_pos, player_vel, wind_dir, wind_strength)
+
 	if has_meta("interactive_foliage_mats"):
 		var fmats: Array = get_meta("interactive_foliage_mats")
 		for m in fmats:
@@ -449,6 +467,7 @@ func update_interactive_env(player_pos: Vector3, player_vel: Vector3, wind_stren
 				sm.set_shader_parameter("player_vel", player_vel)
 				sm.set_shader_parameter("wind_strength", wind_strength)
 				sm.set_shader_parameter("wind_dir", wind_dir)
+				sm.set_shader_parameter("wind_gust", _wind_gust_val)
 	if has_meta("interactive_water_mats"):
 		var wmats: Array = get_meta("interactive_water_mats")
 		for m in wmats:
@@ -465,6 +484,12 @@ func update_interactive_env(player_pos: Vector3, player_vel: Vector3, wind_stren
 			wm.set_shader_parameter("wind_strength", wind_strength)
 			if wm.shader != null and wm.shader.resource_path.ends_with("tree_leaves_alpha.gdshader"):
 				wm.set_shader_parameter("wind_dir", wind_dir)
+				wm.set_shader_parameter("wind_gust", _wind_gust_val)
+				wm.set_shader_parameter("player_pos", player_pos)
+				wm.set_shader_parameter("player_vel", player_vel)
+	if _floor_mat != null and is_instance_valid(_floor_mat):
+		_floor_mat.set_shader_parameter("wind_dir", wind_dir)
+		_floor_mat.set_shader_parameter("wind_strength", wind_strength)
 
 
 func trigger_water_splash(pos: Vector3, strength: float = 1.0) -> void:
@@ -484,7 +509,7 @@ func trigger_water_splash(pos: Vector3, strength: float = 1.0) -> void:
 		wsm.set_shader_parameter("splash_strength", clampf(strength, 0.0, 2.0))
 
 
-func trigger_foliage_gust(pos: Vector3) -> void:
+func trigger_foliage_gust(pos: Vector3, strength: float = 1.0, radius: float = 5.2, shed_leaves: int = 10) -> void:
 	_gust_time = 0.0
 	if has_meta("interactive_foliage_mats"):
 		var fmats: Array = get_meta("interactive_foliage_mats")
@@ -493,6 +518,16 @@ func trigger_foliage_gust(pos: Vector3) -> void:
 				var sm := m as ShaderMaterial
 				sm.set_shader_parameter("gust_pos", pos)
 				sm.set_shader_parameter("gust_time", 0.0)
+				sm.set_shader_parameter("gust_strength", strength)
+	for wm in _wafuu_wind_mats:
+		if is_instance_valid(wm) and wm.shader != null and wm.shader.resource_path.ends_with("tree_leaves_alpha.gdshader"):
+			wm.set_shader_parameter("gust_pos", pos)
+			wm.set_shader_parameter("gust_time", 0.0)
+			wm.set_shader_parameter("gust_strength", strength)
+	if _foliage_phys != null and is_instance_valid(_foliage_phys):
+		_foliage_phys.call("apply_impulse", pos, radius, strength * 1.45, clampf(0.42 * strength, 0.25, 0.95))
+	if _leaf_phys != null and is_instance_valid(_leaf_phys):
+		_leaf_phys.call("apply_vortex_impulse", pos, radius + 2.2, strength * 1.35, shed_leaves)
 
 
 func _try_register_wind_mat(mat: Material, seen: Dictionary) -> void:
@@ -563,6 +598,10 @@ func build_stage(stage_id: String) -> void:
 	_sakura_zone_node = null
 	_lava_plane_mat = null
 	_water_plane_mat = null
+	_foliage_phys = null
+	_leaf_phys = null
+	_floor_mat = null
+	_wind_gust_val = 0.0
 	_sakura_spot_idx = 0
 	_splash_time = 99.0
 	_gust_time = 99.0
@@ -570,6 +609,12 @@ func build_stage(stage_id: String) -> void:
 		remove_meta("interactive_foliage_mats")
 	if has_meta("interactive_water_mats"):
 		remove_meta("interactive_water_mats")
+	if has_meta("leaf_canopy_spots"):
+		remove_meta("leaf_canopy_spots")
+	if has_meta("meadow_grass_mat"):
+		remove_meta("meadow_grass_mat")
+	if has_meta("terrain_floor_mat"):
+		remove_meta("terrain_floor_mat")
 
 	if current_stage_id == ArpgChapter1Data.STAGE_ID:
 		if center_light != null:
@@ -577,7 +622,7 @@ func build_stage(stage_id: String) -> void:
 			center_light.light_energy = 1.65
 			center_light.omni_range = 140.0
 		ArpgCh1Map.build_map(self, _arena_content, FLOOR_SHADER, PROP_SURFACE_SHADER, WATER_SHADER, SKY_SHADER, _sky_anim_nodes)
-		_collect_wafuu_wind_materials()
+		_finalize_stage_physics_and_wind(is_mob)
 		return
 
 	var sky_col := Color.html(st["sky_color"])
@@ -640,6 +685,57 @@ func build_stage(stage_id: String) -> void:
 
 	# 5. Ambient Falling Petals / Leaves / Embers / Starlight
 	_build_ambient_particles(particle_col)
+
+	# 6. Collect wind materials & wire FoliagePhysicsField / LeafPhysicsSystem
+	_finalize_stage_physics_and_wind(is_mob)
+
+
+func _finalize_stage_physics_and_wind(is_mob: bool) -> void:
+	_collect_wafuu_wind_materials()
+
+	# Track terrain floor ShaderMaterial for real-time wind waves on terrain grass
+	if has_meta("terrain_floor_mat") and get_meta("terrain_floor_mat") is ShaderMaterial:
+		_floor_mat = get_meta("terrain_floor_mat") as ShaderMaterial
+	elif _floor_mat == null:
+		var terrain_mi := _arena_content.get_node_or_null("TerrainMesh") as MeshInstance3D
+		if terrain_mi != null and terrain_mi.material_override is ShaderMaterial:
+			_floor_mat = terrain_mi.material_override as ShaderMaterial
+
+	# Real-Time Foliage Physics Field + Rolling Near-Player Meadow Carpet (Chapter 1 ARPG)
+	const FOLIAGE_PHYS_PATH: String = "res://scripts/world/foliage_physics_field.gd"
+	if current_stage_id == ArpgChapter1Data.STAGE_ID and ResourceLoader.exists(FOLIAGE_PHYS_PATH):
+		var fpf_script := load(FOLIAGE_PHYS_PATH) as GDScript
+		if fpf_script != null:
+			var fpf := fpf_script.new() as Node3D
+			if fpf != null:
+				fpf.name = "FoliagePhysicsField"
+				_arena_content.add_child(fpf)
+				var grass_mat: ShaderMaterial = get_meta("meadow_grass_mat", null) as ShaderMaterial
+				fpf.call("setup", self, is_mob, grass_mat, true)
+				if has_meta("interactive_foliage_mats"):
+					for m in get_meta("interactive_foliage_mats"):
+						if m is ShaderMaterial:
+							fpf.call("bind_material", m as ShaderMaterial)
+				_foliage_phys = fpf
+
+	# 6-DOF Aerodynamic Falling Leaf Physics System (stages with trees)
+	const LEAF_PHYS_PATH: String = "res://scripts/world/leaf_physics_system.gd"
+	var has_trees: bool = (
+		current_stage_id == ArpgChapter1Data.STAGE_ID
+		or current_stage_id == "arpg_ch1"
+		or current_stage_id == "sakura_shrine"
+		or current_stage_id == "maple_temple"
+	)
+	if has_trees and ResourceLoader.exists(LEAF_PHYS_PATH):
+		var lps_script := load(LEAF_PHYS_PATH) as GDScript
+		if lps_script != null:
+			var lps := lps_script.new() as Node3D
+			if lps != null:
+				lps.name = "LeafPhysicsSystem"
+				_arena_content.add_child(lps)
+				var canopy_spots: Array = get_meta("leaf_canopy_spots", [])
+				lps.call("setup", self, is_mob, current_stage_id, canopy_spots)
+				_leaf_phys = lps
 
 
 func _stage_shader_index() -> int:
@@ -795,6 +891,7 @@ func _build_heightfield_terrain(_floor_col: Color, _ring_col: Color) -> void:
 	mat.shader = FLOOR_SHADER
 	mat.set_shader_parameter("stage_id", _stage_shader_index())
 	mat.set_shader_parameter("mobile_mode", is_mob)
+	_floor_mat = mat
 
 	var terrain_inst := MeshInstance3D.new()
 	terrain_inst.name = "TerrainMesh"
@@ -869,13 +966,21 @@ func _build_sakura_shrine_props(_ring_col: Color) -> void:
 		_add_tactical_pillar(Vector3(cp.x, cy, cp.y), 0.85, 4.5, "#4c3b5e", "#f472b6")
 
 	# 8 Lush Night Sakura Trees framing the terraced shrine
+	var sakura_canopies: Array = []
 	for tp: Vector2 in [
 		Vector2(-20.5 * S, -13.0 * S), Vector2(20.5 * S, -13.0 * S),
 		Vector2(-21.0 * S, 13.0 * S), Vector2(21.0 * S, 13.0 * S),
 		Vector2(-12.5 * S, -21.5 * S), Vector2(12.5 * S, -21.5 * S),
 		Vector2(-13.5 * S, 19.5 * S), Vector2(13.5 * S, 19.5 * S),
 	]:
-		_add_stylized_tree(Vector3(tp.x, get_base_terrain_height(tp.x, tp.y), tp.y), "#3b231e", "#f472b6", 1.38)
+		var ty := get_base_terrain_height(tp.x, tp.y)
+		_add_stylized_tree(Vector3(tp.x, ty, tp.y), "#3b231e", "#f472b6", 1.38)
+		sakura_canopies.append({
+			"pos": Vector3(tp.x, ty + 4.8 * 1.38, tp.y),
+			"species": "sakura",
+			"radius": 3.4 * 1.38,
+		})
+	set_meta("leaf_canopy_spots", sakura_canopies)
 
 	# 8 Glowing Stone Lanterns along terraces
 	for ang in [0.35, 1.15, 1.95, 2.75, -0.45, -1.15, -2.0, -2.7]:
@@ -952,13 +1057,21 @@ func _build_maple_temple_props(_ring_col: Color) -> void:
 	_add_batched_multimesh(stalk_mesh, bamboo_xforms, false)
 
 	# 7 Crimson & Golden Maple Trees atop outer hills
+	var maple_canopies: Array = []
 	for mp: Vector2 in [
 		Vector2(-19.5 * S, -8.5 * S), Vector2(19.5 * S, -8.5 * S),
 		Vector2(-18.5 * S, 14.5 * S), Vector2(18.5 * S, 14.5 * S),
 		Vector2(-11.0 * S, -21.0 * S), Vector2(11.0 * S, -21.0 * S),
 		Vector2(12.5 * S, 20.0 * S),
 	]:
-		_add_stylized_tree(Vector3(mp.x, get_base_terrain_height(mp.x, mp.y), mp.y), "#451a03", "#ea580c", 1.42)
+		var my := get_base_terrain_height(mp.x, mp.y)
+		_add_stylized_tree(Vector3(mp.x, my, mp.y), "#451a03", "#ea580c", 1.42)
+		maple_canopies.append({
+			"pos": Vector3(mp.x, my + 4.8 * 1.42, mp.y),
+			"species": "maple",
+			"radius": 3.4 * 1.42,
+		})
+	set_meta("leaf_canopy_spots", maple_canopies)
 
 	# Stage Mechanic: 3 Swirling Emerald-Gold Wind Draft Pillars (疾風氣流)
 	var wind_coords := [Vector2(-12.5 * S, 4.0 * S), Vector2(12.5 * S, 4.0 * S), Vector2(0.0, -12.5 * S)]
@@ -1540,6 +1653,9 @@ func _process(delta: float) -> void:
 			for m in get_meta("interactive_foliage_mats"):
 				if m is ShaderMaterial:
 					(m as ShaderMaterial).set_shader_parameter("gust_time", _gust_time)
+		for wm in _wafuu_wind_mats:
+			if is_instance_valid(wm) and wm.shader != null and wm.shader.resource_path.ends_with("tree_leaves_alpha.gdshader"):
+				wm.set_shader_parameter("gust_time", _gust_time)
 
 	if _sakura_zone_node != null and is_instance_valid(_sakura_zone_node):
 		_sakura_zone_node.rotation.y = _elapsed * 1.15

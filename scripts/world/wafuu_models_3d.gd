@@ -74,6 +74,10 @@ static func make_leaf_card_mat(
 			mat.set_shader_parameter("alpha_cutoff", 0.42)
 			var wind_f: float = 1.15 if sp_key == "sakura" else (1.05 if sp_key == "maple" else (0.72 if sp_key == "pine" else 0.95))
 			mat.set_shader_parameter("wind_strength", wind_f)
+			mat.set_shader_parameter("wind_dir", Vector2(0.85, 0.52))
+			mat.set_shader_parameter("wind_gust", 0.0)
+			mat.set_shader_parameter("gust_time", 99.0)
+			mat.set_shader_parameter("gust_strength", 1.0)
 			mat.set_shader_parameter("tint_color", tint)
 			mat.set_shader_parameter("translucency", 0.20 if sp_key == "sakura" else 0.14)
 			mat.set_shader_parameter("mobile_mode", is_mob)
@@ -496,10 +500,14 @@ static func _append_curved_leaf_card(
 	mid_col: Color,
 	bot_col: Color,
 	uv_flip: bool,
-	shade_bias: float
+	shade_bias: float,
+	cup_depth: float = -1.0
 ) -> void:
-	## Emits a single arched 2-segment leaf-branch card (6 logical vertices / 4 triangles).
-	## UV.y = 1.0 anchors the woody stem at `origin`; UV.y = 0.0 reaches outward to leaf tips.
+	## Emits a 3D curved & cupped V-arch leaf-branch sprig (6 logical vertices / 5 triangles).
+	## UV.y = 1.0 strictly pins the woody twig stem pivot at `origin`; UV.y = 0.0 reaches
+	## the outer fluttering leaf tips; UV.x spans 0.0..1.0 across width for torsional flutter.
+	## Trimmed bottom corners (v=0.78) eliminate empty alpha overdraw while keeping 100% of
+	## opaque foliage pixels intact across all four botanical textures.
 	var g_dir: Vector3 = growth_dir.normalized()
 	if g_dir.length_squared() < 0.0001:
 		g_dir = Vector3.FORWARD
@@ -511,47 +519,102 @@ static func _append_curved_leaf_card(
 	# Right-handed frame where right.cross(g_dir) == up_n (CW front face points +up_n)
 	var up_n: Vector3 = right.cross(g_dir).normalized()
 
-	var hw0: float = card_w * 0.46
-	var hw1: float = card_w * 0.54
-	var hw2: float = card_w * 0.48
-	# Slight stem pullback so the sprig visually grows directly out of the branch tip
-	var base_p: Vector3 = origin - g_dir * (card_len * 0.14)
-	var mid_p: Vector3 = base_p + g_dir * (card_len * 0.52) + up_n * arch_h
-	var tip_p: Vector3 = base_p + g_dir * card_len - up_n * tip_droop
+	var hw_low: float = card_w * 0.49
+	var hw_tip: float = card_w * 0.51
+	var cup_h: float = cup_depth if cup_depth >= 0.0 else (card_w * 0.14)
 
-	var p00: Vector3 = base_p - right * hw0
-	var p01: Vector3 = base_p + right * hw0
-	var p10: Vector3 = mid_p - right * hw1
-	var p11: Vector3 = mid_p + right * hw1
-	var p20: Vector3 = tip_p - right * hw2
-	var p21: Vector3 = tip_p + right * hw2
+	# Woody stem attachment pivot tucked directly into the branch tip
+	var p_stem: Vector3 = origin - g_dir * (card_len * 0.12)
+	var low_center: Vector3 = p_stem + g_dir * (card_len * 0.24) + up_n * (arch_h * 0.42 + cup_h * 0.72)
+	var p_low_l: Vector3 = low_center - right * hw_low
+	var p_low_r: Vector3 = low_center + right * hw_low
+	# Central arched midrib slightly recessed below cupped side margins for organic 3D V-cup
+	var p_mid_c: Vector3 = p_stem + g_dir * (card_len * 0.54) + up_n * (arch_h - cup_h * 0.35)
+	var tip_center: Vector3 = p_stem + g_dir * card_len - up_n * (tip_droop - cup_h * 0.85)
+	var p_tip_l: Vector3 = tip_center - right * hw_tip
+	var p_tip_r: Vector3 = tip_center + right * hw_tip
 
 	var u_l: float = 1.0 if uv_flip else 0.0
 	var u_r: float = 0.0 if uv_flip else 1.0
-	var uv00 := Vector2(u_l, 1.0)
-	var uv01 := Vector2(u_r, 1.0)
-	var uv10 := Vector2(u_l, 0.5)
-	var uv11 := Vector2(u_r, 0.5)
-	var uv20 := Vector2(u_l, 0.0)
-	var uv21 := Vector2(u_r, 0.0)
+	var uv_stem := Vector2(0.5, 1.0)
+	var uv_low_l := Vector2(u_l, 0.78)
+	var uv_low_r := Vector2(u_r, 0.78)
+	var uv_mid_c := Vector2(0.5, 0.46)
+	var uv_tip_l := Vector2(u_l, 0.0)
+	var uv_tip_r := Vector2(u_r, 0.0)
 
-	# Segment 0 (stem -> arched mid): 2 triangles
-	_emit_leaf_vert(st, p00, uv00, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
-	_emit_leaf_vert(st, p10, uv10, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
-	_emit_leaf_vert(st, p11, uv11, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+	# 1-2. Stem-pinned V-cup fan (woody twig base -> cupped shoulders & arched midrib)
+	_emit_leaf_vert(st, p_stem, uv_stem, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias - 0.03)
+	_emit_leaf_vert(st, p_low_l, uv_low_l, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+	_emit_leaf_vert(st, p_mid_c, uv_mid_c, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias + 0.02)
 
-	_emit_leaf_vert(st, p00, uv00, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
-	_emit_leaf_vert(st, p11, uv11, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
-	_emit_leaf_vert(st, p01, uv01, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+	_emit_leaf_vert(st, p_stem, uv_stem, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias - 0.03)
+	_emit_leaf_vert(st, p_mid_c, uv_mid_c, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias + 0.02)
+	_emit_leaf_vert(st, p_low_r, uv_low_r, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
 
-	# Segment 1 (arched mid -> outer leaf tips): 2 triangles
-	_emit_leaf_vert(st, p10, uv10, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
-	_emit_leaf_vert(st, p20, uv20, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
-	_emit_leaf_vert(st, p21, uv21, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+	# 3-5. Cupped outer blade & fluttering leaf tips
+	_emit_leaf_vert(st, p_low_l, uv_low_l, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+	_emit_leaf_vert(st, p_tip_l, uv_tip_l, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias + 0.04)
+	_emit_leaf_vert(st, p_mid_c, uv_mid_c, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias + 0.02)
 
-	_emit_leaf_vert(st, p10, uv10, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
-	_emit_leaf_vert(st, p21, uv21, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
-	_emit_leaf_vert(st, p11, uv11, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+	_emit_leaf_vert(st, p_mid_c, uv_mid_c, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias + 0.02)
+	_emit_leaf_vert(st, p_tip_l, uv_tip_l, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias + 0.04)
+	_emit_leaf_vert(st, p_tip_r, uv_tip_r, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias + 0.04)
+
+	_emit_leaf_vert(st, p_mid_c, uv_mid_c, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias + 0.02)
+	_emit_leaf_vert(st, p_tip_r, uv_tip_r, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias + 0.04)
+	_emit_leaf_vert(st, p_low_r, uv_low_r, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+
+
+static func _append_inner_core_leaf_card(
+	st: SurfaceTool,
+	origin: Vector3,
+	growth_dir: Vector3,
+	up_hint: Vector3,
+	card_w: float,
+	card_len: float,
+	cup_h: float,
+	crown_center: Vector3,
+	crown_radius: float,
+	top_col: Color,
+	mid_col: Color,
+	bot_col: Color,
+	uv_flip: bool,
+	shade_bias: float
+) -> void:
+	## Ultra-lean 2-triangle V-folded inner core depth sprig (4 logical vertices) tucked
+	## inside dense branch forks for volumetric canopy depth without bloating WebGL2 counts.
+	var g_dir: Vector3 = growth_dir.normalized()
+	if g_dir.length_squared() < 0.0001:
+		g_dir = Vector3.UP
+	var right: Vector3 = g_dir.cross(up_hint)
+	if right.length_squared() < 0.0001:
+		var fallback_up: Vector3 = Vector3.RIGHT if absf(g_dir.y) > 0.92 else Vector3.UP
+		right = g_dir.cross(fallback_up)
+	right = right.normalized()
+	var up_n: Vector3 = right.cross(g_dir).normalized()
+
+	var hw: float = card_w * 0.52
+	var p_stem: Vector3 = origin - g_dir * (card_len * 0.10)
+	var mid_c: Vector3 = p_stem + g_dir * (card_len * 0.50) + up_n * cup_h
+	var p_l: Vector3 = mid_c - right * hw
+	var p_r: Vector3 = mid_c + right * hw
+	var p_tip: Vector3 = p_stem + g_dir * card_len - up_n * (cup_h * 0.35)
+
+	var u_l: float = 1.0 if uv_flip else 0.0
+	var u_r: float = 0.0 if uv_flip else 1.0
+	var uv_stem := Vector2(0.5, 1.0)
+	var uv_l := Vector2(u_l, 0.42)
+	var uv_r := Vector2(u_r, 0.42)
+	var uv_tip := Vector2(0.5, 0.0)
+
+	_emit_leaf_vert(st, p_stem, uv_stem, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias - 0.04)
+	_emit_leaf_vert(st, p_l, uv_l, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+	_emit_leaf_vert(st, p_tip, uv_tip, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias + 0.02)
+
+	_emit_leaf_vert(st, p_stem, uv_stem, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias - 0.04)
+	_emit_leaf_vert(st, p_tip, uv_tip, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias + 0.02)
+	_emit_leaf_vert(st, p_r, uv_r, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
 
 
 static func _append_leaf_card_cluster(
@@ -570,49 +633,69 @@ static func _append_leaf_card_cluster(
 	droop_factor: float = 0.16,
 	aspect_len: float = 1.0
 ) -> void:
-	## Emits `count` intersecting, subtly arched 3D real-leaf branch-sprig cards
-	## fanning organically around a branch tip with varied yaw/pitch/roll angles.
+	## Emits a layered multi-angle 3D real-leaf branch-sprig cluster:
+	## - Outer airy cupped silhouette sprigs fanning organically around the branch tip
+	## - Steeply pitched inner core depth sprigs providing lush volume from all camera angles
 	if count <= 0:
 		return
 	var out_from_crown: Vector3 = center - crown_center
 	var out_xz := Vector3(out_from_crown.x, 0.0, out_from_crown.z)
 	var base_yaw: float = atan2(out_xz.z, out_xz.x) if out_xz.length_squared() > 0.01 else fmod(seed_val * 2.1, TAU)
+	var outer_count: int = (count - 1) if count >= 3 else count
 
 	for ci: int in range(count):
 		var h1: float = sin(seed_val * 3.17 + float(ci) * 2.41)
 		var h2: float = cos(seed_val * 2.31 + float(ci) * 3.73)
 		var h3: float = sin(seed_val * 4.53 + float(ci) * 1.67)
+		var is_core_sprig: bool = (count >= 3 and ci == count - 1)
 
-		# Evenly fanned azimuths around the branch tip with natural angular jitter
-		var yaw: float = base_yaw + (float(ci) / float(count)) * TAU + h1 * 0.36
-		# Mix flatter horizontal fans with steeper angled sprays so the cluster
-		# reads lush and 3D from side, angled ARPG, and top-down views alike!
+		var yaw: float
 		var pitch_var: float
-		if count >= 3 and ci == count - 1:
-			pitch_var = (0.48 + 0.22 * absf(h2)) * flatness
-		elif ci % 2 == 0:
-			pitch_var = (pitch_bias + 0.16 * h2) * flatness
-		else:
-			pitch_var = (pitch_bias - 0.14 + 0.24 * h2) * flatness
-		var pitch: float = clampf(pitch_var, -0.22, 0.92)
-		var roll: float = h3 * (0.46 if flatness > 0.7 else 0.30)
+		var roll: float
+		var radial_off: float
+		var size_var: float
+		var local_shade: float
+		var cup_scale: float
 
+		if is_core_sprig:
+			# Inner core depth sprig: tucked close to the branch fork, pitched steeply
+			# with subtle ambient core darkening so the crown reads full from underneath & oblique angles.
+			yaw = base_yaw + PI * 0.72 + h1 * 0.65
+			pitch_var = (0.54 + 0.24 * absf(h2)) * maxf(0.68, flatness)
+			roll = h3 * 0.56
+			radial_off = card_size * 0.05
+			size_var = card_size * (0.84 + 0.14 * (0.5 + 0.5 * h1))
+			local_shade = -0.07 + h3 * 0.04
+			cup_scale = 0.18
+		else:
+			# Outer airy silhouette sprigs: evenly fanned around the perimeter with organic jitter
+			yaw = base_yaw + (float(ci) / float(maxi(1, outer_count))) * TAU + h1 * 0.34
+			if ci % 2 == 0:
+				pitch_var = (pitch_bias + 0.18 * h2) * flatness
+			else:
+				pitch_var = (pitch_bias - 0.15 + 0.24 * h2) * flatness
+			roll = h3 * (0.48 if flatness > 0.7 else 0.32)
+			radial_off = card_size * 0.17
+			size_var = card_size * (0.93 + 0.24 * (0.5 + 0.5 * h1))
+			local_shade = 0.03 + h3 * 0.06
+			cup_scale = 0.14 + 0.04 * absf(h2)
+
+		var pitch: float = clampf(pitch_var, -0.22, 0.96)
 		var cos_p: float = cos(pitch)
 		var growth_dir := Vector3(cos(yaw) * cos_p, sin(pitch), sin(yaw) * cos_p).normalized()
-		var side_ref: Vector3 = Vector3(-sin(yaw), 0.0, cos(yaw))
+		var side_ref := Vector3(-sin(yaw), 0.0, cos(yaw))
 		var up_hint: Vector3 = (Vector3.UP * cos(roll) + side_ref * sin(roll)).normalized()
 
-		# Small organic stem offset so cards bloom naturally without pinching at one point
 		var stem_off := Vector3(
-			cos(yaw) * card_size * 0.14,
-			(h2 * 0.12) * card_size * flatness,
-			sin(yaw) * card_size * 0.14
+			cos(yaw) * radial_off,
+			(h2 * 0.11 - (0.06 if is_core_sprig else 0.0)) * card_size * flatness,
+			sin(yaw) * radial_off
 		)
-		var size_var: float = card_size * (0.88 + 0.24 * (0.5 + 0.5 * h1))
-		var c_w: float = size_var * (0.94 + 0.12 * absf(h3))
+		var c_w: float = size_var * (0.96 + 0.12 * absf(h3))
 		var c_len: float = size_var * aspect_len
-		var arch_h: float = c_len * (0.14 + 0.06 * absf(h2))
+		var arch_h: float = c_len * (0.15 + 0.06 * absf(h2))
 		var tip_droop: float = c_len * (droop_factor + 0.05 * maxf(0.0, h1))
+		var cup_h: float = c_w * cup_scale
 
 		_append_curved_leaf_card(
 			st,
@@ -629,7 +712,37 @@ static func _append_leaf_card_cluster(
 			mid_col,
 			bot_col,
 			(ci % 2) == 1,
-			h3 * 0.07
+			local_shade,
+			cup_h
+		)
+
+	# Desktop dense clusters (count >= 4): add 1 lean 2-triangle V-folded inner heart sprig
+	# oriented across the branch fork for lush core fullness while keeping vertex budget lean.
+	if count >= 4:
+		var hc1: float = sin(seed_val * 5.71 + 1.13)
+		var hc2: float = cos(seed_val * 3.89 + 2.27)
+		var core_yaw: float = base_yaw - PI * 0.58 + hc1 * 0.52
+		var core_pitch: float = clampf((0.46 + 0.22 * absf(hc2)) * maxf(0.65, flatness), 0.18, 0.92)
+		var c_cos: float = cos(core_pitch)
+		var core_dir := Vector3(cos(core_yaw) * c_cos, sin(core_pitch), sin(core_yaw) * c_cos).normalized()
+		var core_side := Vector3(-sin(core_yaw), 0.0, cos(core_yaw))
+		var core_up: Vector3 = (Vector3.UP * cos(hc2 * 0.5) + core_side * sin(hc2 * 0.5)).normalized()
+		var core_sz: float = card_size * 0.80
+		_append_inner_core_leaf_card(
+			st,
+			center + Vector3(0.0, -card_size * 0.05 * flatness, 0.0),
+			core_dir,
+			core_up,
+			core_sz * 1.04,
+			core_sz * aspect_len * 0.96,
+			core_sz * 0.17,
+			crown_center,
+			crown_radius,
+			top_col,
+			mid_col,
+			bot_col,
+			hc1 > 0.0,
+			-0.10
 		)
 
 
