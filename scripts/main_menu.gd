@@ -9,6 +9,12 @@ var _main_panel: PanelContainer
 var _name_input: LineEdit
 var _stats_badge_lbl: Label
 var _audio_btn: Button
+var _arpg_section_panel: PanelContainer
+var _arpg_progress_lbl: Label
+var _arpg_hero_hint_lbl: Label
+var _arpg_launch_btn: Button
+var _footer_arpg_btn: Button
+var _last_arena_mode: String = "normal"
 var _char_grid: GridContainer
 var _hero_spotlight_panel: PanelContainer
 var _hero_spotlight_icon: Label
@@ -32,6 +38,8 @@ func _ready() -> void:
 	get_tree().paused = false
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	GameState.reset_battle_state()
+	if not GameState.is_arpg_mode():
+		_last_arena_mode = String(GameState.player.get("mode", "normal"))
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
 	GameState.state_changed.connect(refresh)
@@ -209,8 +217,72 @@ func _build_ui() -> void:
 
 	vbox.add_child(UiStyle.make_ornament_divider("#e6c37a", 0.45))
 
+	# ==================== DEDICATED ARPG STORY ADVENTURE ZONE ====================
+	_arpg_section_panel = PanelContainer.new()
+	_arpg_section_panel.add_theme_stylebox_override("panel", UiStyle.make_accent_card("#071f1c", "#34d399", true, 18, 20, 14))
+	vbox.add_child(_arpg_section_panel)
+
+	var arpg_row := HBoxContainer.new()
+	arpg_row.add_theme_constant_override("separation", 16)
+	arpg_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_arpg_section_panel.add_child(arpg_row)
+
+	var arpg_info := VBoxContainer.new()
+	arpg_info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	arpg_info.add_theme_constant_override("separation", 5)
+	arpg_row.add_child(arpg_info)
+
+	var arpg_badge_row := HBoxContainer.new()
+	arpg_badge_row.add_theme_constant_override("separation", 8)
+	arpg_info.add_child(arpg_badge_row)
+
+	arpg_badge_row.add_child(UiStyle.make_badge_pill("🗺️ RPG 專區", "#064e3b", "#34d399", "#a7f3d0", 14 if is_mob else 11))
+	arpg_badge_row.add_child(UiStyle.make_badge_pill("開放和風地圖・日文 NPC 試煉", "#102838", "#38bdf8", "#bae6fd", 13 if is_mob else 10))
+
+	var prog_pill := PanelContainer.new()
+	prog_pill.add_theme_stylebox_override("panel", UiStyle.make_pill("#291c09", 0.92, "#fbbf24", 0.72, 11, 4))
+	_arpg_progress_lbl = Label.new()
+	_arpg_progress_lbl.add_theme_font_size_override("font_size", 13 if is_mob else 11)
+	_arpg_progress_lbl.add_theme_color_override("font_color", Color.html("#fde68a"))
+	prog_pill.add_child(_arpg_progress_lbl)
+	arpg_badge_row.add_child(prog_pill)
+
+	var arpg_title := Label.new()
+	arpg_title.text = "🌸 ARPG 物語冒險｜第一章：櫻花之里・失落的言靈碑"
+	arpg_title.add_theme_font_size_override("font_size", 24 if is_mob else 18)
+	arpg_title.add_theme_color_override("font_color", Color.html("#fef3c7"))
+	UiStyle.style_label_shadow(arpg_title, 0.78, 1)
+	arpg_info.add_child(arpg_title)
+
+	var arpg_desc := Label.new()
+	arpg_desc.text = "探索櫻花村落、月見湖白砂浜沙灘、互動風動花海草原、幽暗竹林與千本鳥居；與 5 位村民對話答日文題拿獎勵，並體驗真實涉水浮力、沙灘腳印與草叢物理！"
+	arpg_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	arpg_desc.add_theme_font_size_override("font_size", 16 if is_mob else 12)
+	arpg_desc.add_theme_color_override("font_color", Color.html("#d1fae5"))
+	arpg_info.add_child(arpg_desc)
+
+	_arpg_hero_hint_lbl = Label.new()
+	_arpg_hero_hint_lbl.add_theme_font_size_override("font_size", 14 if is_mob else 11)
+	_arpg_hero_hint_lbl.add_theme_color_override("font_color", Color.html("#6ee7b7"))
+	arpg_info.add_child(_arpg_hero_hint_lbl)
+
+	var arpg_cta_col := VBoxContainer.new()
+	arpg_cta_col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	arpg_cta_col.alignment = BoxContainer.ALIGNMENT_CENTER
+	arpg_cta_col.add_theme_constant_override("separation", 5)
+	arpg_row.add_child(arpg_cta_col)
+
+	_arpg_launch_btn = Button.new()
+	_arpg_launch_btn.focus_mode = Control.FOCUS_NONE
+	_arpg_launch_btn.text = "🗺️ 進入 ARPG 冒險！\n第一章・櫻花之里"
+	_arpg_launch_btn.custom_minimum_size = Vector2(280 if is_mob else 238, 86 if is_mob else 72)
+	_arpg_launch_btn.add_theme_font_size_override("font_size", 21 if is_mob else 16)
+	UiStyle.apply_button(_arpg_launch_btn, "#047857", "#fde047", "#ffffff", 18, 2, 1.0)
+	_arpg_launch_btn.pressed.connect(_on_start_arpg_pressed)
+	arpg_cta_col.add_child(_arpg_launch_btn)
+
 	# ==================== STEP 1: CHARACTERS ====================
-	vbox.add_child(_make_section_header("01", "選擇出戰 3D 劍士", "普攻為「あ」三段斬・E 施放專屬技・Q 詠唱 30 種日文言靈奧義", "#fcd34d", is_mob))
+	vbox.add_child(_make_section_header("01", "選擇出戰 3D 劍士", "ARPG 物語冒險與 3D 道場共用目前出戰角色・E 專屬技・Q 詠唱日文奧義", "#fcd34d", is_mob))
 
 	_char_grid = GridContainer.new()
 	_char_grid.columns = 2 if is_mob else 5
@@ -249,8 +321,8 @@ func _build_ui() -> void:
 	_hero_spotlight_desc.add_theme_color_override("font_color", Color.html("#cbd5e1"))
 	spot_v.add_child(_hero_spotlight_desc)
 
-	# ==================== STEP 2: STAGES ====================
-	vbox.add_child(_make_section_header("02", "選擇 3D 立體戰場", "每張地圖皆有高低差地形、高地斬 +20% 與專屬環境機制", "#7dd3fc", is_mob))
+	# ==================== STEP 2: ARENA DOJO STAGES ====================
+	vbox.add_child(_make_section_header("02", "百鬼道場：選擇 3D 立體戰場", "傳統道場闖關用・每張地圖皆有高低差地形、高地斬 +20% 與專屬機制", "#7dd3fc", is_mob))
 
 	_stage_grid = GridContainer.new()
 	_stage_grid.columns = 2 if is_mob else 4
@@ -258,38 +330,38 @@ func _build_ui() -> void:
 	_stage_grid.add_theme_constant_override("v_separation", 10)
 	vbox.add_child(_stage_grid)
 
-	# ==================== STEP 3: MODES ====================
-	vbox.add_child(_make_section_header("03", "選擇挑戰模式", "可體驗全新「ARPG 物語冒險（第一章）」或傳統百鬼道場闖關", "#fda4af", is_mob))
+	# ==================== STEP 3: ARENA DOJO DIFFICULTY ====================
+	vbox.add_child(_make_section_header("03", "百鬼道場：選擇挑戰難度", "可選一般道場闖關或「♾️ 無盡道場」肉鴿祝福無限波次", "#fda4af", is_mob))
 
 	_mode_grid = GridContainer.new()
-	_mode_grid.columns = 2 if is_mob else 5
+	_mode_grid.columns = 2 if is_mob else 4
 	_mode_grid.add_theme_constant_override("h_separation", 10)
 	_mode_grid.add_theme_constant_override("v_separation", 10)
 	vbox.add_child(_mode_grid)
 
 	vbox.add_child(UiStyle.make_divider("#e6c37a", 0.25, 1))
 
-	# ==================== FOOTER: NAME + LAUNCH CTA ====================
+	# ==================== FOOTER: NAME + DUAL LAUNCH CTAs ====================
 	var footer_card := PanelContainer.new()
 	footer_card.add_theme_stylebox_override("panel", UiStyle.make_panel("#0b1326", 0.92, "#e8c474", 0.36, 18, 1, 16, 12, 10))
 	vbox.add_child(footer_card)
 
 	var footer := HBoxContainer.new()
-	footer.add_theme_constant_override("separation", 12)
+	footer.add_theme_constant_override("separation", 10)
 	footer_card.add_child(footer)
 
 	var name_lbl := Label.new()
 	name_lbl.text = "🏷️ 稱號："
 	name_lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 19 if is_mob else 13)
+	name_lbl.add_theme_font_size_override("font_size", 18 if is_mob else 13)
 	name_lbl.add_theme_color_override("font_color", Color.html("#cbd5e1"))
 	footer.add_child(name_lbl)
 
 	_name_input = LineEdit.new()
 	_name_input.max_length = 12
-	_name_input.custom_minimum_size = Vector2(240 if is_mob else 190, 52 if is_mob else 40)
+	_name_input.custom_minimum_size = Vector2(200 if is_mob else 165, 52 if is_mob else 40)
 	_name_input.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_name_input.add_theme_font_size_override("font_size", 19 if is_mob else 14)
+	_name_input.add_theme_font_size_override("font_size", 18 if is_mob else 14)
 	UiStyle.apply_line_edit(_name_input, "#e8c474")
 	_name_input.text_submitted.connect(func(_t: String) -> void: GameState.set_player_name(_name_input.text))
 	footer.add_child(_name_input)
@@ -297,9 +369,9 @@ func _build_ui() -> void:
 	var rand_btn := Button.new()
 	rand_btn.focus_mode = Control.FOCUS_NONE
 	rand_btn.text = "🎲 隨機"
-	rand_btn.custom_minimum_size = Vector2(120 if is_mob else 84, 52 if is_mob else 40)
+	rand_btn.custom_minimum_size = Vector2(106 if is_mob else 76, 52 if is_mob else 40)
 	rand_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	rand_btn.add_theme_font_size_override("font_size", 18 if is_mob else 13)
+	rand_btn.add_theme_font_size_override("font_size", 17 if is_mob else 13)
 	UiStyle.apply_button(rand_btn, "#15203a", "#64748b", "#fde68a", 12, 1, 0.95)
 	rand_btn.pressed.connect(func() -> void:
 		var pick: String = GameData.RANDOM_NAMES[randi() % GameData.RANDOM_NAMES.size()]
@@ -311,9 +383,9 @@ func _build_ui() -> void:
 	var confirm_btn := Button.new()
 	confirm_btn.focus_mode = Control.FOCUS_NONE
 	confirm_btn.text = "儲存"
-	confirm_btn.custom_minimum_size = Vector2(96 if is_mob else 68, 52 if is_mob else 40)
+	confirm_btn.custom_minimum_size = Vector2(84 if is_mob else 62, 52 if is_mob else 40)
 	confirm_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	confirm_btn.add_theme_font_size_override("font_size", 18 if is_mob else 13)
+	confirm_btn.add_theme_font_size_override("font_size", 17 if is_mob else 13)
 	UiStyle.apply_button(confirm_btn, "#1e293b", "#e8c474", "#fef3c7", 12, 1, 0.96)
 	confirm_btn.pressed.connect(func() -> void: GameState.set_player_name(_name_input.text))
 	footer.add_child(confirm_btn)
@@ -322,11 +394,20 @@ func _build_ui() -> void:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	footer.add_child(spacer)
 
+	_footer_arpg_btn = Button.new()
+	_footer_arpg_btn.focus_mode = Control.FOCUS_NONE
+	_footer_arpg_btn.text = "🗺️ ARPG 物語冒險"
+	_footer_arpg_btn.custom_minimum_size = Vector2(240 if is_mob else 192, 64 if is_mob else 46)
+	_footer_arpg_btn.add_theme_font_size_override("font_size", 20 if is_mob else 15)
+	UiStyle.apply_button(_footer_arpg_btn, "#047857", "#6ee7b7", "#ffffff", 16, 2, 1.0)
+	_footer_arpg_btn.pressed.connect(_on_start_arpg_pressed)
+	footer.add_child(_footer_arpg_btn)
+
 	_start_btn = Button.new()
 	_start_btn.focus_mode = Control.FOCUS_NONE
 	_start_btn.text = "⚔️ 進入 3D 道場開戰！"
-	_start_btn.custom_minimum_size = Vector2(360 if is_mob else 268, 68 if is_mob else 48)
-	_start_btn.add_theme_font_size_override("font_size", 24 if is_mob else 16)
+	_start_btn.custom_minimum_size = Vector2(276 if is_mob else 218, 64 if is_mob else 46)
+	_start_btn.add_theme_font_size_override("font_size", 20 if is_mob else 15)
 	UiStyle.apply_button(_start_btn, "#be123c", "#fde68a", "#ffffff", 16, 2, 1.0)
 	_start_btn.pressed.connect(_on_start_battle_pressed)
 	footer.add_child(_start_btn)
@@ -419,12 +500,27 @@ func _update_audio_btn() -> void:
 func refresh() -> void:
 	var is_mob := UiStyle.is_mobile_device()
 	var p := GameState.player
+	if not GameState.is_arpg_mode():
+		_last_arena_mode = String(p.get("mode", "normal"))
 
 	if _stats_badge_lbl != null:
 		_stats_badge_lbl.text = "Lv.%d ｜ 🪙 %d ｜ ✨ %dpt" % [int(p["level"]), int(p["gold"]), int(p["skill_points"])]
 
 	if _name_input != null and not _name_input.has_focus():
 		_name_input.text = String(p["name"])
+
+	# Dedicated ARPG Adventure Section live status
+	var cur_ch: Dictionary = GameData.get_character(p["char_id"])
+	if _arpg_progress_lbl != null:
+		var cleared_cnt: int = GameState.get_arpg_quiz_cleared_count()
+		var ch1_done: bool = bool(p.get("arpg_ch1", {}).get("chapter_cleared", false))
+		_arpg_progress_lbl.text = (
+			"🏆 第一章已通關 · 日文試煉 %d/5" % cleared_cnt
+			if ch1_done
+			else "📜 進度：日文試煉 %d/5" % cleared_cnt
+		)
+	if _arpg_hero_hint_lbl != null:
+		_arpg_hero_hint_lbl.text = "◆ 將使用目前選定劍士出征：%s %s（Lv.%d）" % [cur_ch["icon"], cur_ch["name"], int(p["level"])]
 
 	# 1. Structured Hero Cards + Spotlight
 	if _char_grid != null:
@@ -506,7 +602,6 @@ func refresh() -> void:
 			_char_grid.add_child(btn)
 
 	# Update Selected Hero Spotlight Banner
-	var cur_ch: Dictionary = GameData.get_character(p["char_id"])
 	if _hero_spotlight_panel != null:
 		var c_hex: String = String(cur_ch["color_primary"])
 		_hero_spotlight_panel.add_theme_stylebox_override("panel", UiStyle.make_accent_card("#0e152b", c_hex, true, 16, 18, 11))
@@ -517,7 +612,7 @@ func refresh() -> void:
 		var style_txt: String = String(cur_ch.get("combat_style", ""))
 		_hero_spotlight_desc.text = "%s\n%s" % [style_txt, String(cur_ch["desc"])] if not style_txt.is_empty() else String(cur_ch["desc"])
 
-	# 2. Structured Stage Cards
+	# 2. Structured Arena Dojo Stage Cards
 	if _stage_grid != null:
 		for c in _stage_grid.get_children():
 			c.queue_free()
@@ -572,12 +667,15 @@ func refresh() -> void:
 			btn.pressed.connect(func() -> void: GameState.set_stage(sid))
 			_stage_grid.add_child(btn)
 
-	# 3. Structured Mode Cards
+	# 3. Structured Arena Dojo Mode Cards (ARPG has its own dedicated hero section above!)
 	if _mode_grid != null:
 		for c in _mode_grid.get_children():
 			c.queue_free()
+		var active_arena_mode: String = _last_arena_mode if GameState.is_arpg_mode() else String(p["mode"])
 		for m in GameData.GAME_MODES:
-			var selected: bool = p["mode"] == m["id"]
+			if String(m["id"]) == "arpg_story":
+				continue
+			var selected: bool = active_arena_mode == m["id"]
 			var m_hex: String = String(m["color"])
 			var bg_hex := "#241914" if selected else "#0c1326"
 
@@ -618,25 +716,33 @@ func refresh() -> void:
 			mv.add_child(desc)
 
 			var mid: String = m["id"]
-			btn.pressed.connect(func() -> void: GameState.set_mode(mid))
+			btn.pressed.connect(func() -> void:
+				_last_arena_mode = mid
+				GameState.set_mode(mid)
+			)
 			_mode_grid.add_child(btn)
 
-	if _start_btn != null:
-		if GameState.is_arpg_mode():
-			_start_btn.text = "🗺️ 啟程！第一章：櫻花之里"
-			UiStyle.apply_button(_start_btn, "#047857", "#6ee7b7", "#ffffff", 16, 2, 1.0)
-			if _load_lbl != null:
-				_load_lbl.text = "⛩️ 正在前往「第一章：櫻花之里」和風冒險世界...\n請稍候片刻"
-		else:
-			_start_btn.text = "⚔️ 進入 3D 道場開戰！"
-			UiStyle.apply_button(_start_btn, "#be123c", "#fde68a", "#ffffff", 16, 2, 1.0)
-			if _load_lbl != null:
-				_load_lbl.text = "🌸 正在開啟 3D 道場與百鬼夜行戰場...\n請稍候片刻"
+
+func _on_start_arpg_pressed() -> void:
+	if _is_loading_game:
+		return
+	GameState.set_mode("arpg_story")
+	if _load_lbl != null:
+		_load_lbl.text = "⛩️ 正在前往「第一章：櫻花之里」和風開放冒險世界...\n請稍候片刻"
+	_launch_game_scene()
 
 
 func _on_start_battle_pressed() -> void:
 	if _is_loading_game:
 		return
+	if GameState.is_arpg_mode():
+		GameState.set_mode(_last_arena_mode if not _last_arena_mode.is_empty() else "normal")
+	if _load_lbl != null:
+		_load_lbl.text = "🌸 正在開啟 3D 道場與百鬼夜行戰場...\n請稍候片刻"
+	_launch_game_scene()
+
+
+func _launch_game_scene() -> void:
 	_is_loading_game = true
 
 	UiStyle.request_mobile_landscape_fullscreen()
