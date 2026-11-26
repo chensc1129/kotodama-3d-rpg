@@ -239,7 +239,7 @@ void fragment() {
 		}
 
 	} else {
-		// === STAGE 4: ARPG CHAPTER 1 NATURAL JAPANESE LANDSCAPE ===
+		// === STAGE 4: ARPG CHAPTER 1 FJORD, WILDERNESS & TOWERING MOUNTAIN ===
 		if (w.r > 0.01) {
 			// Warm weathered Japanese granite flagstones with mossy dark crevices & bevel highlights
 			vec3 st_g = flagstone_pattern(xz, vec2(0.56, 0.70), 0.062);
@@ -254,34 +254,56 @@ void fragment() {
 			bump_h += st_g.z * w.r;
 		}
 		if (w.g > 0.01) {
-			// Lush emerald meadow grass & organic mossy woodland soil with soft wildflower moss variation
-			float macro_n = mobile_mode ? vnoise(xz * 0.24) : fbm2(xz * 0.22);
-			vec3 turf = mix(vec3(0.14, 0.34, 0.14), vec3(0.26, 0.48, 0.18), clamp(macro_n * 0.62 + n_fine * 0.38, 0.0, 1.0));
-			float soil_n = mobile_mode ? vnoise(xz * 0.38 + vec2(4.3, -2.7)) : fbm2(xz * 0.36 + vec2(4.3, -2.7));
-			float soil_mask = smoothstep(0.62, 0.84, soil_n);
-			vec3 wood_soil = mix(vec3(0.22, 0.17, 0.11), vec3(0.31, 0.24, 0.15), n_fine);
-			vec3 meadow = mix(turf, wood_soil, soil_mask * 0.72);
-			float wf_moss = smoothstep(0.62, 0.88, vnoise(xz * 1.45 + vec2(-3.1, 5.2)));
-			meadow = mix(meadow, vec3(0.34, 0.52, 0.20), wf_moss * (1.0 - soil_mask) * 0.36);
+			// Multi-scale wilderness meadow: deep pine-shadow moss, warm sunlit coastal grass & wildflower earth
+			float biome_n = vnoise(xz * 0.032 + vec2(11.4, -6.8));
+			float macro_n = mobile_mode ? vnoise(xz * 0.18) : fbm2(xz * 0.16);
+			float pine_mask = smoothstep(0.24, 0.68, biome_n);
+			vec3 pine_moss = mix(vec3(0.09, 0.23, 0.12), vec3(0.16, 0.34, 0.15), clamp(macro_n * 0.58 + n_fine * 0.42, 0.0, 1.0));
+			vec3 sunlit_grass = mix(vec3(0.20, 0.41, 0.15), vec3(0.35, 0.54, 0.20), clamp(macro_n * 0.62 + n_fine * 0.38, 0.0, 1.0));
+			vec3 turf = mix(pine_moss, sunlit_grass, pine_mask);
+
+			float soil_n = mobile_mode ? vnoise(xz * 0.28 + vec2(4.3, -2.7)) : fbm2(xz * 0.26 + vec2(4.3, -2.7));
+			float soil_mask = smoothstep(0.58, 0.84, soil_n);
+			vec3 wood_soil = mix(vec3(0.23, 0.17, 0.11), vec3(0.33, 0.25, 0.16), n_fine);
+			vec3 meadow = mix(turf, wood_soil, soil_mask * 0.68);
+
+			// Subtle wildflower & warm sunlit clover earth patches across the 240x280m wilderness
+			float wf_patch = smoothstep(0.58, 0.86, vnoise(xz * 0.95 + vec2(-3.1, 5.2)));
+			vec3 wf_tint = mix(vec3(0.37, 0.52, 0.20), vec3(0.49, 0.46, 0.25), vnoise(xz * 0.11 + vec2(8.2, 1.9)));
+			meadow = mix(meadow, wf_tint, wf_patch * (1.0 - soil_mask * 0.5) * 0.38);
+
 			final_col += meadow * w.g;
-			final_rough += 0.90 * w.g;
+			final_rough += mix(0.92, 0.86, pine_mask) * w.g;
 			final_met += 0.01 * w.g;
 			bump_h += (n_fine * 0.40 + macro_n * 0.25) * w.g;
 		}
 		if (w.b > 0.01) {
-			// Golden-ivory sandy beach with wind-rippled micro-waves, mineral sparkle & automatic wet-sand darkening
+			// Golden-ivory coastal beach with crisp wet-sand tide-line (-0.42..+0.08) & white foam shoreline sparkle (-0.38..-0.28)
 			float sand_warp = mobile_mode ? vnoise(xz * 0.6) : fbm2(xz * 0.6);
 			float ripple = sin(xz.x * 4.5 + sand_warp * 3.5) * 0.5 + 0.5;
 			vec3 sand_col = mix(vec3(0.76, 0.67, 0.48), vec3(0.88, 0.79, 0.58), ripple * 0.55 + n_fine * 0.45);
-			// Safe WebGL2 smoothstep (edge0 < edge1) matching smoothstep(0.05, -0.45, y)
-			float wet = 1.0 - smoothstep(-0.45, 0.05, v_world_pos.y);
-			float sparkle = mobile_mode ? 0.0 : smoothstep(0.88, 0.99, hash21(floor(xz * 18.0))) * (1.0 - wet * 0.65);
-			sand_col += vec3(0.18, 0.16, 0.11) * sparkle;
-			sand_col *= mix(1.0, 0.58, wet);
+			// Safe WebGL2 smoothstep (edge0 < edge1) for tide-line wet-sand darkening near y = -0.42..+0.08
+			float y_shore = v_world_pos.y + (sand_warp - 0.5) * 0.05;
+			float wet = 1.0 - smoothstep(-0.42, 0.08, y_shore);
+			float wet_deep = 1.0 - smoothstep(-0.42, -0.14, y_shore);
+			float dry_sparkle = mobile_mode ? 0.0 : smoothstep(0.88, 0.99, hash21(floor(xz * 18.0))) * (1.0 - wet * 0.70);
+			sand_col += vec3(0.18, 0.16, 0.11) * dry_sparkle;
+			sand_col *= mix(1.0, 0.50, wet);
+			sand_col *= mix(vec3(1.0), vec3(0.90, 0.86, 0.81), wet_deep * 0.30);
+
+			// Subtle white foam-kissed shoreline lace & sunlit sparkle right near y = -0.38..-0.28
+			float foam_band = smoothstep(-0.41, -0.35, v_world_pos.y) * (1.0 - smoothstep(-0.31, -0.25, v_world_pos.y));
+			float foam_wave = sin(TIME * 1.55 + xz.x * 0.40 + xz.y * 0.34 + sand_warp * 3.6) * 0.5 + 0.5;
+			float foam_lace = smoothstep(0.36, 0.78, vnoise(xz * 2.7 + vec2(TIME * 0.11, -TIME * 0.08)) * 0.65 + foam_wave * 0.35);
+			float foam_mask = foam_band * foam_lace;
+			float foam_sparkle = mobile_mode ? 0.0 : smoothstep(0.82, 0.98, hash21(floor(xz * 16.0 + floor(TIME * 1.6) * 0.17))) * foam_band;
+			sand_col = mix(sand_col, vec3(0.93, 0.96, 0.99), clamp(foam_mask * 0.68 + foam_sparkle * 0.45, 0.0, 0.85));
+
 			final_col += sand_col * w.b;
-			final_rough += mix(0.90, 0.26, wet) * w.b;
-			final_met += mix(0.02, 0.12, wet) * w.b;
-			bump_h += ripple * 0.42 * (1.0 - wet * 0.5) * w.b;
+			final_emi += vec3(0.14, 0.16, 0.18) * foam_sparkle * w.b;
+			final_rough += mix(mix(0.90, 0.16, wet), 0.24, foam_mask * 0.6) * w.b;
+			final_met += mix(0.02, 0.18, wet) * w.b;
+			bump_h += ripple * 0.42 * (1.0 - wet * 0.55) * w.b;
 		}
 		if (w.a > 0.01) {
 			if (v_world_pos.y < 1.2) {
@@ -305,16 +327,64 @@ void fragment() {
 				bump_h += altar.z * w.a;
 			}
 		}
+
+		// High-Altitude Mountain Crags & Alpine Ridges (Mount Sakuradake 10m..50m)
+		if (v_world_pos.y > 10.0) {
+			float alt_t = smoothstep(10.0, 24.0, v_world_pos.y);
+			float slope_up = clamp(v_world_nrm.y, 0.0, 1.0);
+			float crag_steep = smoothstep(0.14, 0.52, 1.0 - slope_up);
+			float strata_warp = mobile_mode ? vnoise(xz * 0.14) : fbm2(xz * 0.14);
+			float strata = sin(v_world_pos.y * 1.45 + strata_warp * 4.2 + n_fine * 1.4) * 0.5 + 0.5;
+			float strata_fine = sin(v_world_pos.y * 5.2 + n_fine * 2.8) * 0.5 + 0.5;
+			float rock_var = clamp(strata * 0.55 + strata_fine * 0.25 + n_fine * 0.20, 0.0, 1.0);
+			vec3 granite_rock = mix(vec3(0.24, 0.25, 0.29), vec3(0.40, 0.42, 0.46), rock_var);
+			float fissure = smoothstep(0.76, 0.96, strata_fine) * (0.4 + 0.6 * crag_steep);
+			granite_rock *= mix(1.0, 0.72, fissure * 0.65);
+
+			// Alpine moss ledges (10m..26m) clinging to flatter mountain shelves
+			float moss_alt = smoothstep(10.0, 13.5, v_world_pos.y) * (1.0 - smoothstep(21.0, 26.5, v_world_pos.y));
+			float ledge_mask = smoothstep(0.66, 0.88, slope_up) * moss_alt;
+			float moss_patch_hi = vnoise(xz * 0.35 + vec2(3.7, -4.1));
+			vec3 alpine_moss = mix(vec3(0.16, 0.31, 0.18), vec3(0.28, 0.42, 0.22), moss_patch_hi * 0.65 + n_fine * 0.35);
+			vec3 mtn_col = mix(granite_rock, alpine_moss, ledge_mask * 0.78);
+
+			// Misty pale granite-slate peak highlights (> 28m)
+			float peak_t = smoothstep(28.0, 44.0, v_world_pos.y);
+			if (peak_t > 0.001) {
+				vec3 peak_slate = mix(vec3(0.50, 0.54, 0.60), vec3(0.72, 0.76, 0.82), clamp(peak_t * 0.62 + strata * 0.38, 0.0, 1.0));
+				float peak_blend = clamp(peak_t * (0.58 + 0.42 * smoothstep(0.42, 0.86, slope_up)), 0.0, 0.92);
+				mtn_col = mix(mtn_col, peak_slate, peak_blend);
+			}
+
+			// Preserve paved shrine/trail flagstones on walkable high ledges while turning mountain crags to rock
+			float path_keep = max(w.r, w.a) * smoothstep(0.68, 0.90, slope_up);
+			float rock_blend = clamp(max(alt_t * 0.92, crag_steep * smoothstep(10.0, 14.5, v_world_pos.y)), 0.0, 1.0) * (1.0 - path_keep * 0.75);
+			final_col = mix(final_col, mtn_col, rock_blend);
+			final_rough = mix(final_rough, mix(0.88, 0.78, peak_t), rock_blend);
+			final_met = mix(final_met, 0.06, rock_blend);
+			bump_h = mix(bump_h, strata * 0.60 + strata_fine * 0.25, rock_blend);
+		}
 	}
 
 	// Steep cliff faces & outer cliff skirt automatically show layered stone rock strata
 	float steepness = smoothstep(0.32, 0.68, 1.0 - clamp(v_world_nrm.y, 0.0, 1.0));
 	if (steepness > 0.01) {
-		float band = sin(v_world_pos.y * 6.5 + n_fine * 2.5) * 0.5 + 0.5;
-		vec3 cliff_col = mix(final_col * 0.52, final_col * 0.80, band * 0.65 + n_fine * 0.35);
-		final_col = mix(final_col, cliff_col, steepness * 0.82);
-		final_rough = mix(final_rough, 0.90, steepness * 0.7);
-		final_met *= (1.0 - steepness * 0.7);
+		if (stage_id == 4) {
+			float cliff_warp = vnoise(xz * 0.22);
+			float band = sin(v_world_pos.y * 3.8 + cliff_warp * 3.4 + n_fine * 2.2) * 0.5 + 0.5;
+			vec3 coastal_rock = mix(vec3(0.24, 0.25, 0.29), vec3(0.40, 0.42, 0.46), band * 0.62 + n_fine * 0.38);
+			float hi_pale = smoothstep(28.0, 44.0, v_world_pos.y);
+			coastal_rock = mix(coastal_rock, vec3(0.56, 0.60, 0.66), hi_pale * 0.48);
+			final_col = mix(final_col, coastal_rock, steepness * 0.88);
+			final_rough = mix(final_rough, 0.90, steepness * 0.75);
+			final_met = mix(final_met, 0.05, steepness * 0.75);
+		} else {
+			float band = sin(v_world_pos.y * 6.5 + n_fine * 2.5) * 0.5 + 0.5;
+			vec3 cliff_col = mix(final_col * 0.52, final_col * 0.80, band * 0.65 + n_fine * 0.35);
+			final_col = mix(final_col, cliff_col, steepness * 0.82);
+			final_rough = mix(final_rough, 0.90, steepness * 0.7);
+			final_met *= (1.0 - steepness * 0.7);
+		}
 	}
 
 	ALBEDO = final_col;

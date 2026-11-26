@@ -307,19 +307,62 @@ func _is_steep_step(from_pos: Vector3, to_x: float, to_z: float) -> bool:
 	var step_up := next_gy - from_pos.y
 	if step_up <= 0.02:
 		return false
-	# Block either an abrupt vertical ledge (> 0.34m) OR a sheer unwalkable slope (> 46.5 deg)
-	return (step_up > 0.34) or ((step_up / horiz) > 1.05)
+	# Smooth hiking/sprinting on gentle mountain trails (<= 38 deg, tan=0.781) while
+	# solidly blocking sheer coastal cliffs (> 48 deg, tan=1.111, cos=0.669)
+	if (step_up / horiz) > 1.04:
+		return true
+	if not is_on_bridge_or_pier(to_x, to_z, next_gy):
+		# Prevent diagonal crab-walking up sheer > 47.5 deg cliff faces (cos(47.5 deg) = 0.6756)
+		var nrm := get_terrain_normal(to_x, to_z)
+		if nrm.y < 0.676:
+			return true
+	return step_up > 0.85
+
+
+func _is_airborne_cliff_hit(from_pos: Vector3, to_x: float, to_z: float) -> bool:
+	var next_gy := get_ground_height(to_x, to_z, from_pos.y)
+	if next_gy <= from_pos.y + 0.42:
+		return false
+	if is_on_bridge_or_pier(to_x, to_z, next_gy):
+		return false
+	var nrm := get_terrain_normal(to_x, to_z)
+	return nrm.y < 0.676 or (next_gy - from_pos.y) > 0.95
 
 
 func resolve_terrain_step(prev_pos: Vector3, next_pos: Vector3, is_grounded: bool) -> Vector3:
-	if not is_grounded:
-		return next_pos
 	var dx := next_pos.x - prev_pos.x
 	var dz := next_pos.z - prev_pos.z
 	if (dx * dx + dz * dz) < 0.000001:
 		return next_pos
 
+	if not is_grounded:
+		if not _is_airborne_cliff_hit(prev_pos, next_pos.x, next_pos.z):
+			return next_pos
+		var air_ok_x := not _is_airborne_cliff_hit(prev_pos, next_pos.x, prev_pos.z)
+		var air_ok_z := not _is_airborne_cliff_hit(prev_pos, prev_pos.x, next_pos.z)
+		if air_ok_x and absf(dx) >= absf(dz):
+			return Vector3(next_pos.x, next_pos.y, prev_pos.z)
+		if air_ok_z:
+			return Vector3(prev_pos.x, next_pos.y, next_pos.z)
+		if air_ok_x:
+			return Vector3(next_pos.x, next_pos.y, prev_pos.z)
+		return Vector3(prev_pos.x, next_pos.y, prev_pos.z)
+
 	if _is_steep_step(prev_pos, next_pos.x, next_pos.z):
+		# First attempt smooth sliding along the cliff contour tangent
+		var nrm := get_terrain_normal(next_pos.x, next_pos.z)
+		var slope_xz := Vector2(nrm.x, nrm.z)
+		if slope_xz.length_squared() > 0.001:
+			slope_xz = slope_xz.normalized()
+			var move_xz := Vector2(dx, dz)
+			var into_cliff := move_xz.dot(-slope_xz)
+			if into_cliff > 0.0:
+				var slide_xz := move_xz + slope_xz * (into_cliff + 0.002)
+				var sx := prev_pos.x + slide_xz.x
+				var sz := prev_pos.z + slide_xz.y
+				if not _is_steep_step(prev_pos, sx, sz):
+					return Vector3(sx, next_pos.y, sz)
+
 		var ok_x := not _is_steep_step(prev_pos, next_pos.x, prev_pos.z)
 		var ok_z := not _is_steep_step(prev_pos, prev_pos.x, next_pos.z)
 		if ok_x and absf(dx) >= absf(dz):
@@ -420,6 +463,8 @@ func update_interactive_env(player_pos: Vector3, player_vel: Vector3, wind_stren
 	for wm in _wafuu_wind_mats:
 		if is_instance_valid(wm):
 			wm.set_shader_parameter("wind_strength", wind_strength)
+			if wm.shader != null and wm.shader.resource_path.ends_with("tree_leaves_alpha.gdshader"):
+				wm.set_shader_parameter("wind_dir", wind_dir)
 
 
 func trigger_water_splash(pos: Vector3, strength: float = 1.0) -> void:
@@ -450,6 +495,18 @@ func trigger_foliage_gust(pos: Vector3) -> void:
 				sm.set_shader_parameter("gust_time", 0.0)
 
 
+func _try_register_wind_mat(mat: Material, seen: Dictionary) -> void:
+	if mat is ShaderMaterial:
+		var sm := mat as ShaderMaterial
+		if sm.shader != null:
+			var spath := sm.shader.resource_path
+			if spath.ends_with("wafuu_prop.gdshader") or spath.ends_with("tree_leaves_alpha.gdshader"):
+				var rid_id := sm.get_instance_id()
+				if not seen.has(rid_id):
+					seen[rid_id] = true
+					_wafuu_wind_mats.append(sm)
+
+
 func _collect_wafuu_wind_materials() -> void:
 	_wafuu_wind_mats.clear()
 	var seen: Dictionary = {}
@@ -458,28 +515,18 @@ func _collect_wafuu_wind_materials() -> void:
 		var n: Node = stack.pop_back()
 		if n is MeshInstance3D:
 			var mi := n as MeshInstance3D
-			var mat := mi.material_override
-			if mat == null and mi.mesh != null and mi.mesh.get_surface_count() > 0:
-				mat = mi.mesh.surface_get_material(0)
-			if mat is ShaderMaterial:
-				var sm := mat as ShaderMaterial
-				if sm.shader != null and sm.shader.resource_path.ends_with("wafuu_prop.gdshader"):
-					var rid_id := sm.get_instance_id()
-					if not seen.has(rid_id):
-						seen[rid_id] = true
-						_wafuu_wind_mats.append(sm)
+			_try_register_wind_mat(mi.material_override, seen)
+			if mi.mesh != null:
+				for si in range(mi.mesh.get_surface_count()):
+					_try_register_wind_mat(mi.get_surface_override_material(si), seen)
+					_try_register_wind_mat(mi.mesh.surface_get_material(si), seen)
 		elif n is MultiMeshInstance3D:
 			var mmi := n as MultiMeshInstance3D
-			var mat := mmi.material_override
-			if mat == null and mmi.multimesh != null and mmi.multimesh.mesh != null and mmi.multimesh.mesh.get_surface_count() > 0:
-				mat = mmi.multimesh.mesh.surface_get_material(0)
-			if mat is ShaderMaterial:
-				var sm := mat as ShaderMaterial
-				if sm.shader != null and sm.shader.resource_path.ends_with("wafuu_prop.gdshader"):
-					var rid_id := sm.get_instance_id()
-					if not seen.has(rid_id):
-						seen[rid_id] = true
-						_wafuu_wind_mats.append(sm)
+			_try_register_wind_mat(mmi.material_override, seen)
+			if mmi.multimesh != null and mmi.multimesh.mesh != null:
+				var mm_mesh := mmi.multimesh.mesh
+				for si in range(mm_mesh.get_surface_count()):
+					_try_register_wind_mat(mm_mesh.surface_get_material(si), seen)
 		for child in n.get_children():
 			stack.append(child)
 

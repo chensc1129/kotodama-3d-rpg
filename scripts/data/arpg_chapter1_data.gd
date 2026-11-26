@@ -6,57 +6,57 @@ extends RefCounted
 const STAGE_ID: String = "arpg_ch1"
 const CHAPTER_TITLE: String = "第一章：櫻花之里・失落的言靈碑"
 
-const MIN_X: float = -52.0
-const MAX_X: float = 52.0
-const MIN_Z: float = -76.0
-const MAX_Z: float = 56.0
+const MIN_X: float = -120.0
+const MAX_X: float = 120.0
+const MIN_Z: float = -140.0
+const MAX_Z: float = 140.0
 
-const PLAYER_SPAWN: Vector3 = Vector3(0.0, 0.0, 42.0)
-const HEAL_SPRING_POS: Vector3 = Vector3(-14.0, 0.0, -34.0)
-const HEAL_SPRING_RADIUS: float = 4.6
+const PLAYER_SPAWN: Vector3 = Vector3(0.0, 0.0, 104.0)
+const HEAL_SPRING_POS: Vector3 = Vector3(-18.0, 0.0, -72.0)
+const HEAL_SPRING_RADIUS: float = 4.8
 
 const QUEST_STEPS: Array = [
 	{
 		"step": 0,
-		"title": "初訪櫻花之里・與巫女美桜交談",
-		"desc": "前往櫻花村廣場中央，與櫻花古社的巫女・美桜對話，了解言靈碑異變的真相（廣場兩側還有茶屋店主與鍛冶師可切磋日語）。",
-		"target_pos": Vector3(0.0, 0.0, 32.0),
+		"title": "初臨蒼海峽灣・前往櫻花之里會見巫女美桜",
+		"desc": "你甦醒於『蒼海峽灣・海濱沙灘』，西側巍峨的『櫻岳高山』與碧海相映。請穿越北方的海風花海曠野前往『櫻花之里』中央，與巫女・美桜對話（村中兩側還有茶屋店主與鍛冶師可切磋日語）。",
+		"target_pos": Vector3(0.0, 0.0, 30.0),
 		"target_label": "⛩️ 巫女・美桜",
 	},
 	{
 		"step": 1,
 		"title": "跨越緋紅太鼓橋・擊退橋上伏擊妖怪",
 		"desc": "沿著櫻花參道向北踏上緋紅太鼓橋，討伐盤踞在橋面的提燈小鬼與傘妖！",
-		"target_pos": Vector3(0.0, 0.0, 1.0),
+		"target_pos": Vector3(0.0, 0.0, 2.0),
 		"target_label": "🌉 緋紅太鼓橋",
 	},
 	{
 		"step": 2,
-		"title": "深入幽暗竹林・淨化竹林妖群",
-		"desc": "穿過緋紅太鼓橋進入幽暗竹林參道，肅清潛伏於竹影間的妖怪伏兵（西側竹林似有旅人受困）。",
-		"target_pos": Vector3(2.0, 0.0, -16.0),
-		"target_label": "🎋 幽暗竹林參道",
+		"title": "深入幽暗竹海・淨化荒野溪谷妖群",
+		"desc": "穿過緋紅太鼓橋進入幽暗竹海與荒野溪谷，肅清潛伏於竹影間的妖怪伏兵（西側地藏神龕空地似有旅人受困）。",
+		"target_pos": Vector3(2.0, 0.0, -34.0),
+		"target_label": "🎋 幽暗竹海・荒野溪谷",
 	},
 	{
 		"step": 3,
-		"title": "登上千本鳥居石階・請益白狐神主",
-		"desc": "步上千本鳥居石階，拜見東側神龕的白狐神主獲取神護與言靈祝福（西側靈泉可恢復體力，亦可直接前往祭壇迎戰首領）。",
-		"target_pos": Vector3(14.0, 2.0, -34.0),
+		"title": "登上千本鳥居山道・請益白狐神主",
+		"desc": "步上千本鳥居山道，拜見東側石龕的白狐神主獲取神護與言靈祝福（西側靈泉可恢復體力，亦可直接前往大祭壇迎戰首領）。",
+		"target_pos": Vector3(18.0, 2.6, -72.0),
 		"target_label": "🦊 白狐神主",
 	},
 	{
 		"step": 4,
-		"title": "決戰夜櫻本殿祭壇・討伐赤鬼大将",
-		"desc": "登上最高處的夜櫻本殿祭壇，以劍技與日語「言靈奧義」擊敗第一章首領「赤鬼大将・獄炎」，奪回失落的言靈碑！",
-		"target_pos": Vector3(0.0, 2.8, -58.0),
+		"title": "決戰滿月夜櫻大祭壇・討伐赤鬼大将",
+		"desc": "登上最高處的滿月夜櫻大祭壇，以劍技與日語「言靈奧義」擊敗第一章首領「赤鬼大将・獄炎」，奪回失落的言靈碑！",
+		"target_pos": Vector3(0.0, 4.6, -108.0),
 		"target_label": "👹 赤鬼大将・獄炎",
 	},
 	{
 		"step": 5,
-		"title": "第一章通關・櫻花之里自由探索",
-		"desc": "言靈碑已重拾神光、櫻花之里恢復寧靜！你可以自由探索各個區域，完成尚未挑戰的日語 NPC 試煉並強化自身實力。",
-		"target_pos": Vector3(0.0, 0.0, 32.0),
-		"target_label": "🌸 櫻花村廣場",
+		"title": "第一章通關・蒼海峽灣與櫻花之里自由探索",
+		"desc": "言靈碑已重拾神光、櫻花之里恢復寧靜！你可以自由探索蒼海峽灣、櫻岳高山、月見湖與整片曠野，完成尚未挑戰的日語 NPC 試煉並強化自身實力。",
+		"target_pos": Vector3(0.0, 0.5, 30.0),
+		"target_label": "🌸 櫻花之里",
 	},
 ]
 
@@ -67,7 +67,7 @@ const NPCS: Array = [
 		"title": "櫻花古社巫女",
 		"icon": "⛩️",
 		"accent": "#f472b6",
-		"pos": Vector3(0.0, 0.0, 32.0),
+		"pos": Vector3(0.0, 0.0, 30.0),
 		"facing": 0.0,
 		"model_key": "sakura",
 		"is_story_npc": true,
@@ -128,7 +128,7 @@ const NPCS: Array = [
 		"title": "和菓子老舖店主",
 		"icon": "🍡",
 		"accent": "#fb923c",
-		"pos": Vector3(-14.5, 0.0, 28.0),
+		"pos": Vector3(-14.5, 0.0, 26.0),
 		"facing": 1.1,
 		"model_key": "kickboxer",
 		"is_story_npc": false,
@@ -189,7 +189,7 @@ const NPCS: Array = [
 		"title": "名刀鍛造師",
 		"icon": "⚒️",
 		"accent": "#ef4444",
-		"pos": Vector3(15.0, 0.0, 27.0),
+		"pos": Vector3(15.0, 0.0, 25.0),
 		"facing": -1.1,
 		"model_key": "swordsman",
 		"is_story_npc": false,
@@ -250,7 +250,7 @@ const NPCS: Array = [
 		"title": "迷途竹林旅人",
 		"icon": "📜",
 		"accent": "#38bdf8",
-		"pos": Vector3(-24.0, 0.0, -10.0),
+		"pos": Vector3(-34.0, 0.0, -28.0),
 		"facing": 1.3,
 		"model_key": "yukionna",
 		"is_story_npc": false,
@@ -311,7 +311,7 @@ const NPCS: Array = [
 		"title": "櫻花古社守護神主",
 		"icon": "🦊",
 		"accent": "#facc15",
-		"pos": Vector3(14.0, 0.0, -34.0),
+		"pos": Vector3(18.0, 0.0, -72.0),
 		"facing": -1.4,
 		"model_key": "kitsune",
 		"is_story_npc": true,
@@ -372,14 +372,14 @@ const ENCOUNTERS: Array = [
 	{
 		"id": "bridge_ambush",
 		"title": "🌉 太鼓橋妖鬼伏擊",
-		"desc": "提燈小鬼與傘妖封鎖了緋紅太鼓橋！擊倒牠們開闢前往竹林的道路。",
+		"desc": "提燈小鬼與傘妖封鎖了緋紅太鼓橋！擊倒牠們開闢前往竹海荒野的道路。",
 		"req_step": 0,
 		"next_step": 2,
 		"is_boss": false,
 		"trigger_pos": Vector3(0.0, 0.0, 2.0),
-		"trigger_radius": 13.0,
-		"spawn_center": Vector3(0.0, 0.0, -1.0),
-		"spawn_radius": 6.5,
+		"trigger_radius": 15.0,
+		"spawn_center": Vector3(0.0, 0.0, -2.0),
+		"spawn_radius": 7.0,
 		"wave_scale": 1,
 		"monsters": [
 			{"id": "chochin", "count": 3, "is_boss": false},
@@ -390,15 +390,15 @@ const ENCOUNTERS: Array = [
 	},
 	{
 		"id": "bamboo_ambush",
-		"title": "🎋 幽暗竹林・妖氣伏兵",
-		"desc": "青鬼武者率領九尾妖狐與絡新婦自竹影現身！淨化整片竹林參道！",
+		"title": "🎋 幽暗竹海・荒野伏兵",
+		"desc": "青鬼武者率領九尾妖狐與絡新婦自竹影溪谷現身！淨化整片竹海荒野！",
 		"req_step": 2,
 		"next_step": 3,
 		"is_boss": false,
-		"trigger_pos": Vector3(0.0, 0.0, -16.0),
-		"trigger_radius": 15.0,
-		"spawn_center": Vector3(0.0, 0.0, -18.0),
-		"spawn_radius": 8.0,
+		"trigger_pos": Vector3(2.0, 0.0, -34.0),
+		"trigger_radius": 17.0,
+		"spawn_center": Vector3(2.0, 0.0, -36.0),
+		"spawn_radius": 9.0,
 		"wave_scale": 3,
 		"monsters": [
 			{"id": "aooni", "count": 2, "is_boss": false},
@@ -411,14 +411,14 @@ const ENCOUNTERS: Array = [
 	{
 		"id": "altar_boss",
 		"title": "👹 第一章首領・赤鬼大将 獄炎",
-		"desc": "竊據言靈碑的赤鬼大将・獄炎現身於夜櫻本殿祭壇！全神貫注迎戰！",
+		"desc": "竊據言靈碑的赤鬼大将・獄炎現身於滿月夜櫻大祭壇！全神貫注迎戰！",
 		"req_step": 3,
 		"next_step": 5,
 		"is_boss": true,
-		"trigger_pos": Vector3(0.0, 2.8, -54.0),
-		"trigger_radius": 15.0,
-		"spawn_center": Vector3(0.0, 2.8, -60.0),
-		"spawn_radius": 7.5,
+		"trigger_pos": Vector3(0.0, 4.6, -108.0),
+		"trigger_radius": 18.0,
+		"spawn_center": Vector3(0.0, 4.6, -114.0),
+		"spawn_radius": 8.5,
 		"wave_scale": 4,
 		"monsters": [
 			{"id": "akaoni_boss", "count": 1, "is_boss": true},
@@ -435,9 +435,9 @@ const OPENING_CUTSCENE: Dictionary = {
 	"icon": "🌸",
 	"jp_tts": "ようこそ、桜の里へ。失われた言霊碑を取り戻しましょう。",
 	"lines": [
-		"「月色籠罩的『櫻花之里』原本是言靈之力最為清澄的和平古村，如今卻被突如其來的赤紅妖霧吞沒……」",
-		"「盤踞於北方夜櫻本殿的『赤鬼大将・獄炎』奪走了鎮社之寶『言靈碑』，並放出成群妖怪封鎖了太鼓橋與竹林參道。」",
-		"「請先前往廣場前方與我（巫女・美桜）會合，也可以拜訪茶屋店主與鍛冶師，透過日語言靈試煉獲得祝福與強化！」",
+		"「從『蒼海峽灣・海濱沙灘』仰望身旁巍峨的『櫻岳高山』，穿越北方海風吹拂的花海曠野，便是言靈清澄的和平古村『櫻花之里』——然而今夜，赤紅妖霧卻吞沒了這片淨土……」",
+		"「盤踞於北方滿月夜櫻大祭壇的『赤鬼大将・獄炎』奪走了鎮社之寶『言靈碑』，並放出成群妖怪封鎖了太鼓橋與竹海荒野。」",
+		"「請從海濱沙灘沿著曠野參道北上『櫻花之里』與我（巫女・美桜）會合，也可以拜訪茶屋店主與鍛冶師，透過日語言靈試煉獲得祝福與強化！」",
 	],
 }
 
@@ -447,27 +447,31 @@ const EPILOGUE_CUTSCENE: Dictionary = {
 	"icon": "🦊",
 	"jp_tts": "お見事です！桜の里に再び平和と光が戻りました。",
 	"lines": [
-		"「お見事です！（真是太精彩了！）隨著赤鬼大将・獄炎化作清風散去，夜櫻本殿祭壇上的『言靈碑』再次綻放出燦爛金光！」",
+		"「お見事です！（真是太精彩了！）隨著赤鬼大将・獄炎化作清風散去，滿月夜櫻大祭壇上的『言靈碑』再次綻放出燦爛金光！」",
 		"「散落的櫻瓣重新舞動於晴朗月空，櫻花之里的結界已然修復，村人們又能安穩度日了。」",
-		"「第一章冒險圓滿落幕！你仍可留在櫻花之里自由探索、完成尚未挑戰的日語 NPC 試煉，為接下來的百鬼夜行新篇章做好萬全準備！」",
+		"「第一章冒險圓滿落幕！你仍可留在蒼海峽灣與櫻花之里自由探索、完成尚未挑戰的日語 NPC 試煉，為接下來的百鬼夜行新篇章做好萬全準備！」",
 	],
 }
 
 
 static func get_zone_name(pos: Vector3) -> String:
-	if pos.x >= 16.0 and pos.z >= -2.0 and pos.z <= 25.0:
+	if pos.x <= -36.0 and pos.z >= 15.0:
+		return "⛰️ 櫻岳高山・峽灣山徑"
+	if pos.z >= 88.0:
+		return "🌊 蒼海峽灣・海濱沙灘"
+	if pos.x >= 26.0 and pos.z >= -4.0 and pos.z <= 44.0:
 		return "🌊 月見湖・白砂浜"
-	if pos.x <= -16.0 and pos.z >= 13.0 and pos.z <= 26.0:
-		return "🌸 櫻花草原・花海"
-	if pos.z >= 20.0:
-		return "🌸 櫻花村廣場"
-	if pos.z >= 4.0:
+	if pos.z >= 44.0:
+		return "🌸 峽灣曠野・海風花海"
+	if pos.z >= 14.0 and absf(pos.x) <= 28.0:
+		return "🌸 櫻花之里"
+	if pos.z >= 2.0:
 		return "🌉 緋紅太鼓橋"
-	if pos.z >= -26.0:
-		return "🎋 幽暗竹林參道"
-	if pos.z >= -46.0:
-		return "🏮 千本鳥居石階"
-	return "⛩️ 夜櫻本殿祭壇"
+	if pos.z >= -56.0:
+		return "🎋 幽暗竹海・荒野溪谷"
+	if pos.z >= -96.0:
+		return "🏮 千本鳥居山道"
+	return "⛩️ 滿月夜櫻大祭壇"
 
 
 static func get_npc(npc_id: String) -> Dictionary:

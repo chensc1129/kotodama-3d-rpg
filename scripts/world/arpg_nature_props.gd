@@ -653,72 +653,64 @@ static func make_lotus_pad_mesh() -> ArrayMesh:
 
 
 # ==============================================================================
-#  5. SCULPTED JAPANESE COASTAL RED PINE TREE (赤松・Akamatsu, 2 DRAW CALLS!)
+#  5. REAL-LEAF JAPANESE COASTAL RED PINE & WILDERNESS FOREST TREE BUILDERS
 # ==============================================================================
 
-static func _append_pine_needle_pad(
-	st: SurfaceTool,
-	center: Vector3,
-	rx: float,
-	ry: float,
-	rz: float,
-	yaw: float,
-	bot_col: Color,
-	mid_col: Color,
-	top_col: Color,
-	seed_val: float,
+static func build_wild_forest_tree_meshes(
+	species: String,
+	variant_idx: int,
 	is_mob: bool
-) -> void:
-	## Flat-bottomed, layered windswept Japanese pine canopy pad with organic needle tufts.
-	var sp := SphereMesh.new()
-	sp.radius = 1.0
-	sp.height = 2.0
-	sp.radial_segments = 8 if is_mob else 11
-	sp.rings = 4 if is_mob else 6
-	var arrays: Array = sp.surface_get_arrays(0)
-	if arrays.is_empty():
-		return
-	var raw_verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var raw_norms: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
-	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+) -> Dictionary:
+	## Builds harmonious natural Japanese wilderness tree meshes (trunk + real-leaf
+	## alpha-cutout branch cards + matching materials) ready for MultiMeshInstance3D
+	## batching in ArpgCh1Map or individual placement.
+	var v: int = posmod(variant_idx, 3)
+	var trunk_hex: String
+	var top_hex: String
+	var mid_hex: String
+	var bot_hex: String
 
-	var rot_b := Basis(Vector3.UP, yaw)
-	var vcount: int = raw_verts.size()
-	var x_verts := PackedVector3Array(); x_verts.resize(vcount)
-	var x_norms := PackedVector3Array(); x_norms.resize(vcount)
-	var x_cols := PackedColorArray(); x_cols.resize(vcount)
+	match species:
+		"sakura":
+			if v == 0:
+				trunk_hex = "#44291f"; top_hex = "#fce7f3"; mid_hex = "#f472b6"; bot_hex = "#9d174d"
+			elif v == 1:
+				trunk_hex = "#3d241c"; top_hex = "#fff1f2"; mid_hex = "#f9a8d4"; bot_hex = "#be185d"
+			else:
+				trunk_hex = "#4a2d22"; top_hex = "#fdf2f8"; mid_hex = "#ec4899"; bot_hex = "#831843"
+		"maple":
+			if v == 0:
+				trunk_hex = "#422010"; top_hex = "#fdba74"; mid_hex = "#ea580c"; bot_hex = "#7c2d12"
+			elif v == 1:
+				trunk_hex = "#3b1d12"; top_hex = "#fca5a5"; mid_hex = "#dc2626"; bot_hex = "#7f1d1d"
+			else:
+				trunk_hex = "#452514"; top_hex = "#fde047"; mid_hex = "#d97706"; bot_hex = "#78350f"
+		"pine":
+			if v == 0:
+				trunk_hex = "#6e3524"; top_hex = "#4fa85a"; mid_hex = "#227a3e"; bot_hex = "#14532d"
+			elif v == 1:
+				trunk_hex = "#5e2d1f"; top_hex = "#439952"; mid_hex = "#1c6b36"; bot_hex = "#104524"
+			else:
+				trunk_hex = "#783b28"; top_hex = "#5cb464"; mid_hex = "#278244"; bot_hex = "#165730"
+		_:
+			# "broadleaf" — lush Japanese Keyaki / mountain oak woodland palette
+			if v == 0:
+				trunk_hex = "#473222"; top_hex = "#74c454"; mid_hex = "#388e3c"; bot_hex = "#1b4d22"
+			elif v == 1:
+				trunk_hex = "#3f2c1e"; top_hex = "#84cc58"; mid_hex = "#439a40"; bot_hex = "#1f5626"
+			else:
+				trunk_hex = "#4f3827"; top_hex = "#62b24e"; mid_hex = "#2e7d36"; bot_hex = "#16421d"
 
-	for i: int in range(vcount):
-		var v: Vector3 = raw_verts[i]
-		# Sculpt iconic flat-bottomed Japanese coastal pine cloud pad
-		var sy: float = v.y
-		if sy < 0.0:
-			sy *= 0.34
-		else:
-			sy = pow(sy, 0.85)
-		var ang: float = atan2(v.z, v.x)
-		var lobe: float = 1.0 + 0.16 * sin(ang * 4.0 + seed_val) + 0.09 * cos(ang * 7.0 - seed_val * 1.4)
-		var sv := Vector3(v.x * rx * lobe, sy * ry, v.z * rz * lobe)
-		var wv: Vector3 = center + rot_b * sv
-		x_verts[i] = wv
-
-		var ln: Vector3 = raw_norms[i] if i < raw_norms.size() else Vector3.UP
-		var wn: Vector3 = (rot_b * Vector3(ln.x / maxf(0.1, rx), ln.y / maxf(0.1, ry), ln.z / maxf(0.1, rz))).normalized()
-		x_norms[i] = wn
-
-		var t: float = clampf((v.y + 1.0) * 0.5, 0.0, 1.0)
-		x_cols[i] = bot_col.lerp(mid_col, t * 2.0) if t < 0.5 else mid_col.lerp(top_col, (t - 0.5) * 2.0)
-
-	var idx: int = 0
-	var icount: int = indices.size()
-	while idx + 2 < icount:
-		var i0: int = indices[idx]
-		var i1: int = indices[idx + 1]
-		var i2: int = indices[idx + 2]
-		st.set_normal(x_norms[i0]); st.set_color(x_cols[i0]); st.add_vertex(x_verts[i0])
-		st.set_normal(x_norms[i1]); st.set_color(x_cols[i1]); st.add_vertex(x_verts[i1])
-		st.set_normal(x_norms[i2]); st.set_color(x_cols[i2]); st.add_vertex(x_verts[i2])
-		idx += 3
+	var sp_norm: String = species if species in ["sakura", "maple", "pine", "broadleaf"] else "broadleaf"
+	return WafuuModels3D.build_tree_meshes(
+		variant_idx,
+		trunk_hex,
+		top_hex,
+		mid_hex,
+		bot_hex,
+		is_mob,
+		sp_norm
+	)
 
 
 static func add_japanese_pine_tree(
@@ -734,81 +726,20 @@ static func add_japanese_pine_tree(
 	root.rotation.y = yaw
 	root.scale = Vector3.ONE * sc
 
-	# 1. Gnarled leaning reddish-brown Akamatsu bark trunk + sweeping limbs (Draw call 1)
-	var st_bark := SurfaceTool.new()
-	st_bark.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var variant_idx: int = int(absf(base_pos.x * 3.1 + base_pos.z * 5.7)) % 3
+	var cache: Dictionary = WafuuModels3D._get_scene_cache(content_root, "_arpg_pine_cache")
+	var cache_key: String = "pine_%d_%d" % [variant_idx, 1 if is_mob else 0]
+	var meshes: Dictionary
+	if cache.has(cache_key):
+		meshes = cache[cache_key] as Dictionary
+	else:
+		meshes = build_wild_forest_tree_meshes("pine", variant_idx, is_mob)
+		cache[cache_key] = meshes
 
-	var c_root := Color.html("#3b1e16")
-	var c_bark_mid := Color.html("#6e3524")
-	var c_bark_top := Color.html("#914830")
-	var trunk_segs: int = 6 if is_mob else 8
-
-	# S-curved coastal leaning main trunk
-	var trunk_pts: Array[Vector3] = [
-		Vector3(0.0, -0.25, 0.0),
-		Vector3(0.18, 0.85, 0.10),
-		Vector3(0.62, 2.05, 0.24),
-		Vector3(0.95, 3.30, 0.14),
-		Vector3(0.65, 4.50, -0.15),
-		Vector3(0.28, 5.45, -0.35),
-	]
-	var trunk_rads: Array[float] = [0.54, 0.36, 0.28, 0.22, 0.15, 0.08]
-	_append_tapered_tube(st_bark, trunk_pts, trunk_rads, trunk_segs, c_root, c_bark_top, true)
-
-	# 3 flared coastal root buttresses gripping the sand/soil
-	for ri: int in range(3):
-		var ra: float = float(ri) * (TAU / 3.0) + 0.55
-		var rd := Vector3(cos(ra), 0.0, sin(ra))
-		var r_pts: Array[Vector3] = [
-			Vector3(0.0, 0.55, 0.0) + rd * 0.15,
-			rd * 0.55 + Vector3(0.0, 0.12, 0.0),
-			rd * 0.98 + Vector3(0.0, -0.22, 0.0),
-		]
-		_append_tapered_tube(st_bark, r_pts, [0.22, 0.14, 0.06], 5, c_root, c_bark_mid, true)
-
-	# 4 sweeping asymmetrical limbs reaching over the beach/water
-	var limb_specs: Array = [
-		[Vector3(0.62, 2.25, 0.22), Vector3(1.65, 2.55, 0.72), Vector3(2.55, 2.72, 0.98), 0.15, 0.05],
-		[Vector3(0.88, 3.15, 0.15), Vector3(-0.35, 3.45, 0.85), Vector3(-1.55, 3.62, 1.15), 0.14, 0.05],
-		[Vector3(0.76, 3.95, -0.05), Vector3(1.62, 4.22, -0.88), Vector3(2.25, 4.38, -1.35), 0.12, 0.04],
-		[Vector3(0.42, 4.85, -0.25), Vector3(-0.68, 5.15, -0.95), Vector3(-1.35, 5.28, -1.25), 0.10, 0.04],
-	]
-	for limb in limb_specs:
-		var l_pts: Array[Vector3] = [limb[0], limb[1], limb[2]]
-		var l_rads: Array[float] = [float(limb[3]), (float(limb[3]) + float(limb[4])) * 0.5, float(limb[4])]
-		_append_tapered_tube(st_bark, l_pts, l_rads, 5, c_bark_mid, c_bark_top, true)
-
-	var bark_mat := WafuuModels3D.make_wafuu_mat(0, is_mob, 0.86, 0.02, 0.12)
-	root.add_child(_make_inst(st_bark.commit(), bark_mat))
-
-	# 2. Wide flat layered deep-emerald pine needle pads (Draw call 2)
-	var st_needles := SurfaceTool.new()
-	st_needles.begin(Mesh.PRIMITIVE_TRIANGLES)
-
-	var c_pine_bot := Color.html("#14532d")
-	var c_pine_mid := Color.html("#227a3e")
-	var c_pine_top := Color.html("#3e9c4f")
-
-	var pad_specs: Array = [
-		[Vector3(2.55, 2.90, 0.98), 1.65, 0.56, 1.32, 0.25],
-		[Vector3(-1.55, 3.82, 1.15), 1.55, 0.52, 1.25, 1.35],
-		[Vector3(2.22, 4.56, -1.35), 1.48, 0.52, 1.28, 2.40],
-		[Vector3(-1.35, 5.42, -1.25), 1.35, 0.48, 1.18, 3.55],
-		[Vector3(0.32, 5.75, -0.32), 1.92, 0.68, 1.62, 0.85],
-	]
-	if not is_mob:
-		pad_specs.append([Vector3(1.15, 3.45, 0.45), 1.18, 0.44, 1.05, 4.15])
-		pad_specs.append([Vector3(-0.35, 4.65, 0.35), 1.25, 0.46, 1.10, 5.20])
-
-	for pi: int in range(pad_specs.size()):
-		var ps: Array = pad_specs[pi]
-		_append_pine_needle_pad(
-			st_needles, ps[0], float(ps[1]), float(ps[2]), float(ps[3]),
-			float(ps[4]), c_pine_bot, c_pine_mid, c_pine_top, float(pi) * 1.7 + 0.6, is_mob
-		)
-
-	var pine_mat := WafuuModels3D.make_wafuu_mat(1, is_mob, 0.66, 0.02, 0.0)
-	root.add_child(_make_inst(st_needles.commit(), pine_mat))
+	var bark_mat: Material = meshes.get("trunk_mat", WafuuModels3D.make_wafuu_mat(0, is_mob, 0.86, 0.02, 0.12)) as Material
+	var pine_mat: Material = meshes.get("foliage_mat", WafuuModels3D.make_leaf_card_mat("pine", is_mob, Color.WHITE)) as Material
+	root.add_child(_make_inst(meshes["trunk"] as ArrayMesh, bark_mat))
+	root.add_child(_make_inst(meshes["foliage"] as ArrayMesh, pine_mat))
 
 	content_root.add_child(root)
 	return root

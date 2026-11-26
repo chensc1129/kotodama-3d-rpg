@@ -6,6 +6,9 @@ extends Node3D
 
 @export var target: Node3D
 @export var camera: Camera3D
+@export var arena: Arena3D
+
+const CAMERA_FAR_CLIP: float = 680.0
 
 var cam_yaw: float = 0.0
 var cam_pitch: float = 0.22
@@ -16,6 +19,8 @@ var look_height: float = 1.92
 var _target_yaw: float = 0.0
 var _target_pitch: float = 0.22
 var _target_dist: float = 7.4
+var _effective_dist: float = 7.4
+var _smooth_terrain_floor: float = -999.0
 var _follow_pos: Vector3 = Vector3(0.0, 0.0, 4.0)
 
 var _is_dragging: bool = false
@@ -30,13 +35,35 @@ var _fov_offset: float = 0.0
 
 func _ready() -> void:
 	process_priority = 20
+	if GameState.is_arpg_mode():
+		# Face cleanly North (-Z) toward Fjord Cove, towering West Mountain & wilderness trail
+		cam_yaw = 0.0
+		cam_pitch = 0.20
 	_target_yaw = cam_yaw
 	_target_pitch = cam_pitch
 	_target_dist = cam_dist
+	_effective_dist = cam_dist
 	if camera == null:
 		camera = get_node_or_null("Camera3D") as Camera3D
+	if arena == null:
+		arena = get_node_or_null("../Arena3D") as Arena3D
 	if camera != null:
 		camera.fov = _base_fov
+		camera.far = CAMERA_FAR_CLIP
+
+
+func reset_camera(yaw: float = 0.0, pitch: float = 0.20, dist: float = 7.4) -> void:
+	cam_yaw = yaw
+	_target_yaw = yaw
+	cam_pitch = pitch
+	_target_pitch = pitch
+	cam_dist = dist
+	_target_dist = dist
+	_effective_dist = dist
+	_smooth_terrain_floor = -999.0
+	if target != null:
+		_follow_pos = target.global_position
+		_initialized = true
 
 
 func add_trauma(amount: float) -> void:
@@ -50,6 +77,22 @@ func add_fov_punch(delta_fov: float) -> void:
 func get_aim_facing() -> float:
 	# Camera sits behind target along (+sin(cam_yaw), +cos(cam_yaw)); forward XZ aim is (-sin, -cos)
 	return atan2(-sin(cam_yaw), -cos(cam_yaw))
+
+
+func _sample_camera_terrain_floor(x: float, z: float) -> float:
+	if arena == null:
+		return -999.0
+	# 5-point cross probe around camera XZ protects the near clip plane on steep 45-50 deg mountain slopes
+	var probe_r := 0.48
+	var h := arena.get_base_terrain_height(x, z)
+	h = maxf(h, arena.get_base_terrain_height(x + probe_r, z))
+	h = maxf(h, arena.get_base_terrain_height(x - probe_r, z))
+	h = maxf(h, arena.get_base_terrain_height(x, z + probe_r))
+	h = maxf(h, arena.get_base_terrain_height(x, z - probe_r))
+	var wl := arena.get_water_level(x, z)
+	if wl > -50.0:
+		h = maxf(h, wl)
+	return h + 0.68
 
 
 func _input(event: InputEvent) -> void:
@@ -81,11 +124,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if is_captured:
 			var rel := mm.relative.clamp(Vector2(-120.0, -120.0), Vector2(120.0, 120.0))
 			_target_yaw -= rel.x * 0.0040 * sens
-			_target_pitch = clampf(_target_pitch + rel.y * 0.0034 * sens, -0.14, 0.95)
+			_target_pitch = clampf(_target_pitch + rel.y * 0.0034 * sens, -0.36, 0.95)
 		elif _is_dragging:
 			var rel := mm.relative.clamp(Vector2(-120.0, -120.0), Vector2(120.0, 120.0))
 			_target_yaw -= rel.x * 0.0065 * sens
-			_target_pitch = clampf(_target_pitch + rel.y * 0.0055 * sens, -0.14, 0.95)
+			_target_pitch = clampf(_target_pitch + rel.y * 0.0055 * sens, -0.36, 0.95)
 	elif event is InputEventScreenTouch:
 		var st := event as InputEventScreenTouch
 		if st.pressed and _drag_touch_index == -1:
@@ -101,21 +144,30 @@ func _unhandled_input(event: InputEvent) -> void:
 			# Clamp browser touch-coalescing spikes for silky smooth Android/iOS camera turns
 			var rel := sd.relative.clamp(Vector2(-95.0, -95.0), Vector2(95.0, 95.0))
 			_target_yaw -= rel.x * 0.0056 * sens
-			_target_pitch = clampf(_target_pitch + rel.y * 0.0044 * sens, -0.10, 0.95)
+			_target_pitch = clampf(_target_pitch + rel.y * 0.0044 * sens, -0.32, 0.95)
 
 
 func _process(delta: float) -> void:
 	if camera == null or target == null:
 		return
+	if arena == null:
+		arena = get_node_or_null("../Arena3D") as Arena3D
+	if camera.far < CAMERA_FAR_CLIP - 1.0:
+		camera.far = CAMERA_FAR_CLIP
+
 	var dt := minf(0.05, delta)
 	var tp := target.global_position
+	var snapped := false
 
-	if not _initialized:
+	if (not _initialized) or _follow_pos.distance_squared_to(tp) > 576.0:
 		_initialized = true
+		snapped = true
 		_follow_pos = tp
 		cam_yaw = _target_yaw
 		cam_pitch = _target_pitch
 		cam_dist = _target_dist
+		_effective_dist = cam_dist
+		_smooth_terrain_floor = -999.0
 	else:
 		# Tight XZ follow + smooth Y slope damping + smooth spherical angles = zero walking jitter!
 		var ang_w := 1.0 - exp(-26.0 * dt)
@@ -136,9 +188,45 @@ func _process(delta: float) -> void:
 
 	var shoulder_scale := clampf(cam_dist / 7.4, 0.65, 1.15)
 	var pivot := Vector3(_follow_pos.x, _follow_pos.y + look_height, _follow_pos.z) + right_xz * (shoulder_offset * shoulder_scale)
+	var ray_dir := back_xz * cos(cam_pitch) + Vector3.UP * sin(cam_pitch)
 
-	var cam_pos := pivot + (back_xz * cos(cam_pitch) + Vector3.UP * sin(cam_pitch)) * cam_dist
-	cam_pos.y = maxf(cam_pos.y, _follow_pos.y + 0.92)
+	# Smooth spring-arm anti-clipping against steep mountain cliffs behind the hero
+	var desired_dist := cam_dist
+	if arena != null:
+		var fracs := [0.34, 0.52, 0.70, 0.86, 1.0]
+		for f_val in fracs:
+			var frac: float = float(f_val)
+			var sp := pivot + ray_dir * (cam_dist * frac)
+			var sg := arena.get_base_terrain_height(sp.x, sp.z)
+			if sg + 0.65 > sp.y and sg > pivot.y + 1.35:
+				desired_dist = minf(desired_dist, maxf(2.5, cam_dist * frac - 0.55))
+				break
+
+	if snapped:
+		_effective_dist = desired_dist
+	elif desired_dist < _effective_dist:
+		_effective_dist = lerpf(_effective_dist, desired_dist, 1.0 - exp(-22.0 * dt))
+	else:
+		_effective_dist = lerpf(_effective_dist, desired_dist, 1.0 - exp(-9.0 * dt))
+
+	var cam_pos := pivot + ray_dir * _effective_dist
+
+	# Smooth terrain-height floor clearance so the camera never clips underground on steep slopes
+	var min_cam_y := _follow_pos.y + 0.62
+	if arena != null:
+		var terrain_floor := _sample_camera_terrain_floor(cam_pos.x, cam_pos.z)
+		if snapped or _smooth_terrain_floor < -500.0:
+			_smooth_terrain_floor = terrain_floor
+		elif terrain_floor > _smooth_terrain_floor:
+			_smooth_terrain_floor = lerpf(_smooth_terrain_floor, terrain_floor, 1.0 - exp(-26.0 * dt))
+		else:
+			_smooth_terrain_floor = lerpf(_smooth_terrain_floor, terrain_floor, 1.0 - exp(-10.0 * dt))
+		# Hard floor (terrain_floor - 0.12 = h_max + 0.56) guarantees zero underground clipping even on whip-turns
+		min_cam_y = maxf(min_cam_y, maxf(_smooth_terrain_floor, terrain_floor - 0.12))
+	else:
+		min_cam_y = _follow_pos.y + 0.92
+
+	cam_pos.y = maxf(cam_pos.y, min_cam_y)
 	var look_pos := pivot + fwd_xz * 2.2
 
 	# Trauma-based damped high-frequency camera shake (runs crisply even during hitstop!)

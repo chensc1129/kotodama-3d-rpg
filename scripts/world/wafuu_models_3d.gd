@@ -7,6 +7,13 @@ extends RefCounted
 ## for use with `wafuu_prop.gdshader`, with shadows disabled and minimal draw calls.
 
 const WAFUU_PROP_SHADER: Shader = preload("res://assets/shaders/wafuu_prop.gdshader")
+const LEAF_SHADER_PATH: String = "res://assets/shaders/tree_leaves_alpha.gdshader"
+const LEAF_TEX_PATHS: Dictionary = {
+	"sakura": "res://assets/textures/foliage/leaf_sakura_branch.png",
+	"maple": "res://assets/textures/foliage/leaf_maple_branch.png",
+	"pine": "res://assets/textures/foliage/leaf_pine_branch.png",
+	"broadleaf": "res://assets/textures/foliage/leaf_broadleaf_branch.png",
+}
 
 
 # ==============================================================================
@@ -29,6 +36,49 @@ static func make_wafuu_mat(
 	mat.set_shader_parameter("moss_amount", moss)
 	mat.set_shader_parameter("mobile_mode", is_mob)
 	return mat
+
+
+static func detect_tree_species(leaf_hex: String) -> String:
+	## Auto-detects botanical tree species from a legacy leaf hex color so all
+	## existing callers seamlessly render authentic species-specific leaf cards.
+	var c: Color = Color.html(leaf_hex)
+	if c.r > 0.65 and c.b > 0.42 and c.r >= c.g:
+		return "sakura"
+	if c.r > 0.52 and c.r > c.g * 1.10 and c.r > c.b * 1.45:
+		return "maple"
+	if c.g >= c.r and c.v < 0.48 and (c.b > c.r * 1.15 or c.v < 0.40):
+		return "pine"
+	if c.g >= c.r * 0.90:
+		return "broadleaf"
+	return "sakura"
+
+
+static func make_leaf_card_mat(
+	species: String,
+	is_mob: bool,
+	tint: Color = Color.WHITE
+) -> Material:
+	## Creates an alpha-cutout 3D real-leaf branch card material bound to
+	## `tree_leaves_alpha.gdshader` and the matching 512x512 botanical texture.
+	var sp_key: String = species if LEAF_TEX_PATHS.has(species) else "sakura"
+	if ResourceLoader.exists(LEAF_SHADER_PATH):
+		var sh: Shader = load(LEAF_SHADER_PATH) as Shader
+		if sh != null:
+			var mat := ShaderMaterial.new()
+			mat.shader = sh
+			var tex_path: String = str(LEAF_TEX_PATHS[sp_key])
+			if ResourceLoader.exists(tex_path):
+				var tex: Texture2D = load(tex_path) as Texture2D
+				if tex != null:
+					mat.set_shader_parameter("leaf_tex", tex)
+			mat.set_shader_parameter("alpha_cutoff", 0.42)
+			var wind_f: float = 1.15 if sp_key == "sakura" else (1.05 if sp_key == "maple" else (0.72 if sp_key == "pine" else 0.95))
+			mat.set_shader_parameter("wind_strength", wind_f)
+			mat.set_shader_parameter("tint_color", tint)
+			mat.set_shader_parameter("translucency", 0.20 if sp_key == "sakura" else 0.14)
+			mat.set_shader_parameter("mobile_mode", is_mob)
+			return mat
+	return make_wafuu_mat(1, is_mob, 0.56, 0.02, 0.0)
 
 
 static func make_glow_mat(hex: String, alpha: float = 1.0) -> StandardMaterial3D:
@@ -389,90 +439,245 @@ static func _append_tapered_tube(
 			_append_tri_colored(st, bot_c, bot_r[sn], bot_r[s], bc, bc, bc, bot_dir)
 
 
-static func _append_blossom_pad(
+static func _calibrate_leaf_card_color(src_col: Color, target_v: float, sat_scale: float) -> Color:
+	## Preserves botanical hue variety across tree variants while preventing
+	## multiplicative over-darkening when modulated against rich RGBA leaf textures.
+	return Color.from_hsv(src_col.h, clampf(src_col.s * sat_scale, 0.0, 0.62), target_v)
+
+
+static func _emit_leaf_vert(
+	st: SurfaceTool,
+	wp: Vector3,
+	uv: Vector2,
+	crown_center: Vector3,
+	crown_radius: float,
+	top_col: Color,
+	mid_col: Color,
+	bot_col: Color,
+	shade_bias: float
+) -> void:
+	# Spherical crown-outward normals (AAA/anime foliage lighting trick):
+	# smoothly wraps sunlight across intersecting leaf cards with zero flat creases.
+	var rel: Vector3 = wp - crown_center
+	var out_n: Vector3 = rel.normalized() if rel.length_squared() > 0.0001 else Vector3.UP
+	var nrm: Vector3 = (out_n * 0.78 + Vector3.UP * 0.22).normalized()
+
+	# 3-stop crown AO & sunlit outer tip gradient
+	var inv_r: float = 1.0 / maxf(0.45, crown_radius)
+	var h_f: float = clampf((rel.y + crown_radius * 0.62) * inv_r * 0.68, 0.0, 1.0)
+	var r_f: float = clampf(rel.length() * inv_r * 0.88, 0.0, 1.0)
+	var tip_f: float = clampf(1.0 - uv.y, 0.0, 1.0)
+	var shade_t: float = clampf(h_f * 0.48 + r_f * 0.30 + tip_f * 0.22 + shade_bias, 0.0, 1.0)
+
+	var col: Color
+	if shade_t < 0.48:
+		col = bot_col.lerp(mid_col, shade_t / 0.48)
+	else:
+		col = mid_col.lerp(top_col, (shade_t - 0.48) / 0.52)
+
+	st.set_normal(nrm)
+	st.set_uv(uv)
+	st.set_color(col)
+	st.add_vertex(wp)
+
+
+static func _append_curved_leaf_card(
+	st: SurfaceTool,
+	origin: Vector3,
+	growth_dir: Vector3,
+	up_hint: Vector3,
+	card_w: float,
+	card_len: float,
+	arch_h: float,
+	tip_droop: float,
+	crown_center: Vector3,
+	crown_radius: float,
+	top_col: Color,
+	mid_col: Color,
+	bot_col: Color,
+	uv_flip: bool,
+	shade_bias: float
+) -> void:
+	## Emits a single arched 2-segment leaf-branch card (6 logical vertices / 4 triangles).
+	## UV.y = 1.0 anchors the woody stem at `origin`; UV.y = 0.0 reaches outward to leaf tips.
+	var g_dir: Vector3 = growth_dir.normalized()
+	if g_dir.length_squared() < 0.0001:
+		g_dir = Vector3.FORWARD
+	var right: Vector3 = g_dir.cross(up_hint)
+	if right.length_squared() < 0.0001:
+		var fallback_up: Vector3 = Vector3.RIGHT if absf(g_dir.y) > 0.92 else Vector3.UP
+		right = g_dir.cross(fallback_up)
+	right = right.normalized()
+	# Right-handed frame where right.cross(g_dir) == up_n (CW front face points +up_n)
+	var up_n: Vector3 = right.cross(g_dir).normalized()
+
+	var hw0: float = card_w * 0.46
+	var hw1: float = card_w * 0.54
+	var hw2: float = card_w * 0.48
+	# Slight stem pullback so the sprig visually grows directly out of the branch tip
+	var base_p: Vector3 = origin - g_dir * (card_len * 0.14)
+	var mid_p: Vector3 = base_p + g_dir * (card_len * 0.52) + up_n * arch_h
+	var tip_p: Vector3 = base_p + g_dir * card_len - up_n * tip_droop
+
+	var p00: Vector3 = base_p - right * hw0
+	var p01: Vector3 = base_p + right * hw0
+	var p10: Vector3 = mid_p - right * hw1
+	var p11: Vector3 = mid_p + right * hw1
+	var p20: Vector3 = tip_p - right * hw2
+	var p21: Vector3 = tip_p + right * hw2
+
+	var u_l: float = 1.0 if uv_flip else 0.0
+	var u_r: float = 0.0 if uv_flip else 1.0
+	var uv00 := Vector2(u_l, 1.0)
+	var uv01 := Vector2(u_r, 1.0)
+	var uv10 := Vector2(u_l, 0.5)
+	var uv11 := Vector2(u_r, 0.5)
+	var uv20 := Vector2(u_l, 0.0)
+	var uv21 := Vector2(u_r, 0.0)
+
+	# Segment 0 (stem -> arched mid): 2 triangles
+	_emit_leaf_vert(st, p00, uv00, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+	_emit_leaf_vert(st, p10, uv10, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+	_emit_leaf_vert(st, p11, uv11, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+
+	_emit_leaf_vert(st, p00, uv00, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+	_emit_leaf_vert(st, p11, uv11, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+	_emit_leaf_vert(st, p01, uv01, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+
+	# Segment 1 (arched mid -> outer leaf tips): 2 triangles
+	_emit_leaf_vert(st, p10, uv10, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+	_emit_leaf_vert(st, p20, uv20, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+	_emit_leaf_vert(st, p21, uv21, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+
+	_emit_leaf_vert(st, p10, uv10, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+	_emit_leaf_vert(st, p21, uv21, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+	_emit_leaf_vert(st, p11, uv11, crown_center, crown_radius, top_col, mid_col, bot_col, shade_bias)
+
+
+static func _append_leaf_card_cluster(
 	st: SurfaceTool,
 	center: Vector3,
-	rx: float,
-	ry: float,
-	rz: float,
-	yaw: float,
-	bot_col: Color,
-	mid_col: Color,
+	card_size: float,
+	count: int,
+	crown_center: Vector3,
 	top_col: Color,
-	noise_seed: float,
-	is_mob: bool
+	mid_col: Color,
+	bot_col: Color,
+	seed_val: float,
+	crown_radius: float = 3.0,
+	pitch_bias: float = 0.24,
+	flatness: float = 1.0,
+	droop_factor: float = 0.16,
+	aspect_len: float = 1.0
 ) -> void:
-	## Organically displaced, flat-bottomed Japanese niwaki blossom/foliage cluster.
-	var sp := SphereMesh.new()
-	sp.radius = 1.0
-	sp.height = 2.0
-	sp.radial_segments = 7 if is_mob else 10
-	sp.rings = 4 if is_mob else 6
+	## Emits `count` intersecting, subtly arched 3D real-leaf branch-sprig cards
+	## fanning organically around a branch tip with varied yaw/pitch/roll angles.
+	if count <= 0:
+		return
+	var out_from_crown: Vector3 = center - crown_center
+	var out_xz := Vector3(out_from_crown.x, 0.0, out_from_crown.z)
+	var base_yaw: float = atan2(out_xz.z, out_xz.x) if out_xz.length_squared() > 0.01 else fmod(seed_val * 2.1, TAU)
 
-	var arrays: Array = sp.surface_get_arrays(0)
-	var raw_verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var raw_norms: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
-	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
-	var rot_b := Basis(Vector3.UP, yaw)
+	for ci: int in range(count):
+		var h1: float = sin(seed_val * 3.17 + float(ci) * 2.41)
+		var h2: float = cos(seed_val * 2.31 + float(ci) * 3.73)
+		var h3: float = sin(seed_val * 4.53 + float(ci) * 1.67)
 
-	var vcount: int = raw_verts.size()
-	var x_verts := PackedVector3Array()
-	x_verts.resize(vcount)
-	var x_norms := PackedVector3Array()
-	x_norms.resize(vcount)
-	var x_cols := PackedColorArray()
-	x_cols.resize(vcount)
-
-	for i: int in range(vcount):
-		var lv: Vector3 = raw_verts[i]
-		# Flatten underside cleanly for natural horizontal layered canopy pads
-		var flat_y: float = lv.y * 0.46 if lv.y < 0.0 else lv.y
-		var np: Vector3 = lv * 2.4 + Vector3(noise_seed, noise_seed * 1.43, noise_seed * 0.87)
-		var lump: float = (
-			sin(np.x * 2.6 + np.z * 2.1) * 0.55
-			+ cos(np.y * 3.1 - np.x * 1.9 + noise_seed) * 0.45
-		)
-		var scale_f: float = 1.0 + lump * 0.17
-		var sv := Vector3(lv.x * rx * scale_f, flat_y * ry * (1.0 + lump * 0.12), lv.z * rz * scale_f)
-		var wp: Vector3 = center + rot_b * sv
-		var sn := Vector3(raw_norms[i].x / maxf(0.1, rx), raw_norms[i].y / maxf(0.1, ry), raw_norms[i].z / maxf(0.1, rz))
-		x_verts[i] = wp
-		x_norms[i] = (rot_b * sn).normalized()
-
-		# 3-stop shading gradient: deep shaded underside -> lush mid -> luminous sunlit crown
-		var h_t: float = clampf((lv.y + 1.0) * 0.5, 0.0, 1.0)
-		var col: Color
-		if h_t < 0.48:
-			col = bot_col.lerp(mid_col, h_t / 0.48)
+		# Evenly fanned azimuths around the branch tip with natural angular jitter
+		var yaw: float = base_yaw + (float(ci) / float(count)) * TAU + h1 * 0.36
+		# Mix flatter horizontal fans with steeper angled sprays so the cluster
+		# reads lush and 3D from side, angled ARPG, and top-down views alike!
+		var pitch_var: float
+		if count >= 3 and ci == count - 1:
+			pitch_var = (0.48 + 0.22 * absf(h2)) * flatness
+		elif ci % 2 == 0:
+			pitch_var = (pitch_bias + 0.16 * h2) * flatness
 		else:
-			col = mid_col.lerp(top_col, (h_t - 0.48) / 0.52)
-		# Gentle petal-clump sparkle variation
-		col = col * (0.93 + 0.14 * clampf(lump * 0.5 + 0.5, 0.0, 1.0))
-		x_cols[i] = col
+			pitch_var = (pitch_bias - 0.14 + 0.24 * h2) * flatness
+		var pitch: float = clampf(pitch_var, -0.22, 0.92)
+		var roll: float = h3 * (0.46 if flatness > 0.7 else 0.30)
 
-	var icount: int = indices.size()
-	var idx: int = 0
-	while idx + 2 < icount:
-		var i0: int = indices[idx]
-		var i1: int = indices[idx + 1]
-		var i2: int = indices[idx + 2]
-		var p0: Vector3 = x_verts[i0]
-		var p1: Vector3 = x_verts[i1]
-		var p2: Vector3 = x_verts[i2]
-		var face_n: Vector3 = (p2 - p0).cross(p1 - p0)
-		var fn_valid: bool = face_n.length_squared() > 0.000001
-		if fn_valid:
-			face_n = face_n.normalized()
-		st.set_normal(x_norms[i0].lerp(face_n, 0.35).normalized() if fn_valid else x_norms[i0])
-		st.set_color(x_cols[i0])
-		st.add_vertex(p0)
-		st.set_normal(x_norms[i1].lerp(face_n, 0.35).normalized() if fn_valid else x_norms[i1])
-		st.set_color(x_cols[i1])
-		st.add_vertex(p1)
-		st.set_normal(x_norms[i2].lerp(face_n, 0.35).normalized() if fn_valid else x_norms[i2])
-		st.set_color(x_cols[i2])
-		st.add_vertex(p2)
-		idx += 3
+		var cos_p: float = cos(pitch)
+		var growth_dir := Vector3(cos(yaw) * cos_p, sin(pitch), sin(yaw) * cos_p).normalized()
+		var side_ref: Vector3 = Vector3(-sin(yaw), 0.0, cos(yaw))
+		var up_hint: Vector3 = (Vector3.UP * cos(roll) + side_ref * sin(roll)).normalized()
+
+		# Small organic stem offset so cards bloom naturally without pinching at one point
+		var stem_off := Vector3(
+			cos(yaw) * card_size * 0.14,
+			(h2 * 0.12) * card_size * flatness,
+			sin(yaw) * card_size * 0.14
+		)
+		var size_var: float = card_size * (0.88 + 0.24 * (0.5 + 0.5 * h1))
+		var c_w: float = size_var * (0.94 + 0.12 * absf(h3))
+		var c_len: float = size_var * aspect_len
+		var arch_h: float = c_len * (0.14 + 0.06 * absf(h2))
+		var tip_droop: float = c_len * (droop_factor + 0.05 * maxf(0.0, h1))
+
+		_append_curved_leaf_card(
+			st,
+			center + stem_off,
+			growth_dir,
+			up_hint,
+			c_w,
+			c_len,
+			arch_h,
+			tip_droop,
+			crown_center,
+			crown_radius,
+			top_col,
+			mid_col,
+			bot_col,
+			(ci % 2) == 1,
+			h3 * 0.07
+		)
+
+
+static func _append_weeping_leaf_curtain(
+	st: SurfaceTool,
+	hang_top: Vector3,
+	out_dir_xz: Vector3,
+	drape_len: float,
+	card_w: float,
+	crown_center: Vector3,
+	crown_radius: float,
+	top_col: Color,
+	mid_col: Color,
+	bot_col: Color,
+	seed_val: float
+) -> void:
+	## Emits 2 crossed, gracefully curving vertical weeping-sakura branch curtains.
+	## Stem (UV.y = 1.0) anchors at `hang_top`; petal tips (UV.y = 0.0) cascade downward!
+	var out_n: Vector3 = Vector3(out_dir_xz.x, 0.0, out_dir_xz.z).normalized()
+	if out_n.length_squared() < 0.001:
+		out_n = Vector3.FORWARD
+	var side_n := Vector3(-out_n.z, 0.0, out_n.x)
+	var hang_dir: Vector3 = (Vector3(0.0, -1.0, 0.0) + out_n * 0.12).normalized()
+
+	for ci: int in range(2):
+		var cross_ang: float = seed_val * 1.3 + float(ci) * (PI * 0.48)
+		var up_hint: Vector3 = (out_n * cos(cross_ang) + side_n * sin(cross_ang)).normalized()
+		var off: Vector3 = up_hint * (card_w * 0.08 * (1.0 if ci == 0 else -1.0))
+		var len_i: float = drape_len * (1.0 if ci == 0 else 0.88)
+		var w_i: float = card_w * (1.0 if ci == 0 else 0.92)
+		_append_curved_leaf_card(
+			st,
+			hang_top + off,
+			hang_dir,
+			up_hint,
+			w_i,
+			len_i,
+			len_i * 0.09,
+			len_i * 0.05,
+			crown_center,
+			crown_radius,
+			top_col,
+			mid_col,
+			bot_col,
+			ci == 1,
+			0.04 if ci == 0 else -0.05
+		)
+
 
 
 static func _append_shide_zigzag(
@@ -521,7 +726,7 @@ static func _register_rotated_obstacle(
 
 
 # ==============================================================================
-# 2. REALISTIC MULTI-BRANCHING SAKURA / MAPLE TREE & GIANT WEEPING SAKURA
+# 2. REAL-LEAF 3D TREES (SAKURA / MAPLE / PINE / BROADLEAF) & GIANT WEEPING SAKURA
 # ==============================================================================
 
 static func build_tree_meshes(
@@ -530,143 +735,178 @@ static func build_tree_meshes(
 	leaf_top_hex: String,
 	leaf_mid_hex: String,
 	leaf_bot_hex: String,
-	is_mob: bool
+	is_mob: bool,
+	species: String = "sakura"
 ) -> Dictionary:
+	var sp_key: String = species if LEAF_TEX_PATHS.has(species) else "sakura"
 	var seed_f: float = float(variant_idx) * 2.137 + 0.618
 	var trunk_base: Color = Color.html(trunk_hex)
 	var bark_dark: Color = trunk_base.darkened(0.38)
 	var bark_mid: Color = trunk_base
-	var bark_light: Color = trunk_base.lightened(0.12)
+	var bark_light: Color = trunk_base.lightened(0.14)
 
-	var col_top: Color = Color.html(leaf_top_hex)
-	var col_mid: Color = Color.html(leaf_mid_hex)
-	var col_bot: Color = Color.html(leaf_bot_hex)
+	var col_top: Color = _calibrate_leaf_card_color(Color.html(leaf_top_hex), 1.0, 0.34)
+	var col_mid: Color = _calibrate_leaf_card_color(Color.html(leaf_mid_hex), 0.89, 0.48)
+	var col_bot: Color = _calibrate_leaf_card_color(Color.html(leaf_bot_hex), 0.54, 0.54)
 
 	var st_trunk := SurfaceTool.new()
 	st_trunk.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	var seg_trunk: int = 6 if is_mob else 8
-	var seg_branch: int = 5 if is_mob else 6
-
-	# 1. Four flared buttress roots gripping the ground (y = -0.25 .. 0.85)
-	var root_base_yaw: float = fmod(seed_f * 1.3, TAU)
-	for ri: int in range(4):
-		var a: float = root_base_yaw + float(ri) * (PI * 0.5) + sin(seed_f + float(ri) * 1.9) * 0.24
-		var r_reach: float = 0.88 + 0.26 * (0.5 + 0.5 * sin(seed_f * 1.7 + float(ri) * 2.3))
-		var r_pts: Array[Vector3] = [
-			Vector3(cos(a) * r_reach, -0.25, sin(a) * r_reach),
-			Vector3(cos(a) * (r_reach * 0.52), 0.20, sin(a) * (r_reach * 0.52)),
-			Vector3(cos(a) * 0.18, 0.82, sin(a) * 0.18),
-		]
-		var r_rads: Array[float] = [0.11, 0.19, 0.24]
-		_append_tapered_tube(st_trunk, r_pts, r_rads, 5, bark_dark, bark_mid, true)
-
-	# 2. 3-segment gently curved organic trunk
-	var lean_x: float = sin(seed_f * 1.1) * 0.34
-	var lean_z: float = cos(seed_f * 0.9) * 0.30
-	var p_t0 := Vector3(0.0, -0.15, 0.0)
-	var p_t1 := Vector3(lean_x * 0.38, 1.35, lean_z * 0.38)
-	var p_t2 := Vector3(lean_x * 0.92, 2.72, lean_z * 0.82)
-	var p_t3 := Vector3(lean_x * 0.72, 3.88, lean_z * 0.68)
-	var trunk_pts: Array[Vector3] = [p_t0, p_t1, p_t2, p_t3]
-	var trunk_rads: Array[float] = [0.46, 0.36, 0.28, 0.20]
-	_append_tapered_tube(st_trunk, trunk_pts, trunk_rads, seg_trunk, bark_dark, bark_mid, true)
-
-	# 3. Five diverging secondary & upper branches reaching outward at niwaki angles
 	var st_fol := SurfaceTool.new()
 	st_fol.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	var branch_count: int = 5
-	var pad_idx: int = 0
+	var seg_trunk: int = 6 if is_mob else 8
+	var seg_branch: int = 5 if is_mob else 6
+	var root_base_yaw: float = fmod(seed_f * 1.3, TAU)
+
+	# 1. Four flared gnarled buttress roots gripping the earth
+	for ri: int in range(4):
+		var a: float = root_base_yaw + float(ri) * (PI * 0.5) + sin(seed_f + float(ri) * 1.9) * 0.24
+		var r_reach: float = (0.98 if sp_key == "pine" else 0.88) + 0.24 * (0.5 + 0.5 * sin(seed_f * 1.7 + float(ri) * 2.3))
+		var r_pts: Array[Vector3] = [
+			Vector3(cos(a) * r_reach, -0.25, sin(a) * r_reach),
+			Vector3(cos(a) * (r_reach * 0.52), 0.18, sin(a) * (r_reach * 0.52)),
+			Vector3(cos(a) * 0.18, 0.78, sin(a) * 0.18),
+		]
+		var r_rads: Array[float] = [0.10, 0.18, 0.24]
+		_append_tapered_tube(st_trunk, r_pts, r_rads, 5, bark_dark, bark_mid, true)
+
+	# 2. Species-tailored organic curved wooden trunk
+	var lean_x: float = sin(seed_f * 1.1) * 0.34
+	var lean_z: float = cos(seed_f * 0.9) * 0.30
+	var p_t2: Vector3
+	var p_t3: Vector3
+	var crown_center: Vector3
+	var crown_radius: float = 3.2
+
+	if sp_key == "pine":
+		# Iconic S-curved coastal Japanese Red Pine (Akamatsu) leaning trunk
+		var s_dir: float = 1.0 if variant_idx % 2 == 0 else -1.0
+		var z_dir: float = 1.0 if variant_idx != 2 else -1.0
+		var pine_pts: Array[Vector3] = [
+			Vector3(0.0, -0.25, 0.0),
+			Vector3(0.20 * s_dir, 0.90, 0.10 * z_dir),
+			Vector3(0.64 * s_dir, 2.10, 0.24 * z_dir),
+			Vector3(0.92 * s_dir, 3.28, 0.14 * z_dir),
+			Vector3(0.62 * s_dir, 4.42, -0.14 * z_dir),
+			Vector3(0.28 * s_dir, 5.28, -0.30 * z_dir),
+		]
+		var pine_rads: Array[float] = [0.52, 0.36, 0.28, 0.22, 0.15, 0.08]
+		_append_tapered_tube(st_trunk, pine_pts, pine_rads, seg_trunk, bark_dark, bark_light, true)
+		p_t2 = pine_pts[2]
+		p_t3 = pine_pts[5]
+		crown_center = Vector3(0.42 * s_dir, 4.35, -0.08 * z_dir)
+		crown_radius = 3.15
+	else:
+		var trunk_h: float = 4.35 if sp_key == "broadleaf" else (3.85 if sp_key == "maple" else 3.65)
+		var r_base: float = 0.50 if sp_key == "broadleaf" else (0.41 if sp_key == "maple" else 0.48)
+		var r_top: float = 0.24 if sp_key == "broadleaf" else (0.17 if sp_key == "maple" else 0.21)
+		var p_t0 := Vector3(0.0, -0.15, 0.0)
+		var p_t1 := Vector3(lean_x * 0.40, trunk_h * 0.34, lean_z * 0.40)
+		p_t2 = Vector3(lean_x * 0.94, trunk_h * 0.70, lean_z * 0.84)
+		p_t3 = Vector3(lean_x * 0.72, trunk_h, lean_z * 0.68)
+		var trunk_pts: Array[Vector3] = [p_t0, p_t1, p_t2, p_t3]
+		var trunk_rads: Array[float] = [r_base, lerpf(r_base, r_top, 0.35), lerpf(r_base, r_top, 0.68), r_top]
+		_append_tapered_tube(st_trunk, trunk_pts, trunk_rads, seg_trunk, bark_dark, bark_mid, true)
+		var crown_y: float = 5.65 if sp_key == "broadleaf" else (4.75 if sp_key == "maple" else 4.90)
+		crown_center = Vector3(lean_x * 0.55, crown_y, lean_z * 0.50)
+		crown_radius = 3.35 if sp_key == "broadleaf" else (3.05 if sp_key == "maple" else 3.25)
+
+	# 3. Primary limbs + forked dark wooden twigs + curved 3D real-leaf branch-sprig cards
+	# Desktop target: 53-56 cards | Mobile target: 31-36 cards (ZERO spherical blobs!)
+	var branch_count: int = 6 if sp_key == "broadleaf" else 5
+	var pitch_bias: float = 0.06 if sp_key == "pine" else (0.14 if sp_key == "maple" else (0.34 if sp_key == "broadleaf" else 0.22))
+	var flatness: float = 0.52 if sp_key == "pine" else (0.72 if sp_key == "maple" else (1.04 if sp_key == "broadleaf" else 0.88))
+	var droop_f: float = 0.08 if sp_key == "pine" else (0.14 if sp_key == "maple" else (0.15 if sp_key == "broadleaf" else 0.20))
+	var base_card_sz: float = 1.56 if sp_key == "pine" else (1.50 if sp_key == "maple" else (1.60 if sp_key == "broadleaf" else 1.66))
+
 	for bi: int in range(branch_count):
-		var az: float = root_base_yaw + 0.45 + float(bi) * (TAU / float(branch_count)) + sin(seed_f + float(bi) * 2.1) * 0.22
-		var is_upper: bool = bi >= 3
-		var start_p: Vector3 = p_t2.lerp(p_t3, 0.35 + 0.55 * float(bi) / float(branch_count - 1))
-		var horiz_len: float = (1.55 if is_upper else 2.25) + 0.32 * sin(seed_f * 1.4 + float(bi) * 1.7)
-		var rise_h: float = (1.55 if is_upper else 1.25) + 0.24 * cos(seed_f + float(bi) * 2.3)
+		var az: float = root_base_yaw + 0.42 + float(bi) * (TAU / float(branch_count)) + sin(seed_f + float(bi) * 2.1) * 0.24
+		var is_upper: bool = bi >= (branch_count - 2)
+		var b_frac: float = float(bi) / float(max(1, branch_count - 1))
+		var start_p: Vector3 = p_t2.lerp(p_t3, 0.16 + 0.74 * b_frac)
+
+		var horiz_len: float
+		var rise_h: float
+		if sp_key == "pine":
+			# Asymmetric horizontal windswept cloud-boughs
+			horiz_len = (1.95 if is_upper else 2.55) + 0.36 * sin(seed_f * 1.6 + float(bi) * 2.1)
+			rise_h = (0.45 if is_upper else 0.58) + 0.18 * cos(seed_f + float(bi) * 1.9)
+		elif sp_key == "maple":
+			# Graceful tiered horizontal-arching Momiji limbs
+			horiz_len = (1.85 if is_upper else 2.48) + 0.28 * sin(seed_f * 1.4 + float(bi) * 1.7)
+			rise_h = (1.28 if is_upper else 0.88) + 0.22 * cos(seed_f + float(bi) * 2.3)
+		elif sp_key == "broadleaf":
+			# Tall ascending Keyaki vase-shaped boughs
+			horiz_len = (1.72 if is_upper else 2.28) + 0.26 * sin(seed_f * 1.5 + float(bi) * 1.9)
+			rise_h = (2.05 if is_upper else 1.68) + 0.28 * cos(seed_f + float(bi) * 2.1)
+		else:
+			# Wide spreading Sakura umbrella boughs
+			horiz_len = (1.85 if is_upper else 2.58) + 0.34 * sin(seed_f * 1.4 + float(bi) * 1.7)
+			rise_h = (1.55 if is_upper else 1.18) + 0.24 * cos(seed_f + float(bi) * 2.3)
 
 		var dir_xz := Vector3(cos(az), 0.0, sin(az))
-		var mid_p: Vector3 = start_p + dir_xz * (horiz_len * 0.55) + Vector3(0.0, rise_h * 0.48, 0.0)
+		var mid_p: Vector3 = start_p + dir_xz * (horiz_len * 0.54) + Vector3(0.0, rise_h * 0.52, 0.0)
 		var tip_p: Vector3 = start_p + dir_xz * horiz_len + Vector3(0.0, rise_h, 0.0)
+		var r0_b: float = 0.16 if is_upper else 0.20
 		var b_pts: Array[Vector3] = [start_p, mid_p, tip_p]
-		var b_rads: Array[float] = [0.17 if is_upper else 0.21, 0.12 if is_upper else 0.14, 0.06]
+		var b_rads: Array[float] = [r0_b, r0_b * 0.66, 0.055]
 		_append_tapered_tube(st_trunk, b_pts, b_rads, seg_branch, bark_mid, bark_light, true)
 
-		# Forked tertiary sub-branch off the elbow for wider horizontal layering
-		var side_az: float = az + (0.62 if bi % 2 == 0 else -0.62)
-		var sub_tip: Vector3 = mid_p + Vector3(cos(side_az), 0.0, sin(side_az)) * (horiz_len * 0.58) + Vector3(0.0, rise_h * 0.52, 0.0)
-		_append_cyl_between(st_trunk, mid_p, sub_tip, 0.10, 0.045, 5, bark_mid, bark_light)
+		# Two slender forked secondary wooden twigs per limb (10-12 visible twigs!)
+		var side_sign: float = 1.0 if bi % 2 == 0 else -1.0
+		var twig_a_az: float = az + side_sign * 0.58
+		var twig_a_tip: Vector3 = mid_p + Vector3(cos(twig_a_az), 0.0, sin(twig_a_az)) * (horiz_len * 0.56) + Vector3(0.0, rise_h * 0.46 + 0.18, 0.0)
+		_append_cyl_between(st_trunk, mid_p, twig_a_tip, 0.095, 0.036, 4, bark_mid, bark_light)
 
-		# Layered blossom/leaf clusters perched along branch tip & sub-branch (3-4 per branch)
-		var pads_per_branch: int = 3 if is_mob else 4
-		for pi: int in range(pads_per_branch):
-			var p_seed: float = seed_f * 3.1 + float(pad_idx) * 1.93
-			pad_idx += 1
-			var base_anchor: Vector3
-			var rad_xz: float
-			var rad_y: float
-			if pi == 0:
-				base_anchor = tip_p + Vector3(0.0, 0.25, 0.0)
-				rad_xz = 1.28 + 0.18 * sin(p_seed)
-				rad_y = 0.72
-			elif pi == 1:
-				base_anchor = sub_tip + Vector3(0.0, 0.20, 0.0)
-				rad_xz = 1.12 + 0.16 * cos(p_seed)
-				rad_y = 0.66
-			elif pi == 2:
-				var off_a: float = az + 0.35
-				base_anchor = tip_p + Vector3(cos(off_a) * 0.58, 0.48, sin(off_a) * 0.58)
-				rad_xz = 0.98 + 0.14 * sin(p_seed * 1.3)
-				rad_y = 0.60
-			else:
-				base_anchor = mid_p.lerp(tip_p, 0.55) + Vector3(0.0, 0.55, 0.0)
-				rad_xz = 1.05 + 0.12 * cos(p_seed * 1.1)
-				rad_y = 0.62
+		var twig_b_az: float = az - side_sign * 0.52
+		var twig_b_start: Vector3 = mid_p.lerp(tip_p, 0.42)
+		var twig_b_tip: Vector3 = twig_b_start + Vector3(cos(twig_b_az), 0.0, sin(twig_b_az)) * (horiz_len * 0.44) + Vector3(0.0, rise_h * 0.36 + 0.24, 0.0)
+		_append_cyl_between(st_trunk, twig_b_start, twig_b_tip, 0.075, 0.030, 4, bark_mid, bark_light)
 
-			var height_lift: float = clampf((base_anchor.y - 3.6) / 2.4, 0.0, 1.0)
-			var c_bot: Color = col_bot.lerp(col_mid, height_lift * 0.22)
-			var c_mid: Color = col_mid.lerp(col_top, height_lift * 0.18)
-			var c_top: Color = col_top.lightened(height_lift * 0.08)
-			_append_blossom_pad(
-				st_fol,
-				base_anchor,
-				rad_xz * 1.12,
-				rad_y,
-				rad_xz * 0.94,
-				az + float(pi) * 0.9,
-				c_bot,
-				c_mid,
-				c_top,
-				p_seed,
-				is_mob
+		# Crossed 3D real-leaf branch-sprig card clusters at main tip + both twigs
+		var b_seed: float = seed_f * 3.1 + float(bi) * 2.47
+		var tip_cards: int = 3 if is_mob else 4
+		var twig_a_cards: int = 2 if is_mob else (2 if sp_key == "broadleaf" else 3)
+		var twig_b_cards: int = 0 if is_mob else 2
+
+		_append_leaf_card_cluster(
+			st_fol, tip_p + Vector3(0.0, 0.08, 0.0), base_card_sz, tip_cards,
+			crown_center, col_top, col_mid, col_bot, b_seed,
+			crown_radius, pitch_bias, flatness, droop_f, 1.04
+		)
+		_append_leaf_card_cluster(
+			st_fol, twig_a_tip + Vector3(0.0, 0.06, 0.0), base_card_sz * 0.90, twig_a_cards,
+			crown_center, col_top, col_mid, col_bot, b_seed + 1.73,
+			crown_radius, pitch_bias + 0.05, flatness, droop_f, 1.0
+		)
+		if twig_b_cards > 0:
+			_append_leaf_card_cluster(
+				st_fol, twig_b_tip + Vector3(0.0, 0.06, 0.0), base_card_sz * 0.84, twig_b_cards,
+				crown_center, col_top, col_mid, col_bot, b_seed + 3.41,
+				crown_radius, pitch_bias + 0.08, flatness, droop_f, 0.98
 			)
 
-	# 4. Luminous upper crown cap pads (3 on mobile, 4 on desktop -> total 18 mobile / 24 desktop!)
-	var crown_count: int = 3 if is_mob else 4
-	for ci: int in range(crown_count):
-		var c_seed: float = seed_f * 4.7 + float(ci) * 2.19
-		var ca: float = root_base_yaw + float(ci) * (TAU / float(crown_count))
-		var offset_r: float = 0.0 if ci == 0 else 0.72
-		var crown_p: Vector3 = p_t3 + Vector3(cos(ca) * offset_r, 1.55 + (0.35 if ci == 0 else 0.08 * float(ci)), sin(ca) * offset_r)
-		var crx: float = 1.48 if ci == 0 else 1.16
-		var cry: float = 0.86 if ci == 0 else 0.68
-		_append_blossom_pad(
-			st_fol,
-			crown_p,
-			crx,
-			cry,
-			crx * 0.92,
-			ca,
-			col_bot.lerp(col_mid, 0.28),
-			col_mid.lerp(col_top, 0.25),
-			col_top.lightened(0.08),
-			c_seed,
-			is_mob
+	# 4. Upper crown wooden summit twigs + sunlit top real-leaf clusters
+	for ci: int in range(2):
+		var ca: float = root_base_yaw + float(ci) * PI + 0.85
+		var c_reach: float = 0.72 if sp_key == "pine" else 0.85
+		var c_rise: float = 0.65 if sp_key == "pine" else (1.55 if sp_key == "broadleaf" else 1.18)
+		var c_tip: Vector3 = p_t3 + Vector3(cos(ca) * c_reach, c_rise, sin(ca) * c_reach)
+		_append_cyl_between(st_trunk, p_t3, c_tip, 0.11, 0.04, 4, bark_mid, bark_light)
+
+		var crown_cards: int = 3 if is_mob else 4
+		_append_leaf_card_cluster(
+			st_fol, c_tip + Vector3(0.0, 0.12, 0.0), base_card_sz * 1.06, crown_cards,
+			crown_center, col_top, col_mid, col_bot, seed_f * 5.3 + float(ci) * 2.91,
+			crown_radius, pitch_bias + 0.10, flatness, droop_f * 0.85, 1.02
 		)
 
 	return {
 		"trunk": st_trunk.commit(),
 		"foliage": st_fol.commit(),
+		"trunk_mat": make_wafuu_mat(0, is_mob, 0.86, 0.02, 0.12 if sp_key == "pine" else 0.18),
+		"foliage_mat": make_leaf_card_mat(sp_key, is_mob, Color.WHITE),
 	}
 
 
@@ -676,15 +916,17 @@ static func add_realistic_tree(
 	trunk_hex: String,
 	leaf_hex: String,
 	sc: float = 1.0,
-	variant_idx: int = 0
+	variant_idx: int = 0,
+	species: String = ""
 ) -> Node3D:
 	var is_mob: bool = UiStyle.is_mobile_device()
+	var resolved_species: String = species if species != "" else detect_tree_species(leaf_hex)
 	var mid_c: Color = Color.html(leaf_hex)
 	var top_c: Color = mid_c.lightened(0.24).lerp(Color(1.0, 0.97, 0.95), 0.16)
 	var bot_c: Color = mid_c.darkened(0.36).lerp(Color(0.22, 0.13, 0.28), 0.18)
 
 	var tree_cache: Dictionary = _get_scene_cache(content_root, "_wafuu_tree_cache")
-	var cache_key: String = "%d_%s_%s_%d" % [variant_idx, trunk_hex, leaf_hex, 1 if is_mob else 0]
+	var cache_key: String = "%d_%s_%s_%s_%d" % [variant_idx, resolved_species, trunk_hex, leaf_hex, 1 if is_mob else 0]
 	var meshes: Dictionary
 	if tree_cache.has(cache_key):
 		meshes = tree_cache[cache_key] as Dictionary
@@ -695,7 +937,8 @@ static func add_realistic_tree(
 			top_c.to_html(false),
 			mid_c.to_html(false),
 			bot_c.to_html(false),
-			is_mob
+			is_mob,
+			resolved_species
 		)
 		tree_cache[cache_key] = meshes
 
@@ -703,8 +946,8 @@ static func add_realistic_tree(
 	tree.position = base_pos
 	tree.scale = Vector3(sc, sc, sc)
 
-	var trunk_mat: ShaderMaterial = make_wafuu_mat(0, is_mob, 0.86, 0.02, 0.18)
-	var fol_mat: ShaderMaterial = make_wafuu_mat(1, is_mob, 0.54, 0.02, 0.0)
+	var trunk_mat: Material = meshes.get("trunk_mat", make_wafuu_mat(0, is_mob, 0.86, 0.02, 0.18)) as Material
+	var fol_mat: Material = meshes.get("foliage_mat", make_leaf_card_mat(resolved_species, is_mob, Color.WHITE)) as Material
 	tree.add_child(_make_mesh_inst(meshes["trunk"] as ArrayMesh, trunk_mat))
 	tree.add_child(_make_mesh_inst(meshes["foliage"] as ArrayMesh, fol_mat))
 
@@ -725,9 +968,9 @@ static func add_giant_weeping_sakura(
 	var bark_mid := Color.html("#3d2520")
 	var bark_light := Color.html("#573730")
 
-	var col_top := Color.html("#fce7f3")
-	var col_mid := Color.html("#f472b6")
-	var col_bot := Color.html("#9d174d")
+	var col_top: Color = _calibrate_leaf_card_color(Color.html("#fce7f3"), 1.0, 0.30)
+	var col_mid: Color = _calibrate_leaf_card_color(Color.html("#f472b6"), 0.90, 0.46)
+	var col_bot: Color = _calibrate_leaf_card_color(Color.html("#9d174d"), 0.56, 0.52)
 
 	var st_trunk := SurfaceTool.new()
 	st_trunk.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -754,11 +997,14 @@ static func add_giant_weeping_sakura(
 	var t_rads: Array[float] = [1.58, 1.24, 1.05, 0.84]
 	_append_tapered_tube(st_trunk, t_pts, t_rads, 8 if is_mob else 10, bark_dark, bark_mid, true)
 
-	# 3. Six monumental sweeping boughs + cascading canopy & weeping curtains
+	# 3. Six monumental sweeping boughs + wooden twigs + lush real-leaf sakura crown & weeping curtains
 	var st_fol := SurfaceTool.new()
 	st_fol.begin(Mesh.PRIMITIVE_TRIANGLES)
 
+	var crown_center := Vector3(0.0, 9.6, 0.0)
+	var crown_radius: float = 7.4
 	var bough_segs: int = 6 if is_mob else 7
+
 	for bi: int in range(6):
 		var az: float = float(bi) * (TAU / 6.0) + 0.25
 		var dir_xz := Vector3(cos(az), 0.0, sin(az))
@@ -768,37 +1014,76 @@ static func add_giant_weeping_sakura(
 		var b_mid: Vector3 = b_start + dir_xz * (reach * 0.52) + Vector3(0.0, (peak_y - b_start.y) * 0.78, 0.0)
 		var b_tip: Vector3 = b_start + dir_xz * reach + Vector3(0.0, peak_y - b_start.y - 0.55, 0.0)
 		var b_pts: Array[Vector3] = [b_start, b_mid, b_tip]
-		var b_rads: Array[float] = [0.62, 0.42, 0.20]
+		var b_rads: Array[float] = [0.62, 0.42, 0.18]
 		_append_tapered_tube(st_trunk, b_pts, b_rads, bough_segs, bark_mid, bark_light, true)
 
-		# Secondary branch fork for dense volumetric dome
+		# Secondary & tertiary wooden twigs visible beneath the real-leaf sakura canopy
 		var fork_a: float = az + 0.42
-		var fork_tip: Vector3 = b_mid + Vector3(cos(fork_a), 0.0, sin(fork_a)) * (reach * 0.55) + Vector3(0.0, 1.35, 0.0)
-		_append_cyl_between(st_trunk, b_mid, fork_tip, 0.30, 0.12, 5, bark_mid, bark_light)
+		var fork_tip: Vector3 = b_mid + Vector3(cos(fork_a), 0.0, sin(fork_a)) * (reach * 0.56) + Vector3(0.0, 1.35, 0.0)
+		_append_cyl_between(st_trunk, b_mid, fork_tip, 0.30, 0.11, 5, bark_mid, bark_light)
 
-		# Tiered blossom cloud pads on each bough (2-3 per bough)
-		_append_blossom_pad(st_fol, b_tip + Vector3(0.0, 0.85, 0.0), 3.15, 1.65, 2.75, az, col_bot, col_mid, col_top, float(bi) * 3.1, is_mob)
-		_append_blossom_pad(st_fol, fork_tip + Vector3(0.0, 0.65, 0.0), 2.55, 1.45, 2.30, fork_a, col_bot, col_mid, col_top, float(bi) * 4.7 + 1.2, is_mob)
+		var fork_b: float = az - 0.44
+		var fork_b_tip: Vector3 = b_mid + Vector3(cos(fork_b), 0.0, sin(fork_b)) * (reach * 0.46) + Vector3(0.0, 1.05, 0.0)
+		_append_cyl_between(st_trunk, b_mid, fork_b_tip, 0.22, 0.08, 4, bark_mid, bark_light)
+
+		# Lush spreading upper real-leaf sakura branch-card clusters on each monumental bough
+		var tip_cnt: int = 4 if is_mob else 5
+		var fork_cnt: int = 3 if is_mob else 4
+		_append_leaf_card_cluster(
+			st_fol, b_tip + Vector3(0.0, 0.35, 0.0), 3.15, tip_cnt,
+			crown_center, col_top, col_mid, col_bot, float(bi) * 3.1 + 0.7,
+			crown_radius, 0.16, 0.85, 0.24, 1.08
+		)
+		_append_leaf_card_cluster(
+			st_fol, fork_tip + Vector3(0.0, 0.25, 0.0), 2.75, fork_cnt,
+			crown_center, col_top, col_mid, col_bot, float(bi) * 4.7 + 1.9,
+			crown_radius, 0.22, 0.88, 0.20, 1.05
+		)
 		if not is_mob:
-			_append_blossom_pad(st_fol, b_mid + Vector3(0.0, 1.45, 0.0), 2.35, 1.25, 2.10, az + 0.8, col_bot.lerp(col_mid, 0.2), col_mid, col_top, float(bi) * 2.3 + 5.0, is_mob)
+			_append_leaf_card_cluster(
+				st_fol, fork_b_tip + Vector3(0.0, 0.30, 0.0), 2.55, 3,
+				crown_center, col_top, col_mid, col_bot, float(bi) * 2.3 + 5.1,
+				crown_radius, 0.25, 0.90, 0.18, 1.02
+			)
 
-		# Cascading drooping weeping blossom curtains hanging gracefully from outer rim!
-		var drapes_per_bough: int = 3 if is_mob else 4
+		# Cascading long vertical drooping curtains of real-leaf sakura branch cards!
+		var drapes_per_bough: int = 3 if is_mob else 5
 		for di: int in range(drapes_per_bough):
-			var da: float = az + (float(di) - float(drapes_per_bough - 1) * 0.5) * 0.34
-			var dr: float = reach * (0.86 + 0.16 * float(di % 2))
-			var hang_top := Vector3(cos(da) * dr, peak_y - 0.15, sin(da) * dr)
-			var drape_len: float = 3.2 + 1.45 * (0.5 + 0.5 * sin(float(bi * 5 + di) * 1.7))
-			var hang_mid: Vector3 = hang_top + Vector3(cos(da) * 0.32, -drape_len * 0.48, sin(da) * 0.32)
-			var hang_bot: Vector3 = hang_top + Vector3(cos(da) * 0.18, -drape_len, sin(da) * 0.18)
-			var d_pts: Array[Vector3] = [hang_top, hang_mid, hang_bot]
-			var d_rads: Array[float] = [0.68, 0.44, 0.14]
-			_append_tapered_tube(st_fol, d_pts, d_rads, 5, col_top.lerp(col_mid, 0.35), col_bot.lerp(col_mid, 0.45), true)
+			var da: float = az + (float(di) - float(drapes_per_bough - 1) * 0.5) * 0.28
+			var dr: float = reach * (0.84 + 0.18 * float(di % 2))
+			var hang_top := Vector3(cos(da) * dr, peak_y - 0.10 + 0.25 * float(di % 2), sin(da) * dr)
+			var drape_len: float = 3.4 + 1.55 * (0.5 + 0.5 * sin(float(bi * 7 + di) * 1.73))
+			var card_w: float = 1.55 + 0.32 * cos(float(bi * 3 + di) * 2.1)
+			_append_weeping_leaf_curtain(
+				st_fol,
+				hang_top,
+				Vector3(cos(da), 0.0, sin(da)),
+				drape_len,
+				card_w,
+				crown_center,
+				crown_radius,
+				col_top,
+				col_mid,
+				col_bot,
+				float(bi * 11 + di) * 1.37
+			)
 
-	# Grand luminous central summit crown
-	_append_blossom_pad(st_fol, Vector3(0.0, 11.4, 0.0), 4.65, 2.35, 4.45, 0.3, col_bot.lerp(col_mid, 0.25), col_mid.lerp(col_top, 0.2), col_top, 17.3, is_mob)
-	_append_blossom_pad(st_fol, Vector3(-1.4, 10.6, 1.1), 3.15, 1.75, 2.95, 1.1, col_bot, col_mid, col_top, 23.1, is_mob)
-	_append_blossom_pad(st_fol, Vector3(1.5, 10.7, -1.0), 3.05, 1.70, 2.85, 2.2, col_bot, col_mid, col_top, 29.4, is_mob)
+	# Grand luminous upper summit branches & sunlit sakura leaf-card canopy dome
+	var summit_specs: Array = [
+		[Vector3(0.0, 10.7, 0.0), 3.45, 4 if is_mob else 6, 17.3],
+		[Vector3(-1.8, 10.1, 1.3), 2.85, 3 if is_mob else 4, 23.1],
+		[Vector3(1.9, 10.2, -1.2), 2.85, 3 if is_mob else 4, 29.4],
+		[Vector3(0.4, 10.0, 2.0), 2.65, 2 if is_mob else 4, 35.7],
+	]
+	for si_c: int in range(summit_specs.size()):
+		var ss: Array = summit_specs[si_c]
+		var sp_pos: Vector3 = ss[0] as Vector3
+		_append_cyl_between(st_trunk, t_pts[3], sp_pos - Vector3(0.0, 0.35, 0.0), 0.32, 0.11, 5, bark_mid, bark_light)
+		_append_leaf_card_cluster(
+			st_fol, sp_pos, float(ss[1]), int(ss[2]),
+			crown_center, col_top, col_mid, col_bot, float(ss[3]),
+			crown_radius, 0.28, 0.82, 0.18, 1.06
+		)
 
 	# 4. Sacred braided shimenawa rope + 5 crisp white shide paper zigzags around trunk
 	var st_sacred := SurfaceTool.new()
@@ -827,7 +1112,7 @@ static func add_giant_weeping_sakura(
 
 	tree.add_child(_make_mesh_inst(st_trunk.commit(), make_wafuu_mat(0, is_mob, 0.88, 0.02, 0.24)))
 	tree.add_child(_make_mesh_inst(st_sacred.commit(), make_wafuu_mat(4, is_mob, 0.76, 0.04, 0.0)))
-	tree.add_child(_make_mesh_inst(st_fol.commit(), make_wafuu_mat(1, is_mob, 0.50, 0.02, 0.0)))
+	tree.add_child(_make_mesh_inst(st_fol.commit(), make_leaf_card_mat("sakura", is_mob, Color.WHITE)))
 	content_root.add_child(tree)
 	return tree
 
